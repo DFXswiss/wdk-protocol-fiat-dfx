@@ -49,7 +49,8 @@ npx --yes bare@1.34.1 bare-smoke.mjs
 
 It imports the package's `bare.js` entry point, performs a stubbed sandbox sign-in,
 and checks the submitted Safe address and ERC-6492-wrapped signature. It does not
-connect to a network or authenticate with a real DFX API.
+connect to a network or authenticate with a real DFX API. The expected wrapper
+and its derivation details are in `fixtures/bare-smoke-expected.json`.
 
 ## Side effects and output
 
@@ -365,6 +366,8 @@ script then deploys the account without a bundler and signs again. `buy` and
 `sell` must post the same wrapper. The forked contract accepts the inner
 signature through ERC-1271 (`0x1626ba7e`), and viem accepts the wrapped
 signature. Each sign-in records `sandbox` as `rejected` or `accepted`.
+Wallet packages can include their own `@tetherto/wdk-wallet` copy; the probe's
+initial resolution check compares only the copies used by DFX and WDK.
 `rejected` is a `ProviderError` with reason `UNAUTHORIZED`. `accepted` is a
 widget URL that contains a session. The sandbox can accept a Safe that is not
 deployed on the fork once the DFX API verifies ERC-6492 on Polygon. It needs

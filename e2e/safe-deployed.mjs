@@ -209,11 +209,13 @@ const interrupted = new Promise((resolve, reject) => {
 })
 
 async function run () {
-  await step('single @tetherto/wdk-wallet copy', async () => {
+  await step('DFX and WDK share one @tetherto/wdk-wallet copy', async () => {
     const dfxWalletPath = createRequire(require.resolve('@dfx.swiss/wdk-protocol-fiat-dfx')).resolve('@tetherto/wdk-wallet')
     const wdkWalletPath = createRequire(require.resolve('@tetherto/wdk')).resolve('@tetherto/wdk-wallet')
     check(dfxWalletPath === wdkWalletPath, 'Duplicate @tetherto/wdk-wallet copies; reinstall e2e dependencies with install-links=true')
-    return { copies: 1 }
+    const erc4337WalletVersion = walletRequire('@tetherto/wdk-wallet/package').version
+    console.log(`    ERC-4337 wallet package resolves @tetherto/wdk-wallet ${erc4337WalletVersion}`)
+    return { erc4337WalletCopyVersion: erc4337WalletVersion }
   })
 
   await step('start Polygon fork and await eth_chainId', async () => {

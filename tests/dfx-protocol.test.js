@@ -857,18 +857,27 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       ])
     })
 
-    test('wraps a matching WDK Safe prediction as ERC-6492 on Polygon', async () => {
-      const { predicted, account, message, safeSignature, result, typed, body } = await buyMatchingSafe('Polygon')
+    test.each([
+      ['Ethereum', 1],
+      ['Sepolia', 11155111],
+      ['BinanceSmartChain', 56],
+      ['Optimism', 10],
+      ['Arbitrum', 42161],
+      ['Polygon', 137],
+      ['Base', 8453],
+      ['Gnosis', 100]
+    ])('wraps a matching WDK Safe prediction as ERC-6492 on %s', async (NETWORK, CHAIN_ID) => {
+      const { predicted, account, message, safeSignature, result, typed, body } = await buyMatchingSafe(NETWORK)
       const [factoryAddress, factoryData] = SafeAccount030.createFactoryAddressAndData([OWNER_ADDRESS], WDK_SAFE_OVERRIDES)
       const encoded = '0x' + body.signature.slice(2, -ERC_6492_MAGIC.length)
       const [decodedFactory, decodedData, inner] = AbiCoder.defaultAbiCoder().decode(['address', 'bytes', 'bytes'], encoded)
       const hex = value => value.toLowerCase().replace(/^0x/, '')
       expect(account).not.toBe(predicted)
-      expect(result).toEqual(widget('buy', { blockchain: 'Polygon' }))
+      expect(result).toEqual(widget('buy', { blockchain: NETWORK }))
       expect(body.address).toBe(account)
-      expect(body.blockchain).toBe('Polygon')
+      expect(body.blockchain).toBe(NETWORK)
       expect(body.signature.endsWith(ERC_6492_MAGIC)).toBe(true)
-      expect(typed.domain.chainId).toBe(137)
+      expect(typed.domain.chainId).toBe(CHAIN_ID)
       expect(typed.domain.verifyingContract).toBe(account)
       expect(hex(decodedFactory)).toBe(hex(factoryAddress))
       expect(hex(decodedData)).toBe(hex(factoryData))

@@ -1,4 +1,5 @@
 import DfxProtocol from '../bare.js'
+import expected from './fixtures/bare-smoke-expected.json' with { type: 'json' }
 
 // The deterministic public owner 0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF,
 // Safe and signatures were derived with ethers Wallet using private key 2 and
@@ -7,7 +8,7 @@ const SAFE = '0xe5385ac47CD1964317428CD363cf59D976D12672'
 const CHALLENGE = '[dev]_By_signing_this_message,_you_confirm_that_you_are_the_sole_owner_of_the_provided_Blockchain_address._Your_ID:_0xe5385ac47CD1964317428CD363cf59D976D12672'
 const OWNER_SIGNATURE = '0xd68efac83e5d5ce82f4017fb82bd1b5a63c35e7e5cdca327a7658a5bfabb87713dd0d9562de8fed5d4d885945066e6af9c3ac3008094ac21336d030c155d36261b'
 const SAFE_SIGNATURE = `0x${'11'.repeat(64)}1b`
-const ERC6492_MAGIC = '6492'.repeat(16)
+// See ./fixtures/bare-smoke-expected.json for the wrapper and its derivation details.
 
 let postedAuth
 
@@ -60,7 +61,6 @@ try {
 }
 
 check('posted address is the predicted Safe', postedAuth?.address === SAFE)
-check('posted signature ends with the ERC-6492 magic', typeof postedAuth?.signature === 'string' && postedAuth.signature.endsWith(ERC6492_MAGIC))
-check('posted signature contains the inner Safe signature', typeof postedAuth?.signature === 'string' && postedAuth.signature.includes(SAFE_SIGNATURE.slice(2)))
+check('posted signature matches the expected ERC-6492 wrapper', postedAuth?.signature === expected.signature)
 check('transaction detail returns the stubbed 404 after login', postedAuth !== undefined && detailError?.message === 'Not found', detailError?.message ?? 'no error returned')
 console.log(`SUMMARY: ${passed}/${checks}`)

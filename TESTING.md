@@ -48,7 +48,7 @@ unless it says so.
   `@tetherto/wdk-wallet-tron` 1.0.0-beta.14, `@tetherto/wdk-wallet-solana` 1.0.0-beta.16,
   `@tetherto/wdk-wallet-btc` 1.0.0-beta.16, `@tetherto/wdk-wallet-spark` 1.0.0-beta.27.
 - **DFX environments:** sandbox `dev.api.dfx.swiss` / `dev.app.dfx.swiss`, production `api.dfx.swiss` / `app.dfx.swiss`,
-  and a local full stack (real DFX API and real Postgres, external providers mocked) built from `DFXswiss/backend`
+  and a local full stack (real DFX API and real Postgres, external providers mocked) built from the DFX API at
   `63cb9d569` and `DFXswiss/app` `1321f956`.
 
 ## Summary
@@ -56,8 +56,8 @@ unless it says so.
 | Layer | Command | Result |
 | --- | --- | --- |
 | Integration, local | `npm run test:integration` | 35/35 tests in 1 suite against a local DFX server replaying recorded sandbox responses; no network |
-| Unit tests | `npm run lint && npm test` | lint output empty; 704/704 tests in 2 suites |
-| Coverage (unit + integration) | `npm run test:coverage` | 739/739 tests in 3 suites on Node v26.7.0; 100 % statements, branches, functions, lines |
+| Unit tests | `npm run lint && npm test` | lint output empty; 711/711 tests in 2 suites |
+| Coverage (unit + integration) | `npm run test:coverage` | 746/746 tests in 3 suites on Node v26.7.0; 100 % statements, branches, functions, lines |
 | Mutation probes | ad-hoc script (see [Mutation probes](#mutation-probes)) | 59/59 mutations detected on 2026-09-30, each by 1–233 tests; not repeated on this branch. 7/7 mutations of the ERC-6492 wrapper and the challenge check detected on 2026-10-20 |
 | Signature normalisation vs. reference libraries | `cd e2e && node signature-diff.mjs` | 0 mismatches in 20 000 Solana and 5 000 Spark signatures on `20ec94d`. The script on this branch was not re-run |
 | Live matrix, sandbox | `cd e2e && DFX_ENV=sandbox node live-matrix.mjs` | 172/178 steps on `20ec94d`; the 6 failures are expected (section 2). The script on this branch was not re-run |
@@ -69,7 +69,7 @@ unless it says so.
 | Backend processing, first look | `cd e2e && node fullstack-processing.mjs` | On `20ec94d`, the sell deposit is matched by the real `BuyFiat` job; a +10 % counter-test is not matched. The script on this branch was not re-run |
 | Transaction lifecycle, real backend jobs | `cd e2e && node fullstack-lifecycle.mjs` | On `20ec94d`: 56 steps OK, 2 red: buy and sell reach an automatic AML `Pass`, rejection and refund reach `Returned`, the module status matches all seven DFX states observed; the crypto payout and the fiat bank execution are not prepared by the local stack (no liquidity rules). The script on this branch was not re-run |
 | KYC in the widget | `cd e2e && node kyc-widget.mjs` | On `20ec94d`: e-mail code → level 10 → personal data → level 20 → nationality → stops at the Sumsub identification call. The script on this branch was not re-run |
-| Bare entry point | `cd e2e && npx --yes bare@1.34.1 bare-smoke.mjs` | 5/5 checks on this branch (2026-10-20, Bare runtime v1.35.0): `bare.js` loads `DfxProtocol`, and a sandbox sign-in on Polygon through stubbed `fetch` posts the predicted Safe address with an ERC-6492-wrapped signature that contains the inner Safe signature. With Polygon removed from `ERC6492_NETWORKS` the probe reports 4/5. No network, no DFX API |
+| Bare entry point | `cd e2e && npx --yes bare@1.34.1 bare-smoke.mjs` | 4/4 checks on this branch (2026-10-20, Bare runtime v1.35.0): `bare.js` loads `DfxProtocol`, and a sandbox sign-in on Polygon through stubbed `fetch` posts the predicted Safe address with exactly the ERC-6492 signature in `e2e/fixtures/bare-smoke-expected.json`, then the stubbed detail request answers 404. With one hex digit of that fixture changed the probe reports 3/4. No network, no DFX API |
 | Deployed ERC-4337 account | `cd e2e && ANVIL_FORK_URL=https://polygon.drpc.org node safe-deployed.mjs` | 11/11 steps on this branch (2026-10-20): before deployment the posted signature is ERC-6492-wrapped and viem 2.38.5 verifies it on the fork while the Safe has no code; after deployment the inner signature passes ERC-1271 and the wrapped one passes viem; sandbox result `rejected` in all three sign-ins (section 8) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
@@ -77,16 +77,17 @@ See [`e2e/README.md`](e2e/README.md) for prerequisites and side effects before r
 
 ## 1. Unit tests
 
-On this branch (2026-10-20), `npm run lint` prints nothing and `npm test` passes 704 tests in 2 suites (Node v26.7.0).
+On this branch (2026-10-20), `npm run lint` prints nothing and `npm test` passes 711 tests in 2 suites (Node v26.7.0).
 `npm run test:integration` passes 35 tests in 1 suite on that same Node version.
-`npm run test:coverage` on that same Node version passes 739 tests in 3 suites and reaches 100 % coverage in all four categories. The
+`npm run test:coverage` on that same Node version passes 746 tests in 3 suites and reaches 100 % coverage in all four categories. The
 session scenarios that build state across successive public calls live in the integration suite
 (skill rule R3). Parallel calls to the same method within one Act belong in unit tests. All
 unit tests use an injected `fetch` routed by method and URL and cover
 both trade directions, both amount modes, lossless 18-decimal arithmetic, every HTTP-status mapping, every DFX
 transaction state, the account-error allowlist per method, signature normalisation (Solana, Spark), sign-in as the
-account address, a Safe EIP-712 signature when the recovered signer differs, its ERC-6492 wrapper on the networks where DFX
-verifies ERC-6492 (decoded with ethers and checked against an independent abstractionkit prediction), the exact
+account address, a Safe EIP-712 signature when the recovered signer differs, its ERC-6492 wrapper on Polygon for `buy`, `sell` and
+`getTransactionDetail` (decoded with ethers and checked against an independent abstractionkit prediction), the unwrapped
+Safe signature on Citrea and CitreaTestnet, the exact
 sign-in challenge check before any signature, and assets whose API decimals are null.
 There is no cached signing owner.
 
@@ -99,7 +100,9 @@ On 2026-10-20, seven mutations of the ERC-6492 wrapper and the sign-in challenge
 (pattern matched exactly once, source restored), but only `tests/dfx-protocol.test.js` was run, not the integration
 suite. All seven were detected, with the number of failing tests in brackets: salt nonce changed (1), Safe 4337 module
 address changed (1), self-check skipped (2), second ABI offset shifted by one word (1), challenge check removed (6),
-sandbox prefix empty (6), wrapper on every network (1).
+sandbox prefix empty (6), wrapper on every network (1). After the positive ERC-6492 test was extended to all eight
+networks, narrowing `ERC6492_NETWORKS` to Polygon failed 8 tests. In the integration suite, posting the owner signature
+instead of the Safe signature failed 3 of 35 tests.
 
 Examples: sell rate not inverted; sell fee taken from the source side; a failed DFX state mapped to `in_progress`;
 `PayoutInProgress` mapped to `completed`; network binding not enforced; `isValid: false` not checked first; EVM
@@ -471,7 +474,7 @@ repeated.
 **DFX backend issue found: Solana addresses starting with `3`.** DFX rejects sign-ins of Solana accounts whose address
 starts with `3` with 400 "Invalid signature". Sandbox, fresh throwaway accounts: 5 of 5 addresses starting with `3`
 rejected, 5 of 5 others accepted; the rejected signatures verify locally (ed25519) and are sent unchanged. Cause in
-`DFXswiss/backend` (`origin/develop`): `bitcoinAddressFormat = '([13]|bc1)[a-zA-HJ-NP-Z0-9]{25,62}|…'` also matches
+The DFX API (development branch): `bitcoinAddressFormat = '([13]|bc1)[a-zA-HJ-NP-Z0-9]{25,62}|…'` also matches
 43–44-character Base58 addresses beginning with `1` or `3`; `CryptoService` detects Bitcoin before Solana and
 `verifySignature` uses the detected chain (the `blockchain` field is only used for EVM). About 6 % of random Solana
 addresses start with `1` or `3` (5.8 % with `3` and 0.4 % with `1` in a simulation of 200 000 random keys).

@@ -203,11 +203,13 @@ export const SIGN_IN_CHALLENGE_PREFIX = Object.freeze({
 
 export const SIGN_IN_CHALLENGE = 'By_signing_this_message,_you_confirm_that_you_are_the_sole_owner_of_the_provided_Blockchain_address._Your_ID:_'
 
-// The module wraps Safe signatures only on networks in ERC6492_NETWORKS
-// (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base and
-// Gnosis), for which the DFX API is intended to verify ERC-6492; an API without
-// ERC-6492 support rejects an undeployed Safe and a wrapped signature from a
-// deployed Safe.
+// The module wraps a Safe signature only when the recovered owner predicts the
+// account with the WDK Safe 0.3.0 parameters and the network is in
+// ERC6492_NETWORKS (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
+// Polygon, Base and Gnosis), the networks for which the DFX API is intended to
+// verify ERC-6492; otherwise, it sends the Safe signature unwrapped, and an API
+// without ERC-6492 support rejects an undeployed Safe and a wrapped signature
+// from a deployed Safe.
 export const ERC6492_NETWORKS = Object.freeze(new Set([
   'ethereum', 'sepolia', 'binancesmartchain', 'optimism', 'arbitrum', 'polygon',
   'base', 'gnosis'
