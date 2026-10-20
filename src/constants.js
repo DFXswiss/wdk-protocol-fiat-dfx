@@ -206,16 +206,16 @@ export const SIGN_IN_CHALLENGE = 'By_signing_this_message,_you_confirm_that_you_
 // The module wraps a Safe signature only when the recovered owner predicts the
 // account with the WDK Safe 0.3.0 parameters and the network is in
 // ERC6492_NETWORKS (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
-// Polygon, Base and Gnosis), the networks for which the DFX API is intended to
+// Polygon, Base, Gnosis and Plasma), the networks for which the DFX API is intended to
 // verify ERC-6492; otherwise, it sends the Safe signature unwrapped, and an API
 // without ERC-6492 support rejects an undeployed Safe and a wrapped signature
 // from a deployed Safe.
 export const ERC6492_NETWORKS = Object.freeze(new Set([
   'ethereum', 'sepolia', 'binancesmartchain', 'optimism', 'arbitrum', 'polygon',
-  'base', 'gnosis'
+  'base', 'gnosis', 'plasma'
 ]))
 
-// Chain ids DFX uses for ERC-1271. Haqq and Plasma are absent: DFX publishes no id for them.
+// Chain ids DFX uses for ERC-1271. Haqq is absent: DFX publishes no id for it.
 export const EVM_CHAIN_IDS = Object.freeze({
   ethereum: 1,
   sepolia: 11155111,
@@ -225,6 +225,7 @@ export const EVM_CHAIN_IDS = Object.freeze({
   polygon: 137,
   base: 8453,
   gnosis: 100,
+  plasma: 9745,
   citrea: 4114,
   citreatestnet: 5115
 })

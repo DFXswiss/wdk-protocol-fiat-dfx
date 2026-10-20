@@ -236,7 +236,7 @@ address. Authenticated DFX methods sign in as that address. On a known chain id,
 when the recovered signer differs and the account implements `signTypedData`,
 the module sends a Safe EIP-712 signature. The module wraps Safe signatures only
 on networks in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism,
-Arbitrum, Polygon, Base and Gnosis), for which the DFX API is intended to verify
+Arbitrum, Polygon, Base, Gnosis and Plasma), for which the DFX API is intended to verify
 ERC-6492; an API without ERC-6492 support rejects an undeployed Safe and a
 wrapped signature from a deployed Safe. Wrapping also requires that the owner
 predicts the account with the WDK Safe 0.3.0 parameters.
@@ -362,8 +362,9 @@ signature must be an ERC-6492 wrapper: `factory` and `factoryData` match the
 counterfactual account from `account._getSmartAccount()`, and the inner Safe
 signature recovers to the owner. viem 2.38.5, the version the DFX API uses,
 verifies that wrapper on the fork. The Safe still has no code afterwards. The
-script then deploys the account without a bundler and signs again. `buy` and
-`sell` must post the same wrapper. The forked contract accepts the inner
+script then deploys the account without a bundler and signs again. The
+post-deployment `buy` and `sell` signatures are checked byte-for-byte against
+the pre-deployment `buy` wrapper. The forked contract accepts the inner
 signature through ERC-1271 (`0x1626ba7e`), and viem accepts the wrapped
 signature. Each sign-in records `sandbox` as `rejected` or `accepted`.
 Wallet packages can include their own `@tetherto/wdk-wallet` copy; the probe's

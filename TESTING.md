@@ -23,7 +23,7 @@ unless it says so.
     `refundAddress` are checked before every sign-in. When the account implements
     `signTypedData`, the recovered signer differs and the constructor network has a known chain id, authentication
     sends a Safe EIP-712 signature and does not submit the owner. On the networks in `ERC6492_NETWORKS`
-    (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base, Gnosis), for which the DFX API is intended to
+    (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base, Gnosis, Plasma), for which the DFX API is intended to
     verify ERC-6492, that Safe signature is wrapped as ERC-6492 when the recovered owner predicts the account with the
     WDK Safe 0.3.0 parameters. Nothing is signed unless
     the sign-in challenge equals the expected DFX text for the environment and the address sent. Assets without API
@@ -77,9 +77,9 @@ See [`e2e/README.md`](e2e/README.md) for prerequisites and side effects before r
 
 ## 1. Unit tests
 
-On this branch (2026-10-20), `npm run lint` prints nothing and `npm test` passes 711 tests in 2 suites (Node v26.7.0).
-`npm run test:integration` passes 35 tests in 1 suite on that same Node version.
-`npm run test:coverage` on that same Node version passes 746 tests in 3 suites and reaches 100 % coverage in all four categories. The
+On this branch (2026-10-20), `npm run lint` printed nothing and `npm test` passed 711 tests in 2 suites (Node v26.7.0).
+`npm run test:integration` passed 35 tests in 1 suite on that same Node version.
+`npm run test:coverage` on that same Node version passed 746 tests in 3 suites and reached 100 % coverage in all four categories. The
 session scenarios that build state across successive public calls live in the integration suite
 (skill rule R3). Parallel calls to the same method within one Act belong in unit tests. All
 unit tests use an injected `fetch` routed by method and URL and cover
@@ -100,8 +100,10 @@ On 2026-10-20, seven mutations of the ERC-6492 wrapper and the sign-in challenge
 (pattern matched exactly once, source restored), but only `tests/dfx-protocol.test.js` was run, not the integration
 suite. All seven were detected, with the number of failing tests in brackets: salt nonce changed (1), Safe 4337 module
 address changed (1), self-check skipped (2), second ABI offset shifted by one word (1), challenge check removed (6),
-sandbox prefix empty (6), wrapper on every network (1). After the positive ERC-6492 test was extended to all eight
-networks, narrowing `ERC6492_NETWORKS` to Polygon failed 8 tests. In the integration suite, posting the owner signature
+sandbox prefix empty (6), wrapper on every network (1). With the positive ERC-6492 test covering all nine networks,
+narrowing `ERC6492_NETWORKS` to Polygon failed 9 tests: the wrap case on each of the eight other networks, and
+"keeps the Safe signature when Safe prediction throws", whose network then no longer reaches the prediction; removing
+only Plasma failed 1 test. In the integration suite, posting the owner signature
 instead of the Safe signature failed 3 of 35 tests.
 
 Examples: sell rate not inverted; sell fee taken from the source side; a failed DFX state mapped to `in_progress`;
@@ -300,8 +302,8 @@ counterfactual deployment, the inner Safe signature recovers to the owner, and v
 accepts the wrapped signature while `eth_getCode` stays empty. The probe then deploys the WDK smart account without a
 bundler, using that factory data; `eth_getCode` is non-empty after. The account's personal signature over a fixed
 message is byte-for-byte identical before and after deployment, and it recovers to the owner. After deployment,
-`buy()` and `sell()` again submit the wrapped signature: the inner signature returns the ERC-1271 magic value from
-`isValidSignature` on the forked Safe, and viem accepts the wrapped one. The sandbox API cannot see the fork; on
+`buy()` and `sell()` again submit the wrapped signature, byte for byte the one posted before deployment: the inner
+signature returns the ERC-1271 magic value from `isValidSignature` on the forked Safe, and viem accepts the wrapped one. The sandbox API cannot see the fork; on
 2026-10-20 it rejected all three sign-ins (`sandbox: rejected`), because it did not verify ERC-6492 yet. Once it does,
 the probe reports `accepted` for a session it returns.
 
@@ -474,7 +476,7 @@ repeated.
 **DFX backend issue found: Solana addresses starting with `3`.** DFX rejects sign-ins of Solana accounts whose address
 starts with `3` with 400 "Invalid signature". Sandbox, fresh throwaway accounts: 5 of 5 addresses starting with `3`
 rejected, 5 of 5 others accepted; the rejected signatures verify locally (ed25519) and are sent unchanged. Cause in
-The DFX API (development branch): `bitcoinAddressFormat = '([13]|bc1)[a-zA-HJ-NP-Z0-9]{25,62}|…'` also matches
+the DFX API (development branch): `bitcoinAddressFormat = '([13]|bc1)[a-zA-HJ-NP-Z0-9]{25,62}|…'` also matches
 43–44-character Base58 addresses beginning with `1` or `3`; `CryptoService` detects Bitcoin before Solana and
 `verifySignature` uses the detected chain (the `blockchain` field is only used for EVM). About 6 % of random Solana
 addresses start with `1` or `3` (5.8 % with `3` and 0.4 % with `1` in a simulation of 200 000 random keys).

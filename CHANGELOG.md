@@ -37,7 +37,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   including `onChainIdentifier` or another abstractionkit configuration, sends
   the unwrapped Safe signature. The module wraps Safe signatures only on networks
   in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
-  Polygon, Base and Gnosis), for which the DFX API is intended to verify
+  Polygon, Base, Gnosis and Plasma), for which the DFX API is intended to verify
   ERC-6492; an API without ERC-6492 support rejects an undeployed Safe and a
   wrapped signature from a deployed Safe. Citrea and CitreaTestnet receive the
   unwrapped Safe signature.
@@ -132,12 +132,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   ERC-6492 wrapper when the owner predicts the account with the WDK Safe 0.3.0
   parameters. The module wraps Safe signatures only on networks in
   `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
-  Polygon, Base and Gnosis), for which the DFX API is intended to verify
+  Polygon, Base, Gnosis and Plasma), for which the DFX API is intended to verify
   ERC-6492; an API without ERC-6492 support rejects an undeployed Safe and a
   wrapped signature from a deployed Safe. Otherwise, and on Citrea and
   CitreaTestnet, it can sign in only after its contract is deployed. In every
   case one owner signature must meet the contract threshold.
-  Haqq and Plasma are forwarded without a Safe signature because DFX publishes
-  no chain id for them.
+  Haqq is forwarded without a Safe signature because DFX publishes no chain id
+  for it.
 - Amounts outside the API's conservative numeric precision boundary are rejected.
 - Rate-limit and account-state error reasons are provisional pending WDK agreement.

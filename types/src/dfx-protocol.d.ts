@@ -103,7 +103,7 @@ export default class DfxProtocol extends FiatProtocol {
      * When the recovered signer differs, that account can sign typed data and the constructor network has a DFX chain id,
      * sign-in uses a Safe EIP-712 signature for the account address; otherwise the wallet
      * signature is submitted for that same address.
-     * The module wraps a Safe signature only when the recovered owner predicts the account with the WDK Safe 0.3.0 parameters and the network is in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base and Gnosis), the networks for which the DFX API is intended to verify ERC-6492; otherwise, it sends the Safe signature unwrapped, and an API without ERC-6492 support rejects an undeployed Safe and a wrapped signature from a deployed Safe.
+     * The module wraps a Safe signature only when the recovered owner predicts the account with the WDK Safe 0.3.0 parameters and the network is in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base, Gnosis and Plasma), the networks for which the DFX API is intended to verify ERC-6492; otherwise, it sends the Safe signature unwrapped, and an API without ERC-6492 support rejects an undeployed Safe and a wrapped signature from a deployed Safe.
      * Account errors pass through only for the exact constructors listed below;
      * subclasses and other account failures become ProviderError with the original cause.
      *
@@ -164,7 +164,7 @@ export default class DfxProtocol extends FiatProtocol {
      * When the recovered signer differs, that account can sign typed data and the constructor network has a DFX chain id,
      * sign-in uses a Safe EIP-712 signature for the account address; otherwise the wallet
      * signature is submitted for that same address.
-     * The module wraps a Safe signature only when the recovered owner predicts the account with the WDK Safe 0.3.0 parameters and the network is in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base and Gnosis), the networks for which the DFX API is intended to verify ERC-6492; otherwise, it sends the Safe signature unwrapped, and an API without ERC-6492 support rejects an undeployed Safe and a wrapped signature from a deployed Safe.
+     * The module wraps a Safe signature only when the recovered owner predicts the account with the WDK Safe 0.3.0 parameters and the network is in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base, Gnosis and Plasma), the networks for which the DFX API is intended to verify ERC-6492; otherwise, it sends the Safe signature unwrapped, and an API without ERC-6492 support rejects an undeployed Safe and a wrapped signature from a deployed Safe.
      * Account errors pass through only for the exact constructors listed below;
      * subclasses and other account failures become ProviderError with the original cause.
      *
@@ -225,7 +225,7 @@ export default class DfxProtocol extends FiatProtocol {
      * When the recovered signer differs, that account can sign typed data and the constructor network has a DFX chain id,
      * sign-in uses a Safe EIP-712 signature for the account address; otherwise the wallet
      * signature is submitted for that same address.
-     * The module wraps a Safe signature only when the recovered owner predicts the account with the WDK Safe 0.3.0 parameters and the network is in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base and Gnosis), the networks for which the DFX API is intended to verify ERC-6492; otherwise, it sends the Safe signature unwrapped, and an API without ERC-6492 support rejects an undeployed Safe and a wrapped signature from a deployed Safe.
+     * The module wraps a Safe signature only when the recovered owner predicts the account with the WDK Safe 0.3.0 parameters and the network is in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base, Gnosis and Plasma), the networks for which the DFX API is intended to verify ERC-6492; otherwise, it sends the Safe signature unwrapped, and an API without ERC-6492 support rejects an undeployed Safe and a wrapped signature from a deployed Safe.
      * Only exact ProviderRequiredError and ProviderError account errors pass through;
      * all other account failures become ProviderError with the original cause.
      *

@@ -865,7 +865,8 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       ['Arbitrum', 42161],
       ['Polygon', 137],
       ['Base', 8453],
-      ['Gnosis', 100]
+      ['Gnosis', 100],
+      ['Plasma', 9745]
     ])('wraps a matching WDK Safe prediction as ERC-6492 on %s', async (NETWORK, CHAIN_ID) => {
       const { predicted, account, message, safeSignature, result, typed, body } = await buyMatchingSafe(NETWORK)
       const [factoryAddress, factoryData] = SafeAccount030.createFactoryAddressAndData([OWNER_ADDRESS], WDK_SAFE_OVERRIDES)
@@ -929,7 +930,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       expect(signMock.mock.calls).toEqual([[DUMMY_ACCOUNT_MESSAGE]])
     })
 
-    test.each(['Haqq', 'Plasma'])('%s keeps the wallet signature when DFX publishes no chain id', async NETWORK => {
+    test.each(['Haqq'])('%s keeps the wallet signature when DFX publishes no chain id', async NETWORK => {
       signTypedDataMock.mockResolvedValue('0x' + 'ab'.repeat(65))
       const { protocol } = setup({ network: NETWORK }, {
         'GET /v1/asset': response([{ ...DUMMY_ASSETS[0], blockchain: NETWORK }]),

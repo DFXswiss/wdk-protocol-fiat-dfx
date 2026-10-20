@@ -21,7 +21,7 @@ const API = 'https://dev.api.dfx.swiss'
 const MESSAGE = 'DFX deployed Safe owner-signature probe v1'
 const results = []
 const stop = new AbortController()
-let child, childDone, childError, wdk, rpcUrl, account, fiat, safe, owner, signatureBefore
+let child, childDone, childError, wdk, rpcUrl, account, fiat, safe, owner, signatureBefore, preDeploymentWrapper
 const dfxRequests = []
 const authBodies = []
 let challengeMessage
@@ -301,6 +301,7 @@ async function run () {
   const buyOptions = { cryptoAsset: 'USDT', fiatCurrency: 'EUR', fiatAmount: 10000n }
   await step('buy submits the wrapped Safe signature before deployment', async () => {
     const posted = await submitSignIn('buy', buyOptions)
+    preDeploymentWrapper = posted.signature
     const smartAccount = await account._getSmartAccount()
     check(sameHex(posted.factory, smartAccount.factoryAddress), 'Wrapper factory differs from the counterfactual Safe')
     check(sameHex(posted.factoryData, smartAccount.factoryData), 'Wrapper factory data differs from the counterfactual Safe')
@@ -371,6 +372,7 @@ async function run () {
       const posted = await submitSignIn(kind, kind === 'buy' ? buyOptions : {
         cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: 50n * 10n ** BigInt(asset.decimals)
       })
+      check(posted.signature === preDeploymentWrapper, `${kind} wrapper differs byte-for-byte from the pre-deployment buy wrapper`)
       const data = erc1271.encodeFunctionData('isValidSignature', [hashMessage(challengeMessage), posted.inner])
       const magic = await rpc('eth_call', [{ to: safe, data }, 'latest'])
       check(magic.startsWith('0x1626ba7e'), 'Forked Safe rejected the sign-in signature')

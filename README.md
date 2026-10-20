@@ -347,14 +347,14 @@ same fallback.
 - ERC-4337 accounts (`@tetherto/wdk-wallet-evm-erc-4337`) sign in as the address
   returned by `getAddress()`. That address is the DFX account, the recipient and
   the refund address. The module never submits the recovered owner. On Ethereum,
-  Sepolia, BinanceSmartChain, Optimism, Arbitrum, Polygon, Base, Gnosis, Citrea
-  and CitreaTestnet, a personal signature that recovers to a different address is
+  Sepolia, BinanceSmartChain, Optimism, Arbitrum, Polygon, Base, Gnosis, Plasma,
+  Citrea and CitreaTestnet, a personal signature that recovers to a different address is
   replaced with a Safe EIP-712 `SafeMessage` when the account implements
   `signTypedData`. When the recovered owner predicts that same account with the
   WDK Safe 0.3.0 parameters (no `onChainIdentifier`), the module wraps the Safe
   signature as ERC-6492. The module wraps Safe signatures only on networks in
   `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
-  Polygon, Base and Gnosis), for which the DFX API is intended to verify
+  Polygon, Base, Gnosis and Plasma), for which the DFX API is intended to verify
   ERC-6492; an API without ERC-6492 support rejects an undeployed Safe and a
   wrapped signature from a deployed Safe. A Safe that is not deployed yet can
   sign in once the DFX API verifies ERC-6492; a deployed Safe is still checked
@@ -362,7 +362,7 @@ same fallback.
   If the prediction does not match — a wallet `onChainIdentifier`, or another
   abstractionkit version — the module sends the Safe signature unwrapped. A
   deployed Safe can still pass ERC-1271. A Safe with no code is rejected.
-  Haqq and Plasma have no chain id in that configuration, so the wallet
+  Haqq has no chain id in that configuration, so the wallet
   signature is forwarded and DFX decides. Accounts without `signTypedData` keep
   the wallet signature on the account address. Without a constructor `network`,
   no Safe signature is built. EOA accounts still need one signature.
@@ -389,7 +389,7 @@ constructor network has a known chain id, the account also signs Safe EIP-712
 typed data whose `SafeMessage` bytes are the EIP-191 hash of that message.
 A matching WDK Safe prediction wraps that signature as ERC-6492 only on networks
 in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
-Polygon, Base and Gnosis), for which the DFX API is intended to verify ERC-6492;
+Polygon, Base, Gnosis and Plasma), for which the DFX API is intended to verify ERC-6492;
 an API without ERC-6492 support rejects an undeployed Safe and a wrapped
 signature from a deployed Safe. Citrea and CitreaTestnet receive the unwrapped
 Safe signature.
