@@ -35,11 +35,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   predicts the account with the WDK Safe 0.3.0 init parameters. An undeployed
   Safe can sign in once the DFX API verifies ERC-6492. A failed self-check,
   including `onChainIdentifier` or another abstractionkit configuration, sends
-  the unwrapped Safe signature. DFX verifies ERC-6492 only on Ethereum, Sepolia,
-  BinanceSmartChain, Optimism, Arbitrum, Polygon, Base and Gnosis. Citrea and
-  CitreaTestnet receive the unwrapped Safe signature: a wrapper there would be
-  rejected even for a deployed Safe, while ERC-1271 still accepts the unwrapped
-  signature.
+  the unwrapped Safe signature. The module wraps Safe signatures only on networks
+  in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
+  Polygon, Base and Gnosis), for which the DFX API is intended to verify
+  ERC-6492; an API without ERC-6492 support rejects an undeployed Safe and a
+  wrapped signature from a deployed Safe. Citrea and CitreaTestnet receive the
+  unwrapped Safe signature.
 - Sign EVM smart accounts in as the account address. When the recovered signer
   differs, `signTypedData` is available and the constructor network has a DFX
   chain id, authentication sends a Safe EIP-712 signature instead of the owner
@@ -128,10 +129,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Assets without API decimals, and ambiguous tickers without a network, are rejected.
 - A smart account that is not deployed yet can sign in only through the
-  ERC-6492 wrapper: on the networks where DFX verifies ERC-6492, and only when
-  the owner predicts the account with the WDK Safe 0.3.0 parameters. Otherwise,
-  and on Citrea and CitreaTestnet, it can sign in only after its contract is
-  deployed. In every case one owner signature must meet the contract threshold.
+  ERC-6492 wrapper when the owner predicts the account with the WDK Safe 0.3.0
+  parameters. The module wraps Safe signatures only on networks in
+  `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
+  Polygon, Base and Gnosis), for which the DFX API is intended to verify
+  ERC-6492; an API without ERC-6492 support rejects an undeployed Safe and a
+  wrapped signature from a deployed Safe. Otherwise, and on Citrea and
+  CitreaTestnet, it can sign in only after its contract is deployed. In every
+  case one owner signature must meet the contract threshold.
   Haqq and Plasma are forwarded without a Safe signature because DFX publishes
   no chain id for them.
 - Amounts outside the API's conservative numeric precision boundary are rejected.

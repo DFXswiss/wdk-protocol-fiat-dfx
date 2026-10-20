@@ -22,9 +22,10 @@ unless it says so.
   - **Current sign-in:** the account address is the DFX account. `recipient` and
     `refundAddress` are checked before every sign-in. When the account implements
     `signTypedData`, the recovered signer differs and the constructor network has a known chain id, authentication
-    sends a Safe EIP-712 signature and does not submit the owner. On the networks where DFX verifies ERC-6492
-    (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base, Gnosis), that Safe signature is wrapped as
-    ERC-6492 when the recovered owner predicts the account with the WDK Safe 0.3.0 parameters. Nothing is signed unless
+    sends a Safe EIP-712 signature and does not submit the owner. On the networks in `ERC6492_NETWORKS`
+    (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base, Gnosis), for which the DFX API is intended to
+    verify ERC-6492, that Safe signature is wrapped as ERC-6492 when the recovered owner predicts the account with the
+    WDK Safe 0.3.0 parameters. Nothing is signed unless
     the sign-in challenge equals the expected DFX text for the environment and the address sent. Assets without API
     decimals stay unlisted. The owner-cache drop and the delivery check limited to
     non-EVM or EOA above describe the 2026-09-30 revision only.
@@ -37,7 +38,7 @@ unless it says so.
     (section 12).
 - **First runs:** 2026-09-24 (sections 1–5) and 2026-09-25 (sections 6–8) against `0be1b6d`; the numbers in this document
   are those of the 2026-09-28 re-run unless a section says otherwise.
-- **Runtime:** Historical runs used Node.js `v22.22.0`. On this branch, lint, unit, integration, coverage and the fork probe used Node v26.7.0. macOS arm64; Bare for the Bare entry point.
+- **Runtime:** Historical runs used Node.js `v22.22.0`. On this branch, lint, unit, integration, coverage and the fork probe used Node v26.7.0. macOS arm64. The Bare entry point ran on the Bare runtime v1.35.0 (npm package `bare@1.34.1`), see the summary row.
 - **WDK packages used by `tests/integration`:** root-lockfile versions `@tetherto/wdk-wallet` 1.0.0-beta.17
   (a single copy, also used by `@tetherto/wdk-wallet-evm`; 1.0.0-beta.19 before 2026-10-02)
   and `@tetherto/wdk-wallet-evm` 1.0.0-beta.19.
@@ -68,6 +69,7 @@ unless it says so.
 | Backend processing, first look | `cd e2e && node fullstack-processing.mjs` | On `20ec94d`, the sell deposit is matched by the real `BuyFiat` job; a +10 % counter-test is not matched. The script on this branch was not re-run |
 | Transaction lifecycle, real backend jobs | `cd e2e && node fullstack-lifecycle.mjs` | On `20ec94d`: 56 steps OK, 2 red: buy and sell reach an automatic AML `Pass`, rejection and refund reach `Returned`, the module status matches all seven DFX states observed; the crypto payout and the fiat bank execution are not prepared by the local stack (no liquidity rules). The script on this branch was not re-run |
 | KYC in the widget | `cd e2e && node kyc-widget.mjs` | On `20ec94d`: e-mail code → level 10 → personal data → level 20 → nationality → stops at the Sumsub identification call. The script on this branch was not re-run |
+| Bare entry point | `cd e2e && npx --yes bare@1.34.1 bare-smoke.mjs` | 5/5 checks on this branch (2026-10-20, Bare runtime v1.35.0): `bare.js` loads `DfxProtocol`, and a sandbox sign-in on Polygon through stubbed `fetch` posts the predicted Safe address with an ERC-6492-wrapped signature that contains the inner Safe signature. With Polygon removed from `ERC6492_NETWORKS` the probe reports 4/5. No network, no DFX API |
 | Deployed ERC-4337 account | `cd e2e && ANVIL_FORK_URL=https://polygon.drpc.org node safe-deployed.mjs` | 11/11 steps on this branch (2026-10-20): before deployment the posted signature is ERC-6492-wrapped and viem 2.38.5 verifies it on the fork while the Safe has no code; after deployment the inner signature passes ERC-1271 and the wrapped one passes viem; sandbox result `rejected` in all three sign-ins (section 8) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 

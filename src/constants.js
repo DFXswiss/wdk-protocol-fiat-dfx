@@ -203,9 +203,11 @@ export const SIGN_IN_CHALLENGE_PREFIX = Object.freeze({
 
 export const SIGN_IN_CHALLENGE = 'By_signing_this_message,_you_confirm_that_you_are_the_sole_owner_of_the_provided_Blockchain_address._Your_ID:_'
 
-// Networks where DFX verifies ERC-6492. Citrea and CitreaTestnet accept an
-// unwrapped Safe signature through ERC-1271 and reject a wrapper, including
-// for a Safe that is already deployed.
+// The module wraps Safe signatures only on networks in ERC6492_NETWORKS
+// (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum, Polygon, Base and
+// Gnosis), for which the DFX API is intended to verify ERC-6492; an API without
+// ERC-6492 support rejects an undeployed Safe and a wrapped signature from a
+// deployed Safe.
 export const ERC6492_NETWORKS = Object.freeze(new Set([
   'ethereum', 'sepolia', 'binancesmartchain', 'optimism', 'arbitrum', 'polygon',
   'base', 'gnosis'

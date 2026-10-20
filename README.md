@@ -352,12 +352,13 @@ same fallback.
   replaced with a Safe EIP-712 `SafeMessage` when the account implements
   `signTypedData`. When the recovered owner predicts that same account with the
   WDK Safe 0.3.0 parameters (no `onChainIdentifier`), the module wraps the Safe
-  signature as ERC-6492. DFX verifies ERC-6492 only on Ethereum, Sepolia,
-  BinanceSmartChain, Optimism, Arbitrum, Polygon, Base and Gnosis, not on Citrea
-  or CitreaTestnet. A wrapper sent on Citrea or CitreaTestnet would be rejected
-  even for a deployed Safe; the unwrapped Safe signature is accepted through
-  ERC-1271. A Safe that is not deployed yet can sign in once the DFX API
-  verifies ERC-6492; a deployed Safe is still checked with ERC-1271.
+  signature as ERC-6492. The module wraps Safe signatures only on networks in
+  `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
+  Polygon, Base and Gnosis), for which the DFX API is intended to verify
+  ERC-6492; an API without ERC-6492 support rejects an undeployed Safe and a
+  wrapped signature from a deployed Safe. A Safe that is not deployed yet can
+  sign in once the DFX API verifies ERC-6492; a deployed Safe is still checked
+  with ERC-1271.
   If the prediction does not match — a wallet `onChainIdentifier`, or another
   abstractionkit version — the module sends the Safe signature unwrapped. A
   deployed Safe can still pass ERC-1271. A Safe with no code is rejected.
@@ -386,9 +387,12 @@ and the exact address sent in `?address=`, including the sandbox `[dev]_` prefix
 When the recovered signer differs, `signTypedData` is available and the
 constructor network has a known chain id, the account also signs Safe EIP-712
 typed data whose `SafeMessage` bytes are the EIP-191 hash of that message.
-A matching WDK Safe prediction wraps that signature as ERC-6492 only on the
-networks where DFX verifies it. Citrea and CitreaTestnet receive the unwrapped
-Safe signature, because a wrapper there would be rejected even for a deployed Safe.
+A matching WDK Safe prediction wraps that signature as ERC-6492 only on networks
+in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism, Arbitrum,
+Polygon, Base and Gnosis), for which the DFX API is intended to verify ERC-6492;
+an API without ERC-6492 support rejects an undeployed Safe and a wrapped
+signature from a deployed Safe. Citrea and CitreaTestnet receive the unwrapped
+Safe signature.
 
 Widget URLs contain a bearer session token: deliver them only to the user-facing
 browser and do not log or share them. Tokens are not persisted by the module.

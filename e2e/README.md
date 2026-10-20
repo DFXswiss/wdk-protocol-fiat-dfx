@@ -39,6 +39,18 @@ signature differential needs no network after installation. Wallet journeys need
 loopback port 4748 free (override with `WALLET_SIM_PORT`); they start and stop their own simulator for every journey.
 Do not start a separate simulator at the same time.
 
+## Bare entry point
+
+From `e2e/`, run the stubbed smoke probe with:
+
+```sh
+npx --yes bare@1.34.1 bare-smoke.mjs
+```
+
+It imports the package's `bare.js` entry point, performs a stubbed sandbox sign-in,
+and checks the submitted Safe address and ERC-6492-wrapped signature. It does not
+connect to a network or authenticate with a real DFX API.
+
 ## Side effects and output
 
 The live matrix creates fresh wallets and DFX users through authentication, both
@@ -221,10 +233,12 @@ and are not queried. Native balances follow the configured chain RPCs even in
 DFX sandbox mode. Smart-account balances belong to the displayed smart-account
 address. Authenticated DFX methods sign in as that address. On a known chain id,
 when the recovered signer differs and the account implements `signTypedData`,
-the module sends a Safe EIP-712 signature. On the networks where DFX verifies
-ERC-6492, it wraps that signature as ERC-6492 when the owner predicts the account
-with the WDK Safe 0.3.0 parameters. A DFX API that does not verify ERC-6492 rejects
-an undeployed account that has no code.
+the module sends a Safe EIP-712 signature. The module wraps Safe signatures only
+on networks in `ERC6492_NETWORKS` (Ethereum, Sepolia, BNB Smart Chain, Optimism,
+Arbitrum, Polygon, Base and Gnosis), for which the DFX API is intended to verify
+ERC-6492; an API without ERC-6492 support rejects an undeployed Safe and a
+wrapped signature from a deployed Safe. Wrapping also requires that the owner
+predicts the account with the WDK Safe 0.3.0 parameters.
 
 If `WALLET_SIM_ORDERS_FILE` is set, its parent directory must already exist.
 Orders are saved atomically with permissions `0600` and loaded at startup.

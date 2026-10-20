@@ -130,6 +130,9 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
         types: { SafeMessage: [{ name: 'message', type: 'bytes' }] },
         message: { message: expect.stringMatching(/^0x[0-9a-f]{64}$/) }
       }])
+      const authBodies = await serverControl('/__auth-bodies')
+      expect(authBodies).toHaveLength(1)
+      expect(authBodies[0].signature).toBe(await smart.account.signTypedData(smart.typedData[0]))
       expect(await serverControl('/__events')).toEqual([
         `challenge:${DUMMY_SMART_ADDRESS}`,
         `login:${DUMMY_SMART_ADDRESS}`

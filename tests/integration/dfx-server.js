@@ -40,6 +40,7 @@ export async function startServer () {
   const tokens = new Set()
   const registeredAddresses = new Set()
   const events = []
+  const authBodies = []
   let faults = {}
   let logins = 0
   const server = createServer(async (request, response) => {
@@ -57,6 +58,7 @@ export async function startServer () {
         tokens.clear()
         if (url.searchParams.get('preserveRegistrations') !== 'true') registeredAddresses.clear()
         events.length = 0
+        authBodies.length = 0
         logins = 0
         faults = JSON.parse(body || '{}')
         send(200, '{}')
@@ -64,6 +66,10 @@ export async function startServer () {
       }
       if (request.method === 'GET' && url.pathname === '/__events') {
         send(200, JSON.stringify(events))
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/__auth-bodies') {
+        send(200, JSON.stringify(authBodies))
         return
       }
       if (request.method === 'GET' && url.pathname === '/v1/auth/signMessage' && body === null &&
@@ -77,6 +83,7 @@ export async function startServer () {
       }
       if (request.method === 'POST' && request.url === '/v1/auth') {
         const auth = JSON.parse(body)
+        authBodies.push(auth)
         if (!auth || Object.keys(auth).sort().join() !== 'address,blockchain,signature' || auth.blockchain !== 'Ethereum') {
           throw new Error('Unrecorded DFX auth request: expected address, signature and blockchain Ethereum')
         }
