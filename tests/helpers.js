@@ -3,6 +3,13 @@
 
 import { expect } from '@jest/globals'
 
+const SIGN_IN_CHALLENGE = 'By_signing_this_message,_you_confirm_that_you_are_the_sole_owner_of_the_provided_Blockchain_address._Your_ID:_'
+
+export function challengeMessage (address, environment = 'production') {
+  const prefix = environment === 'sandbox' ? '[dev]_' : ''
+  return prefix + SIGN_IN_CHALLENGE + address
+}
+
 export function response (data, status = 200) {
   return { ok: status >= 200 && status < 300, status, async text () { return typeof data === 'string' ? data : JSON.stringify(data) } }
 }

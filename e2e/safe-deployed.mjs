@@ -1,11 +1,15 @@
 // Live DFX sandbox probe. Only wallet RPCs use the local Polygon fork.
-// buy/sell submit the Safe address. The fork proves ERC-1271; the sandbox cannot see it.
+// buy/sell submit the Safe address as an ERC-6492 wrapper. viem 2.38.5, the
+// version the DFX API uses, checks that wrapper on the fork before deployment
+// and again after it. Each sign-in records sandbox as rejected or accepted.
 import { spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import { setTimeout as delay } from 'node:timers/promises'
-import { hashMessage, Interface, verifyMessage } from 'ethers'
+import { AbiCoder, hashMessage, Interface, verifyMessage, verifyTypedData } from 'ethers'
+// viem 2.38.5 mirrors the DFX API's ERC-6492 verification.
+import { createPublicClient, http } from 'viem'
 import WDK from '@tetherto/wdk'
 import WalletManagerEvmErc4337 from '@tetherto/wdk-wallet-evm-erc-4337'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
@@ -115,6 +119,86 @@ async function stopAnvil () {
   }
 }
 
+const ERC_6492_MAGIC = '6492649264926492649264926492649264926492649264926492649264926492'
+
+function unwrapErc6492 (signature) {
+  check(typeof signature === 'string' && signature.toLowerCase().endsWith(ERC_6492_MAGIC), 'Sign-in signature is not ERC-6492')
+  let decoded
+  try {
+    decoded = AbiCoder.defaultAbiCoder().decode(
+      ['address', 'bytes', 'bytes'],
+      '0x' + signature.slice(2, -ERC_6492_MAGIC.length)
+    )
+  } catch {
+    throw new ProbeFailure('ERC-6492 signature could not be decoded')
+  }
+  const [factory, factoryData, inner] = decoded
+  return { factory, factoryData, inner }
+}
+
+function sameHex (left, right) {
+  return String(left).toLowerCase() === String(right).toLowerCase()
+}
+
+function sandboxOutcome (kind, result, rejection) {
+  if (!rejection) {
+    const field = kind === 'buy' ? 'buyUrl' : 'sellUrl'
+    let session = ''
+    try { session = new URL(result?.[field]).searchParams.get('session') ?? '' } catch { session = '' }
+    check(session.length > 0, 'Sandbox acceptance did not return a session')
+    return 'accepted'
+  }
+  check(rejection.constructor?.name === 'ProviderError', 'Sandbox did not reject the sign-in or return a session')
+  check(rejection.reason === 'UNAUTHORIZED', 'Sandbox rejection was not an authentication failure')
+  return 'rejected'
+}
+
+async function submitSignIn (kind, options) {
+  dfxRequests.length = 0
+  authBodies.length = 0
+  challengeMessage = undefined
+  let result
+  let rejection
+  try {
+    result = await fiat[kind](options)
+  } catch (error) {
+    rejection = error
+  }
+  const sandbox = sandboxOutcome(kind, result, rejection)
+  check(dfxRequests.filter(request => request === 'GET /v1/auth/signMessage').length === 1, 'Expected exactly one DFX sign-in challenge')
+  check(authBodies.length === 1, 'Expected one DFX sign-in')
+  const body = JSON.parse(authBodies[0])
+  check(sameHex(body.address, safe), 'Sign-in address is not the Safe')
+  check(!sameHex(body.address, owner), 'Sign-in address is the owner')
+  check(body.blockchain === 'Polygon', 'Sign-in blockchain is not Polygon')
+  check(typeof challengeMessage === 'string' && challengeMessage.length > 0, 'Missing DFX challenge')
+  const signer = verifyMessage(challengeMessage, await account.sign(challengeMessage))
+  check(sameHex(signer, owner), 'Owner personal signature changed')
+  const wrapped = unwrapErc6492(body.signature)
+  const typedSigner = verifyTypedData(
+    { chainId: 137, verifyingContract: safe },
+    { SafeMessage: [{ name: 'message', type: 'bytes' }] },
+    { message: hashMessage(challengeMessage) },
+    wrapped.inner
+  )
+  check(sameHex(typedSigner, owner), 'Safe signature does not recover to the owner')
+  return { signature: body.signature, sandbox, ...wrapped }
+}
+
+async function forkVerifiesWrapper (signature) {
+  let accepted = false
+  try {
+    accepted = await createPublicClient({ transport: http(rpcUrl) }).verifyMessage({
+      address: safe,
+      message: challengeMessage,
+      signature
+    })
+  } catch {
+    throw new ProbeFailure('Fork rejected the ERC-6492 sign-in signature')
+  }
+  check(accepted === true, 'Fork rejected the ERC-6492 sign-in signature')
+}
+
 const onSignal = () => stop.abort(new ProbeFailure('Interrupted'))
 process.once('SIGINT', onSignal)
 process.once('SIGTERM', onSignal)
@@ -207,6 +291,22 @@ async function run () {
     return { owner, safe }
   })
 
+  const asset = await step('find USDT on Polygon', async () => {
+    const asset = (await fiat.getSupportedCryptoAssets()).find(a => a.code === 'USDT' && a.networkCode === 'polygon')
+    check(asset && Number.isInteger(asset.decimals) && asset.decimals >= 0, 'USDT/Polygon missing or invalid decimals')
+    return { code: asset.code, decimals: asset.decimals }
+  })
+  const buyOptions = { cryptoAsset: 'USDT', fiatCurrency: 'EUR', fiatAmount: 10000n }
+  await step('buy submits the wrapped Safe signature before deployment', async () => {
+    const posted = await submitSignIn('buy', buyOptions)
+    const smartAccount = await account._getSmartAccount()
+    check(sameHex(posted.factory, smartAccount.factoryAddress), 'Wrapper factory differs from the counterfactual Safe')
+    check(sameHex(posted.factoryData, smartAccount.factoryData), 'Wrapper factory data differs from the counterfactual Safe')
+    await forkVerifiesWrapper(posted.signature)
+    check(await rpc('eth_getCode', [safe, 'latest']) === '0x', 'ERC-6492 verification deployed the Safe')
+    return { safe, sandbox: posted.sandbox, wrapped: true, deployed: false }
+  })
+
   await step('deploy package factory transaction without bundler', async () => {
     // beta.20 uses AbstractionKit, not Relay Kit. _getSmartAccount preserves
     // the exact init-code overrides used by WDK to predict this Safe address.
@@ -257,12 +357,6 @@ async function run () {
     return { identical: true, owner }
   })
 
-  const asset = await step('find USDT on Polygon', async () => {
-    const asset = (await fiat.getSupportedCryptoAssets()).find(a => a.code === 'USDT' && a.networkCode === 'polygon')
-    check(asset && Number.isInteger(asset.decimals) && asset.decimals >= 0, 'USDT/Polygon missing or invalid decimals')
-    return { code: asset.code, decimals: asset.decimals }
-  })
-  const buyOptions = { cryptoAsset: 'USDT', fiatCurrency: 'EUR', fiatAmount: 10000n }
   await step('quoteBuy EUR to USDT/Polygon', async () => {
     const quote = await fiat.quoteBuy(buyOptions)
     check(typeof quote?.cryptoAmount === 'bigint' && quote.cryptoAmount > 0n, 'quoteBuy returned no positive crypto amount')
@@ -272,37 +366,14 @@ async function run () {
   const erc1271 = new Interface(['function isValidSignature(bytes32,bytes) view returns (bytes4)'])
   for (const kind of ['buy', 'sell']) {
     await step(`${kind} submits the Safe and the fork accepts the signature`, async () => {
-      dfxRequests.length = 0
-      authBodies.length = 0
-      challengeMessage = undefined
-      let rejection
-      try {
-        await fiat[kind](kind === 'buy' ? buyOptions : {
-          cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: 50n * 10n ** BigInt(asset.decimals)
-        })
-      } catch (error) { rejection = error }
-      check(rejection?.constructor?.name === 'ProviderError', 'Sandbox did not reject the anvil-only Safe')
-      check(rejection.reason === 'UNAUTHORIZED', 'Sandbox rejection was not an authentication failure')
-      check(dfxRequests.filter(request => request === 'GET /v1/auth/signMessage').length === 1, 'Expected exactly one DFX sign-in challenge')
-      check(authBodies.length === 1, 'Expected one DFX sign-in')
-      const body = JSON.parse(authBodies[0])
-      check(body.address.toLowerCase() === safe.toLowerCase(), 'Sign-in address is not the Safe')
-      check(body.address.toLowerCase() !== owner.toLowerCase(), 'Sign-in address is the owner')
-      check(body.blockchain === 'Polygon', 'Sign-in blockchain is not Polygon')
-      check(typeof challengeMessage === 'string' && challengeMessage.length > 0, 'Missing DFX challenge')
-      const signer = verifyMessage(challengeMessage, await account.sign(challengeMessage))
-      check(signer.toLowerCase() === owner.toLowerCase(), 'Owner personal signature changed')
-      const typedSigner = (await import('ethers')).verifyTypedData(
-        { chainId: 137, verifyingContract: body.address },
-        { SafeMessage: [{ name: 'message', type: 'bytes' }] },
-        { message: hashMessage(challengeMessage) },
-        body.signature
-      )
-      check(typedSigner.toLowerCase() === owner.toLowerCase(), 'Safe signature does not recover to the owner')
-      const data = erc1271.encodeFunctionData('isValidSignature', [hashMessage(challengeMessage), body.signature])
+      const posted = await submitSignIn(kind, kind === 'buy' ? buyOptions : {
+        cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: 50n * 10n ** BigInt(asset.decimals)
+      })
+      const data = erc1271.encodeFunctionData('isValidSignature', [hashMessage(challengeMessage), posted.inner])
       const magic = await rpc('eth_call', [{ to: safe, data }, 'latest'])
       check(magic.startsWith('0x1626ba7e'), 'Forked Safe rejected the sign-in signature')
-      return { safe, erc1271: true, sandbox: rejection.constructor.name }
+      await forkVerifiesWrapper(posted.signature)
+      return { safe, erc1271: true, sandbox: posted.sandbox }
     })
   }
 }

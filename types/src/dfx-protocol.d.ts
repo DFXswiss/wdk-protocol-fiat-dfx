@@ -103,6 +103,7 @@ export default class DfxProtocol extends FiatProtocol {
      * When the recovered signer differs, that account can sign typed data and the constructor network has a DFX chain id,
      * sign-in uses a Safe EIP-712 signature for the account address; otherwise the wallet
      * signature is submitted for that same address.
+     * When that Safe signature's owner predicts the account under the WDK Safe 0.3.0 parameters and DFX verifies ERC-6492 on that network, it is wrapped as ERC-6492.
      * Account errors pass through only for the exact constructors listed below;
      * subclasses and other account failures become ProviderError with the original cause.
      *
@@ -126,6 +127,7 @@ export default class DfxProtocol extends FiatProtocol {
      * @throws {ValueError} If recipient differs from the account address.
      * @throws {ValueError} If externalTransactionId is not 1–256 characters from A-Z, a-z, 0-9, dot, underscore, colon and hyphen.
      * @throws {ProviderError} If authentication fails.
+     * @throws {ProviderError} If the sign-in challenge is not the expected DFX text.
      * @throws {ProviderError} If the API request fails.
      * @throws {ProviderError} If the API returns malformed data.
      * @throws {ProviderRequiredError} If the account requires a provider.
@@ -162,6 +164,7 @@ export default class DfxProtocol extends FiatProtocol {
      * When the recovered signer differs, that account can sign typed data and the constructor network has a DFX chain id,
      * sign-in uses a Safe EIP-712 signature for the account address; otherwise the wallet
      * signature is submitted for that same address.
+     * When that Safe signature's owner predicts the account under the WDK Safe 0.3.0 parameters and DFX verifies ERC-6492 on that network, it is wrapped as ERC-6492.
      * Account errors pass through only for the exact constructors listed below;
      * subclasses and other account failures become ProviderError with the original cause.
      *
@@ -185,6 +188,7 @@ export default class DfxProtocol extends FiatProtocol {
      * @throws {ValueError} If refundAddress differs from the account address.
      * @throws {ValueError} If externalTransactionId is not 1–256 characters from A-Z, a-z, 0-9, dot, underscore, colon and hyphen.
      * @throws {ProviderError} If authentication fails.
+     * @throws {ProviderError} If the sign-in challenge is not the expected DFX text.
      * @throws {ProviderError} If the API request fails.
      * @throws {ProviderError} If the API returns malformed data.
      * @throws {ProviderRequiredError} If the account requires a provider.
@@ -221,6 +225,7 @@ export default class DfxProtocol extends FiatProtocol {
      * When the recovered signer differs, that account can sign typed data and the constructor network has a DFX chain id,
      * sign-in uses a Safe EIP-712 signature for the account address; otherwise the wallet
      * signature is submitted for that same address.
+     * When that Safe signature's owner predicts the account under the WDK Safe 0.3.0 parameters and DFX verifies ERC-6492 on that network, it is wrapped as ERC-6492.
      * Only exact ProviderRequiredError and ProviderError account errors pass through;
      * all other account failures become ProviderError with the original cause.
      *
@@ -237,6 +242,7 @@ export default class DfxProtocol extends FiatProtocol {
      * @throws {ProviderRequiredError} If the signing account requires a provider.
      * @throws {ProviderError} If a signing account is unavailable.
      * @throws {ProviderError} If authentication fails.
+     * @throws {ProviderError} If the sign-in challenge is not the expected DFX text.
      * @throws {ProviderError} If the API request fails.
      * @throws {ProviderError} If the response cannot be resolved.
      */

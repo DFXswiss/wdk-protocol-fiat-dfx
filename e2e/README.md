@@ -221,7 +221,10 @@ and are not queried. Native balances follow the configured chain RPCs even in
 DFX sandbox mode. Smart-account balances belong to the displayed smart-account
 address. Authenticated DFX methods sign in as that address. On a known chain id,
 when the recovered signer differs and the account implements `signTypedData`,
-the module sends a Safe EIP-712 signature. DFX rejects an undeployed account that has no code.
+the module sends a Safe EIP-712 signature. On the networks where DFX verifies
+ERC-6492, it wraps that signature as ERC-6492 when the owner predicts the account
+with the WDK Safe 0.3.0 parameters. A DFX API that does not verify ERC-6492 rejects
+an undeployed account that has no code.
 
 If `WALLET_SIM_ORDERS_FILE` is set, its parent directory must already exist.
 Orders are saved atomically with permissions `0600` and loaded at startup.
@@ -338,11 +341,20 @@ node kyc-widget.mjs > out/kyc-widget.log 2>&1
 
 ### Deployed ERC-4337 account
 
-`safe-deployed.mjs` starts `anvil` (Foundry) as a Polygon fork. It deploys the
-WDK smart account there without a bundler and signs before and after
-deployment. It then checks that `buy` and `sell` submit the Safe address and that
-the forked contract accepts that signature via ERC-1271. The sandbox rejects the
-sign-in because it does not see the fork. It needs `anvil` on `PATH`;
+`safe-deployed.mjs` starts `anvil` (Foundry) as a Polygon fork. Before
+deployment it signs with the WDK smart account and calls `buy`. The posted
+signature must be an ERC-6492 wrapper: `factory` and `factoryData` match the
+counterfactual account from `account._getSmartAccount()`, and the inner Safe
+signature recovers to the owner. viem 2.38.5, the version the DFX API uses,
+verifies that wrapper on the fork. The Safe still has no code afterwards. The
+script then deploys the account without a bundler and signs again. `buy` and
+`sell` must post the same wrapper. The forked contract accepts the inner
+signature through ERC-1271 (`0x1626ba7e`), and viem accepts the wrapped
+signature. Each sign-in records `sandbox` as `rejected` or `accepted`.
+`rejected` is a `ProviderError` with reason `UNAUTHORIZED`. `accepted` is a
+widget URL that contains a session. The sandbox can accept a Safe that is not
+deployed on the fork once the DFX API verifies ERC-6492 on Polygon. It needs
+`anvil` on `PATH`;
 `ANVIL_PORT` defaults to 8547. `ANVIL_FORK_URL` selects the upstream Polygon RPC
 and defaults to `https://polygon-bor-rpc.publicnode.com`. Only valid `https:` URLs
 are accepted. Set the variable in the process environment; the probe does not

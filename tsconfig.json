@@ -8,6 +8,7 @@
     "src/constants.js",
     "src/dfx-client.js",
     "src/json.js",
+    "src/safe.js",
     "src/signature.js"
   ],
   "compilerOptions": {

@@ -8,8 +8,9 @@ import {
 import { ProviderErrorReason } from '@tetherto/wdk-wallet'
 import DfxClient from './dfx-client.js'
 import { normalizeSignature, recoverEvmAddress, safeMessageTypedData } from './signature.js'
+import { erc6492SafeSignature } from './safe.js'
 import { decimal, displayAmount, divideAmounts, minorUnits, positiveAmount, unexpected } from './amounts.js'
-import { BLOCKCHAINS, EVM_BLOCKCHAINS, EVM_CHAIN_IDS, FAILED_STATES, FIAT_DECIMALS, INPUT_ERRORS, MAX_ASSET_DECIMALS, MAX_TIMEOUT_MS } from './constants.js'
+import { BLOCKCHAINS, ERC6492_NETWORKS, EVM_BLOCKCHAINS, EVM_CHAIN_IDS, FAILED_STATES, FIAT_DECIMALS, INPUT_ERRORS, MAX_ASSET_DECIMALS, MAX_TIMEOUT_MS, SIGN_IN_CHALLENGE, SIGN_IN_CHALLENGE_PREFIX } from './constants.js'
 
 /** @typedef {import('@tetherto/wdk-wallet').IWalletAccount} IWalletAccount */
 /** @typedef {import('@tetherto/wdk-wallet').IWalletAccountReadOnly} IWalletAccountReadOnly */
@@ -107,6 +108,11 @@ function externalTransactionId (value) {
 function sameAddress (left, right) {
   const evm = /^0x[0-9a-fA-F]{40}$/
   return evm.test(left) && evm.test(right) ? left.toLowerCase() === right.toLowerCase() : left === right
+}
+
+function signInChallenge (environment, address) {
+  const prefix = environment === 'sandbox' ? SIGN_IN_CHALLENGE_PREFIX.sandbox : SIGN_IN_CHALLENGE_PREFIX.production
+  return prefix + SIGN_IN_CHALLENGE + address
 }
 
 function record (value) {
@@ -242,6 +248,7 @@ export default class DfxProtocol extends FiatProtocol {
    * When the recovered signer differs, that account can sign typed data and the constructor network has a DFX chain id,
    * sign-in uses a Safe EIP-712 signature for the account address; otherwise the wallet
    * signature is submitted for that same address.
+   * When that Safe signature's owner predicts the account under the WDK Safe 0.3.0 parameters and DFX verifies ERC-6492 on that network, it is wrapped as ERC-6492.
    * Account errors pass through only for the exact constructors listed below;
    * subclasses and other account failures become ProviderError with the original cause.
    *
@@ -265,6 +272,7 @@ export default class DfxProtocol extends FiatProtocol {
    * @throws {ValueError} If recipient differs from the account address.
    * @throws {ValueError} If externalTransactionId is not 1–256 characters from A-Z, a-z, 0-9, dot, underscore, colon and hyphen.
    * @throws {ProviderError} If authentication fails.
+   * @throws {ProviderError} If the sign-in challenge is not the expected DFX text.
    * @throws {ProviderError} If the API request fails.
    * @throws {ProviderError} If the API returns malformed data.
    * @throws {ProviderRequiredError} If the account requires a provider.
@@ -307,6 +315,7 @@ export default class DfxProtocol extends FiatProtocol {
    * When the recovered signer differs, that account can sign typed data and the constructor network has a DFX chain id,
    * sign-in uses a Safe EIP-712 signature for the account address; otherwise the wallet
    * signature is submitted for that same address.
+   * When that Safe signature's owner predicts the account under the WDK Safe 0.3.0 parameters and DFX verifies ERC-6492 on that network, it is wrapped as ERC-6492.
    * Account errors pass through only for the exact constructors listed below;
    * subclasses and other account failures become ProviderError with the original cause.
    *
@@ -330,6 +339,7 @@ export default class DfxProtocol extends FiatProtocol {
    * @throws {ValueError} If refundAddress differs from the account address.
    * @throws {ValueError} If externalTransactionId is not 1–256 characters from A-Z, a-z, 0-9, dot, underscore, colon and hyphen.
    * @throws {ProviderError} If authentication fails.
+   * @throws {ProviderError} If the sign-in challenge is not the expected DFX text.
    * @throws {ProviderError} If the API request fails.
    * @throws {ProviderError} If the API returns malformed data.
    * @throws {ProviderRequiredError} If the account requires a provider.
@@ -372,6 +382,7 @@ export default class DfxProtocol extends FiatProtocol {
    * When the recovered signer differs, that account can sign typed data and the constructor network has a DFX chain id,
    * sign-in uses a Safe EIP-712 signature for the account address; otherwise the wallet
    * signature is submitted for that same address.
+   * When that Safe signature's owner predicts the account under the WDK Safe 0.3.0 parameters and DFX verifies ERC-6492 on that network, it is wrapped as ERC-6492.
    * Only exact ProviderRequiredError and ProviderError account errors pass through;
    * all other account failures become ProviderError with the original cause.
    *
@@ -388,6 +399,7 @@ export default class DfxProtocol extends FiatProtocol {
    * @throws {ProviderRequiredError} If the signing account requires a provider.
    * @throws {ProviderError} If a signing account is unavailable.
    * @throws {ProviderError} If authentication fails.
+   * @throws {ProviderError} If the sign-in challenge is not the expected DFX text.
    * @throws {ProviderError} If the API request fails.
    * @throws {ProviderError} If the response cannot be resolved.
    */
@@ -507,7 +519,9 @@ export default class DfxProtocol extends FiatProtocol {
 
   /**
    * Keeps the DFX account on the smart-account address.
-   * A deployed Safe accepts the typed-data signature; the owner address is never submitted.
+   * The owner address is never submitted. A matching WDK Safe 0.3.0 prediction
+   * wraps the typed-data signature as ERC-6492 only where DFX verifies it;
+   * otherwise the Safe signature is sent unwrapped.
    *
    * @private
    */
@@ -516,7 +530,9 @@ export default class DfxProtocol extends FiatProtocol {
     if (signer === undefined || sameAddress(signer, accountAddress)) return signature
     const chainId = EVM_CHAIN_IDS[this._config.network]
     if (chainId === undefined || typeof this._account.signTypedData !== 'function') return signature
-    return this._accountCall(method, 'signTypedData', safeMessageTypedData(chainId, accountAddress, message))
+    const safeSignature = await this._accountCall(method, 'signTypedData', safeMessageTypedData(chainId, accountAddress, message))
+    if (!ERC6492_NETWORKS.has(this._config.network)) return safeSignature
+    return erc6492SafeSignature({ owner: signer, account: accountAddress, signature: safeSignature })
   }
 
   /** @private */
@@ -526,6 +542,7 @@ export default class DfxProtocol extends FiatProtocol {
     const evm = EVM_BLOCKCHAINS.has(this._config.network)
     const challenge = record(await this._client._request(`/v1/auth/signMessage?${new URLSearchParams({ address: accountAddress })}`))
     const challengeText = textField(challenge.message)
+    if (challengeText !== signInChallenge(this._config.environment, accountAddress)) throw unexpected('Unexpected DFX sign-in challenge')
     let signature = await this._accountCall(method, 'sign', challengeText)
     if (evm) signature = await this.#contractSignature(method, challengeText, signature, accountAddress)
     const body = {

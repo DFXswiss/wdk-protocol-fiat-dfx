@@ -180,6 +180,37 @@ export const EVM_BLOCKCHAINS = new Set([
   'base', 'haqq', 'gnosis', 'plasma', 'citrea', 'citreatestnet'
 ])
 
+// WDK Safe 0.3.0 init code, without onChainIdentifierParams.
+// Source: @tetherto/wdk-wallet-evm-erc-4337 1.0.0-beta.20,
+// src/wallet-account-read-only-evm-erc-4337.js SALT_NONCE, SAFE_MODULES_MAP['0.3.0']
+// and _getInitCodeOverrides. ENTRYPOINT_V7 in that file is the abstractionkit 0.4.0
+// constant copied below. A wallet onChainIdentifier, or another abstractionkit
+// build, predicts a different Safe and must not be wrapped.
+export const SAFE_V0_3_0_INIT_OVERRIDES = Object.freeze({
+  c2Nonce: BigInt('0x69b348339eea4ed93f9d11931c3b894c8f9d8c7663a053024b11cb7eb4e5a1f6'),
+  entrypointAddress: '0x0000000071727De22E5E9d8BAf0edAc6f37da032',
+  safe4337ModuleAddress: '0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226',
+  safeModuleSetupAddress: '0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47'
+})
+
+// DFX API sign-in message: production has no prefix, sandbox prefixes `[dev]_`.
+// The address is appended exactly as sent in ?address=. The prefix split matches
+// DfxClient's API host and the widget app host.
+export const SIGN_IN_CHALLENGE_PREFIX = Object.freeze({
+  production: '',
+  sandbox: '[dev]_'
+})
+
+export const SIGN_IN_CHALLENGE = 'By_signing_this_message,_you_confirm_that_you_are_the_sole_owner_of_the_provided_Blockchain_address._Your_ID:_'
+
+// Networks where DFX verifies ERC-6492. Citrea and CitreaTestnet accept an
+// unwrapped Safe signature through ERC-1271 and reject a wrapper, including
+// for a Safe that is already deployed.
+export const ERC6492_NETWORKS = Object.freeze(new Set([
+  'ethereum', 'sepolia', 'binancesmartchain', 'optimism', 'arbitrum', 'polygon',
+  'base', 'gnosis'
+]))
+
 // Chain ids DFX uses for ERC-1271. Haqq and Plasma are absent: DFX publishes no id for them.
 export const EVM_CHAIN_IDS = Object.freeze({
   ethereum: 1,

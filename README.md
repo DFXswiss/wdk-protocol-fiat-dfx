@@ -350,14 +350,22 @@ same fallback.
   Sepolia, BinanceSmartChain, Optimism, Arbitrum, Polygon, Base, Gnosis, Citrea
   and CitreaTestnet, a personal signature that recovers to a different address is
   replaced with a Safe EIP-712 `SafeMessage` when the account implements
-  `signTypedData`. DFX checks it with ERC-1271. The check succeeds only after the
-  contract is deployed and one owner signature meets its threshold. A
-  counterfactual account with no code is rejected by DFX. Haqq and Plasma have no
-  chain id in that configuration, so the wallet signature is forwarded and DFX
-  decides. Accounts without `signTypedData` keep the wallet signature on the
-  account address. Without a constructor `network`, no Safe signature is built.
-  EOA accounts still need one signature. Unrecoverable signatures are forwarded
-  unchanged with the account address.
+  `signTypedData`. When the recovered owner predicts that same account with the
+  WDK Safe 0.3.0 parameters (no `onChainIdentifier`), the module wraps the Safe
+  signature as ERC-6492. DFX verifies ERC-6492 only on Ethereum, Sepolia,
+  BinanceSmartChain, Optimism, Arbitrum, Polygon, Base and Gnosis, not on Citrea
+  or CitreaTestnet. A wrapper sent on Citrea or CitreaTestnet would be rejected
+  even for a deployed Safe; the unwrapped Safe signature is accepted through
+  ERC-1271. A Safe that is not deployed yet can sign in once the DFX API
+  verifies ERC-6492; a deployed Safe is still checked with ERC-1271.
+  If the prediction does not match — a wallet `onChainIdentifier`, or another
+  abstractionkit version — the module sends the Safe signature unwrapped. A
+  deployed Safe can still pass ERC-1271. A Safe with no code is rejected.
+  Haqq and Plasma have no chain id in that configuration, so the wallet
+  signature is forwarded and DFX decides. Accounts without `signTypedData` keep
+  the wallet signature on the account address. Without a constructor `network`,
+  no Safe signature is built. EOA accounts still need one signature.
+  Unrecoverable signatures are forwarded unchanged with the account address.
 - Bitcoin authentication is sandbox-verified. Bitcoin/BTC, Lightning/BTC and
   Arkade/BTC remain excluded from the recorded sandbox catalog until the API
   supplies `decimals`; sandbox Firo/FIRO supplies `8`. In the production catalog recorded on 2026-10-02 (`b5cafa1`), production
@@ -372,11 +380,15 @@ same fallback.
 ## Security
 
 See [SECURITY.md](SECURITY.md) for private vulnerability reporting. No logging or
-telemetry is implemented. Private keys and seeds are never read. `sign` receives
-the exact message returned by the chosen DFX environment (including sandbox
-prefixes). When the recovered signer differs, `signTypedData` is available and the
+telemetry is implemented. Private keys and seeds are never read. `sign` is called
+only when the DFX challenge equals the expected text for the selected environment
+and the exact address sent in `?address=`, including the sandbox `[dev]_` prefix.
+When the recovered signer differs, `signTypedData` is available and the
 constructor network has a known chain id, the account also signs Safe EIP-712
 typed data whose `SafeMessage` bytes are the EIP-191 hash of that message.
+A matching WDK Safe prediction wraps that signature as ERC-6492 only on the
+networks where DFX verifies it. Citrea and CitreaTestnet receive the unwrapped
+Safe signature, because a wrapper there would be rejected even for a deployed Safe.
 
 Widget URLs contain a bearer session token: deliver them only to the user-facing
 browser and do not log or share them. Tokens are not persisted by the module.

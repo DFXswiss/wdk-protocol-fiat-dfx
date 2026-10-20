@@ -19,6 +19,14 @@ Session tokens remain in instance memory and are included in the generated widge
 URL. Do not log, persist or share those URLs. The caller must bind the account to
 the correct constructor network and supply a trusted fetch implementation.
 
+An instance holds its DFX access token until the token expires. The backend
+default lifetime is 2 days. `getTransactionDetail` reuses that token. `buy` and
+`sell` sign in on every call. When the wallet locks, drop the reference to the
+instance. If the protocol is registered on the account, each `getFiatProtocol`
+returns the same instance, so drop the account too. There is no `dispose()`:
+WDK does not call it, and another public method would go through the policy
+engine. The module signs only the expected DFX sign-in challenge.
+
 The current prerelease line is `1.0.0-beta.1`. Runtime verification results and their
 tested revisions are recorded in [TESTING.md](TESTING.md); a dependency audit is
 pending before release. Report defects against this line; fixes will be
