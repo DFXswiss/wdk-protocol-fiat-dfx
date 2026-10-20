@@ -303,9 +303,10 @@ accepts the wrapped signature while `eth_getCode` stays empty. The probe then de
 bundler, using that factory data; `eth_getCode` is non-empty after. The account's personal signature over a fixed
 message is byte-for-byte identical before and after deployment, and it recovers to the owner. After deployment,
 `buy()` and `sell()` again submit the wrapped signature, byte for byte the one posted before deployment: the inner
-signature returns the ERC-1271 magic value from `isValidSignature` on the forked Safe, and viem accepts the wrapped one. The sandbox API cannot see the fork; on
-2026-10-20 it rejected all three sign-ins (`sandbox: rejected`), because it did not verify ERC-6492 yet. Once it does,
-the probe reports `accepted` for a session it returns.
+signature returns the ERC-1271 magic value from `isValidSignature` on the forked Safe, and viem accepts the wrapped one.
+The sandbox API cannot see the fork. On 2026-10-20 it rejected all three sign-ins as an authentication failure
+(`sandbox: rejected`, `ProviderError` with reason `UNAUTHORIZED`); the probe does not show why. If the sandbox returns a
+session, the probe reports `accepted`.
 
 ## 9. Real purchase with real money (production, 2026-09-28)
 
