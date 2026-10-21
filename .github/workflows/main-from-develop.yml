@@ -2,8 +2,10 @@
 # GitHub has no native source-branch restriction; this job is the gate.
 # pull_request_target runs the workflow from the default branch, which is
 # develop. A pull request cannot replace this job. Do not check out the
-# pull request. Do not add a job-level `if:` that skips on the wrong head:
-# a skipped required check counts as passing.
+# pull request. workflow_dispatch is how the release workflow starts this
+# check: a pull request opened with the workflow token does not start
+# pull_request_target. Do not add a job-level `if:` that skips on the
+# wrong head: a skipped required check counts as passing.
 
 name: Main source branch
 
@@ -19,9 +21,16 @@ on:
       - edited
       - labeled
       - unlabeled
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number into main
+        required: true
+        type: string
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   only-develop:
@@ -31,11 +40,32 @@ jobs:
     steps:
       - name: Reject any head other than this repo's develop
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
           THIS_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_URL: ${{ github.api_url }}
         run: |
           set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ -z "$PR_NUMBER" ]; then
+              echo "::error::A pull request number is required."
+              exit 1
+            fi
+            body=$(curl -sS -f \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${API_URL}/repos/${THIS_REPO}/pulls/${PR_NUMBER}")
+            eval "$(printf '%s' "$body" | python3 -c 'import json,shlex,sys; pr=json.load(sys.stdin); head=pr.get("head") or {}; base=pr.get("base") or {}; repo=(head.get("repo") or {}).get("full_name") or ""; ref=head.get("ref") or ""; base_ref=base.get("ref") or ""; print("HEAD_REF="+shlex.quote(ref)); print("HEAD_REPO="+shlex.quote(repo)); print("BASE_REF="+shlex.quote(base_ref))')"
+          fi
+          if [ "$BASE_REF" != "main" ]; then
+            echo "::error::This check only applies to a pull request into main (got '${BASE_REF}')."
+            exit 1
+          fi
           if [ -z "$HEAD_REF" ] || [ -z "$HEAD_REPO" ] || [ -z "$THIS_REPO" ]; then
             echo "::error::Missing pull_request head metadata; refusing to pass."
             exit 1
