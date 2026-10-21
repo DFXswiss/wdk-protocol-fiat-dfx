@@ -17,6 +17,8 @@
 # --pr selects by pull request number in this repo only (not github.head_ref).
 # After merge the list API often leaves pull_requests empty; --head-sha matches
 # workflow_run.head_sha so leftover CI of the closed PR is still selected.
+# Only pull_request and pull_request_target runs are cancelled. A push,
+# schedule, or workflow_dispatch run on the same commit is left alone.
 # No-op (nothing to cancel) exits 0.
 # Cancel treats HTTP 202/409 as success. 502/503/429 retry then continue
 # (best-effort — a GitHub blip must not fail the calling workflow).
@@ -167,17 +169,22 @@ for r in runs:
         else:
             head = ""
         # After merge, pull_requests is often []. Match head_sha when given.
+        event = r.get("event") or ""
+        if not isinstance(event, str):
+            event = ""
+        pr_event = event in ("pull_request", "pull_request_target")
         matched_pr = nums is not None and int(filter_pr) in nums
         matched_sha = bool(filter_sha) and head == filter_sha
+        # Same commit can also have push, schedule, or workflow_dispatch runs.
+        # pull_requests is [] for those. Cancel only pull-request events.
         if nums:
-            if not matched_pr:
+            if not matched_pr or not pr_event:
                 continue
         elif nums == []:
-            # After merge the API often returns []. Need head_sha to keep the run.
-            if not matched_sha:
+            if not matched_sha or not pr_event:
                 continue
         elif filter_sha:
-            if not matched_sha:
+            if not matched_sha or not pr_event:
                 continue
         # nums is None (no field) and no sha: keep (pre-scoped fixture / list)
     print(rid)
