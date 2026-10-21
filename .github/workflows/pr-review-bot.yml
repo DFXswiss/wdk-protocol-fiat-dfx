@@ -45,12 +45,12 @@ jobs:
               core.setOutput('unverified', 'false');
               return;
             }
-            const commits = await github.rest.pulls.listCommits({
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: prNumber
             });
-            const unverified = commits.data.filter(c => !c.commit.verification?.verified);
+            const unverified = commits.filter(c => !c.commit.verification?.verified);
             if (unverified.length > 0) {
               const list = unverified.map(c =>
                 `- \`${c.sha.substring(0,7)}\` ${c.commit.message.split('\n')[0]} (${c.commit.author?.name || 'unknown'})`
