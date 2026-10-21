@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # Print GitHub Actions outputs: module=true when this head has the package.
-# Exit 1 when the head drops a package.json that the base still has.
+# Exit 1 when the base ref is missing, when that ref cannot be fetched,
+# or when the head drops a package.json that the base still has.
 # Exit 0 with module=false when neither side has a package yet.
 set -euo pipefail
 
 base_ref="${GITHUB_BASE_REF:-}"
+if [ -z "$base_ref" ]; then
+  echo "::error::Base ref is missing. A manual run must pass base_ref." >&2
+  exit 1
+fi
 base_has=0
-if [ -n "$base_ref" ]; then
-  git fetch --no-tags origin "$base_ref"
-  if git cat-file -e "origin/${base_ref}:package.json" 2>/dev/null; then
-    base_has=1
-  fi
+git fetch --no-tags origin "$base_ref"
+if git cat-file -e "origin/${base_ref}:package.json" 2>/dev/null; then
+  base_has=1
 fi
 
 head_has=0
