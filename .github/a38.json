@@ -92,7 +92,10 @@
             "CI": "true"
           },
           "npm": {
-            "node_major": 22
+            "node_major": 22,
+            "canaries": [
+              "standard/package.json"
+            ]
           },
           "steps": [
             ["npm", "ci"],
