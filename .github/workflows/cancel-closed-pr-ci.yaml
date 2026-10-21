@@ -1,0 +1,29 @@
+# When a PR is closed or merged, cancel its leftover CI so runners free
+# immediately. Cancel by PR number in this repo only (not github.head_ref).
+# This workflow is not a required check; do not add a job-level `if:` skip
+# (skipped required checks count as pass).
+# No-op cancel (nothing left) is a successful run.
+
+name: Cancel CI for closed PR
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel:
+    name: Cancel leftover CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Cancel leftover runs for this PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/ci-cancel-runs.sh --repo "$GITHUB_REPOSITORY" --pr "${{ github.event.pull_request.number }}" --head-sha "${{ github.event.pull_request.head.sha }}"

@@ -1,0 +1,122 @@
+# Module PR CI: lint, types, tests, and audit.
+#
+# This repository is public. GitHub-hosted runners execute the suite.
+# Drafts run these jobs. Ready does not start CI. Never listen to
+# ready_for_review here.
+#
+# Until package.json exists on the base and the head, each job records
+# that the module is not here yet and succeeds. Removing package.json
+# after it has landed fails the job. A job-level if is not used: a
+# skipped required check would count as passing.
+
+name: Module PR CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number for a manual run
+        required: false
+        type: string
+      base_ref:
+        description: PR base branch for a manual run
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: module-pr-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: need
+        run: bash .github/scripts/need-module.sh >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
+        if: steps.need.outputs.module == 'true'
+        with:
+          node-version: '22.22.0'
+          cache: npm
+      - if: steps.need.outputs.module == 'true'
+        run: npm ci
+      - if: steps.need.outputs.module == 'true'
+        run: npm run lint
+
+  types:
+    name: Types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: need
+        run: bash .github/scripts/need-module.sh >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
+        if: steps.need.outputs.module == 'true'
+        with:
+          node-version: '22.22.0'
+          cache: npm
+      - if: steps.need.outputs.module == 'true'
+        run: npm ci
+      - if: steps.need.outputs.module == 'true'
+        run: npm run build:types
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: need
+        run: bash .github/scripts/need-module.sh >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
+        if: steps.need.outputs.module == 'true'
+        with:
+          node-version: '22.22.0'
+          cache: npm
+      - if: steps.need.outputs.module == 'true'
+        run: npm ci
+      - if: steps.need.outputs.module == 'true'
+        run: npm run test:coverage
+
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: need
+        run: bash .github/scripts/need-module.sh >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
+        if: steps.need.outputs.module == 'true'
+        with:
+          node-version: '22.22.0'
+          cache: npm
+      - if: steps.need.outputs.module == 'true'
+        run: npm ci
+      - if: steps.need.outputs.module == 'true'
+        run: npm audit --audit-level=critical
