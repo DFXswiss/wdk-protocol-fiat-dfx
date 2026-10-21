@@ -179,7 +179,10 @@ for r in runs:
             head = head.lower()
         else:
             head = ""
-        # After merge, pull_requests is often []. Match head_sha when given.
+        # After merge, pull_requests is often []. Match pull_request runs of
+        # the closed head by head SHA. A pull_request_target run uses the
+        # shared base commit as head_sha, so an empty list must not select
+        # it. Those runs match only while the pull request number is present.
         event = r.get("event") or ""
         if not isinstance(event, str):
             event = ""
@@ -192,7 +195,7 @@ for r in runs:
             if not matched_pr or not pr_event:
                 continue
         elif nums == []:
-            if not matched_sha or not pr_event:
+            if event != "pull_request" or not matched_sha:
                 continue
         elif filter_sha:
             if not matched_sha or not pr_event:
