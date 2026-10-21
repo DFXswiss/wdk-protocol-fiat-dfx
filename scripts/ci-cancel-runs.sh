@@ -19,6 +19,8 @@
 # workflow_run.head_sha so leftover CI of the closed PR is still selected.
 # Only pull_request and pull_request_target runs are cancelled. A push,
 # schedule, or workflow_dispatch run on the same commit is left alone.
+# The live list is paged until a short page or the reported total is in hand.
+# A full page past the page cap is a cut-off and exits 1 before any cancel.
 # No-op (nothing to cancel) exits 0.
 # Cancel treats HTTP 202/409 as success. 502/503/429 retry then continue
 # (best-effort — a GitHub blip must not fail the calling workflow).
@@ -255,13 +257,42 @@ else
   trap 'rm -rf "$tmpdir"' EXIT
   # Prefer head_sha query after merge (pull_requests[] is often empty).
   # Live --workflow-name is rejected above (before curl / tmpdir).
-  if [[ -n "$HEAD_SHA" ]]; then
-    api_get "${base}/repos/${REPO}/actions/runs?per_page=100&head_sha=${HEAD_SHA}" \
-      >"$tmpdir/page1.json"
-  else
-    api_get "${base}/repos/${REPO}/actions/runs?per_page=100&page=1" >"$tmpdir/page1.json"
-    api_get "${base}/repos/${REPO}/actions/runs?per_page=100&page=2" >"$tmpdir/page2.json"
-  fi
+  # Page until a short page or total_count is covered. Stop and fail closed
+  # when the cap is hit while the last page is still full.
+  page=1
+  max_pages=100
+  while true; do
+    if [[ -n "$HEAD_SHA" ]]; then
+      api_get "${base}/repos/${REPO}/actions/runs?per_page=100&page=${page}&head_sha=${HEAD_SHA}" \
+        >"$tmpdir/page${page}.json"
+    else
+      api_get "${base}/repos/${REPO}/actions/runs?per_page=100&page=${page}" \
+        >"$tmpdir/page${page}.json"
+    fi
+    read -r count total <<<"$(python3 -c '
+import json, sys
+data = json.load(open(sys.argv[1]))
+runs = data.get("workflow_runs") or []
+total = data.get("total_count")
+print(len(runs), "" if total is None else int(total))
+' "$tmpdir/page${page}.json")"
+    if [[ "$count" -lt 100 ]]; then
+      collected=$(((page - 1) * 100 + count))
+      if [[ -n "$total" && "$collected" -lt "$total" ]]; then
+        echo "error: actions run list ended after ${collected} of ${total}" >&2
+        exit 1
+      fi
+      break
+    fi
+    if [[ -n "$total" && $((page * 100)) -ge "$total" ]]; then
+      break
+    fi
+    if [[ "$page" -ge "$max_pages" ]]; then
+      echo "error: actions run list is cut off after ${page} pages" >&2
+      exit 1
+    fi
+    page=$((page + 1))
+  done
   raw=$(python3 -c '
 import json, pathlib, sys
 runs = []
