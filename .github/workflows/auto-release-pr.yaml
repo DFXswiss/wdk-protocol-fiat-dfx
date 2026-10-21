@@ -151,10 +151,12 @@ jobs:
             echo "The release pull request number is missing." >&2
             exit 1
           fi
-          # pull_request workflows are created and wait for approval. Dispatching
-          # them again would put a second check of the same name on this commit.
-          # pull_request_target is not created, so this dispatch is the only run.
-          # It lands on this develop commit, which is the release head.
+          # This token creates the pull request, so pull_request_target does not
+          # start for that open. A later push to develop is not made by this
+          # token, and that push starts pull_request_target on the new commit.
+          # Dispatch only on create. Dispatching again on a later push would
+          # post a second check of the same name. pull_request workflows are
+          # created and wait for approval; they are not dispatched here.
           curl -sS -f -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
