@@ -1,5 +1,0 @@
-node_modules
-coverage
-.DS_Store
-e2e/out/
-e2e/node_modules/
