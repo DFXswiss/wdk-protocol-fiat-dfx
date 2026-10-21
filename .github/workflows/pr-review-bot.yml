@@ -1,0 +1,201 @@
+name: PR Review Bot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number when kicked manually
+        required: false
+        type: string
+      base_ref:
+        description: PR base branch when kicked manually
+        required: false
+        type: string
+
+concurrency:
+  group: review-pr-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  review:
+    name: Review
+    if: >
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false ||
+      github.event.pull_request.head.repo.full_name != github.repository ||
+      contains(github.event.pull_request.labels.*.name, 'ci') ||
+      contains(github.event.pull_request.labels.*.name, 'ci:full')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check for unverified commits
+        id: verify-commits
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const prNumber = Number(process.env.PR_NUMBER || context.issue.number);
+            if (!prNumber) {
+              core.setOutput('unverified', 'false');
+              return;
+            }
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            const unverified = commits.data.filter(c => !c.commit.verification?.verified);
+            if (unverified.length > 0) {
+              const list = unverified.map(c =>
+                `- \`${c.sha.substring(0,7)}\` ${c.commit.message.split('\n')[0]} (${c.commit.author?.name || 'unknown'})`
+              ).join('\n');
+              core.setOutput('unverified', 'true');
+              core.setOutput('unverified_list', list);
+              core.setOutput('unverified_count', unverified.length);
+            } else {
+              core.setOutput('unverified', 'false');
+            }
+
+      - id: module
+        run: |
+          if [ -f package.json ] && [ -f package-lock.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v5
+        if: steps.module.outputs.present == 'true'
+        with:
+          node-version: '22.22.0'
+          cache: npm
+
+      - if: steps.module.outputs.present == 'true'
+        run: npm ci
+
+      - name: Lint
+        id: lint
+        if: steps.module.outputs.present == 'true'
+        continue-on-error: true
+        run: |
+          set +e
+          npm run lint
+          code=$?
+          if [ "$code" -eq 0 ]; then
+            echo "ran=true" >> "$GITHUB_OUTPUT"
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ran=true" >> "$GITHUB_OUTPUT"
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Types
+        id: types
+        if: steps.module.outputs.present == 'true'
+        continue-on-error: true
+        run: |
+          set +e
+          npm run build:types
+          code=$?
+          if [ "$code" -eq 0 ]; then
+            echo "ran=true" >> "$GITHUB_OUTPUT"
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ran=true" >> "$GITHUB_OUTPUT"
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Audit
+        id: audit
+        if: steps.module.outputs.present == 'true'
+        continue-on-error: true
+        run: |
+          set +e
+          npm audit --audit-level=critical
+          code=$?
+          if [ "$code" -eq 0 ]; then
+            echo "ran=true" >> "$GITHUB_OUTPUT"
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ran=true" >> "$GITHUB_OUTPUT"
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post PR comment
+        if: env.PR_NUMBER != ''
+        continue-on-error: true
+        uses: actions/github-script@v8
+        env:
+          UNVERIFIED: ${{ steps.verify-commits.outputs.unverified }}
+          UNVERIFIED_LIST: ${{ steps.verify-commits.outputs.unverified_list }}
+          UNVERIFIED_COUNT: ${{ steps.verify-commits.outputs.unverified_count }}
+          MODULE: ${{ steps.module.outputs.present }}
+          LINT_FAILED: ${{ steps.lint.outputs.failed }}
+          TYPES_FAILED: ${{ steps.types.outputs.failed }}
+          AUDIT_FAILED: ${{ steps.audit.outputs.failed }}
+        with:
+          script: |
+            const MARKER = '<!-- dfx-pr-review-bot -->';
+            const prNumber = Number(process.env.PR_NUMBER || context.issue.number);
+            if (!prNumber) return;
+
+            const lines = [];
+            if (process.env.UNVERIFIED === 'true') {
+              lines.push(`## Unverified commits (${process.env.UNVERIFIED_COUNT || '0'})`);
+              lines.push('');
+              lines.push('These commits are not verified:');
+              lines.push('');
+              lines.push(process.env.UNVERIFIED_LIST || '');
+            }
+            if (process.env.MODULE === 'true') {
+              if (process.env.LINT_FAILED === 'true') lines.push('Lint failed.');
+              if (process.env.TYPES_FAILED === 'true') lines.push('Types failed.');
+              if (process.env.AUDIT_FAILED === 'true') lines.push('Audit reported a critical vulnerability.');
+            }
+
+            const existing = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+            const botComment = existing.find(c => (c.body || '').includes(MARKER));
+
+            if (lines.length === 0) {
+              if (botComment) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id
+                });
+              }
+              return;
+            }
+
+            const body = `${MARKER}\n${lines.join('\n\n')}`;
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body
+              });
+            }
