@@ -11,9 +11,7 @@
 #
 # Live cancel is --pr / --head-sha only. There are no live --workflow-name
 # mappings; every live --workflow-name (also combined with --pr / --head-sha)
-# is rejected before any API call. Full-stack E2E is a required check;
-# --workflow-name "Full-stack E2E" is rejected (exit 1) on every path.
-# --pr / --head-sha may still select leftover Full-stack E2E runs of a closed PR.
+# is rejected before any API call.
 # Cancels runs in statuses: queued, pending, waiting, requested, in_progress.
 # Never cancels GITHUB_RUN_ID when that env var is set (current run).
 # --pr selects by pull request number in this repo only (not github.head_ref).
@@ -39,7 +37,6 @@ Optional: --dry-run
 Offline (selftest): --from-json PATH with --pr [--head-sha SHA] or --workflow-name
 Live has no --workflow-name mappings; every live --workflow-name is rejected
 (including combined with --pr / --head-sha).
-Full-stack E2E is a required check; --workflow-name "Full-stack E2E" is rejected.
 EOF
   exit 1
 }
@@ -92,11 +89,6 @@ fi
 
 if [[ -n "$FROM_JSON" && ! -f "$FROM_JSON" ]]; then
   echo "error: --from-json path not found: $FROM_JSON" >&2
-  exit 1
-fi
-
-if [[ "$WORKFLOW_NAME" == "Full-stack E2E" ]]; then
-  echo "error: Full-stack E2E is a required check and must not be cancelled by --workflow-name" >&2
   exit 1
 fi
 
@@ -201,7 +193,7 @@ api_get() {
   local token
   token=$(api_token)
   if [[ -z "$token" ]]; then
-    echo "error: GH_TOKEN or GITHUB_TOKEN is required (the pool does not ship gh)" >&2
+    echo "error: GH_TOKEN or GITHUB_TOKEN is required" >&2
     exit 1
   fi
   curl -sS -f \
@@ -216,10 +208,8 @@ api_cancel() {
   local token
   token=$(api_token)
   local base=${GITHUB_API_URL:-https://api.github.com}
-  # 202 = accepted; 409 = already completed — both are success for drain.
-  # 502/503/429 are GitHub blips (seen on develop pushes); retry, then continue
-  # so a transient outage cannot paint the release PR red. Cancel is best-effort:
-  # the deploy proceeds either way.
+  # 202 = accepted; 409 = already completed. Both are success.
+  # 502/503/429 are retried. A transient outage must not fail the closing workflow.
   local code=""
   local attempt=0
   local max=6
