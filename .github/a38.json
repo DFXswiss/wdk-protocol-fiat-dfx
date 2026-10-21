@@ -1,0 +1,137 @@
+{
+  "schema": "a38/v1",
+  "standard": "A38",
+  "documentation": "docs/a38.md",
+  "mode": "enforce",
+  "jobs": [
+    {
+      "id": "lint",
+      "name": "Lint",
+      "timeout_s": 900,
+      "workflow": ".github/workflows/module-pr.yaml",
+      "job": "lint",
+      "executor": {
+        "adapter": "commands",
+        "config": {
+          "env": {
+            "CI": "true"
+          },
+          "npm": {
+            "node_major": 22,
+            "canaries": [
+              "standard/package.json"
+            ]
+          },
+          "steps": [
+            ["npm", "ci"],
+            ["npm", "run", "lint"]
+          ]
+        }
+      }
+    },
+    {
+      "id": "types",
+      "name": "Types",
+      "timeout_s": 900,
+      "workflow": ".github/workflows/module-pr.yaml",
+      "job": "types",
+      "executor": {
+        "adapter": "commands",
+        "config": {
+          "env": {
+            "CI": "true"
+          },
+          "npm": {
+            "node_major": 22,
+            "canaries": [
+              "typescript/lib/typescript.js"
+            ]
+          },
+          "steps": [
+            ["npm", "ci"],
+            ["npm", "run", "build:types"]
+          ]
+        }
+      }
+    },
+    {
+      "id": "test",
+      "name": "Test",
+      "timeout_s": 1500,
+      "workflow": ".github/workflows/module-pr.yaml",
+      "job": "test",
+      "executor": {
+        "adapter": "commands",
+        "config": {
+          "env": {
+            "CI": "true"
+          },
+          "npm": {
+            "node_major": 22,
+            "canaries": [
+              "jest/bin/jest.js"
+            ]
+          },
+          "steps": [
+            ["npm", "ci"],
+            ["npm", "run", "test:coverage"]
+          ]
+        }
+      }
+    },
+    {
+      "id": "audit",
+      "name": "Audit",
+      "timeout_s": 900,
+      "workflow": ".github/workflows/module-pr.yaml",
+      "job": "audit",
+      "executor": {
+        "adapter": "commands",
+        "config": {
+          "env": {
+            "CI": "true"
+          },
+          "npm": {
+            "node_major": 22
+          },
+          "steps": [
+            ["npm", "ci"],
+            ["npm", "audit", "--audit-level=critical"]
+          ]
+        }
+      }
+    }
+  ],
+  "exclusions": [
+    {
+      "workflow": ".github/workflows/a38-guard.yml",
+      "job": "guard",
+      "reason": "A38 report guard bot itself (trusted base audit of the author report). Not part of the measured local suite."
+    },
+    {
+      "workflow": ".github/workflows/auto-release-pr.yaml",
+      "job": "create-release-pr",
+      "reason": "Housekeeping bot that opens the develop to main release pull request. Not author CI."
+    },
+    {
+      "workflow": ".github/workflows/main-from-develop.yml",
+      "job": "only-develop",
+      "reason": "Main-branch ancestry policy (head must be this repo's develop). External policy gate, not a code or test suite."
+    },
+    {
+      "workflow": ".github/workflows/ci-on-ready.yaml",
+      "job": "ensure-ci-label",
+      "reason": "Ready is not a CI switch. The job prints that notice and does not test code."
+    },
+    {
+      "workflow": ".github/workflows/cancel-closed-pr-ci.yaml",
+      "job": "cancel",
+      "reason": "Housekeeping: cancel leftover Actions runs after a pull request is closed or merged."
+    },
+    {
+      "workflow": ".github/workflows/pr-review-bot.yml",
+      "job": "review",
+      "reason": "Pull request review bot (unverified commits and an advisory lint, types, and audit comment). Not author-measured CI."
+    }
+  ]
+}

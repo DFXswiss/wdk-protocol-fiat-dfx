@@ -1,0 +1,40 @@
+{
+  "schema": "pr-guard/v1",
+  "a38": {
+    "enforce": [
+      "develop"
+    ],
+    "exclude": [
+      "main"
+    ],
+    "default": "enforce"
+  },
+  "workflow_approval": {
+    "enabled": true,
+    "workflows": [
+      ".github/workflows/module-pr.yaml",
+      ".github/workflows/pr-review-bot.yml",
+      ".github/workflows/ci-on-ready.yaml",
+      ".github/workflows/main-from-develop.yml"
+    ]
+  },
+  "lifecycle": {
+    "enabled": true,
+    "auto_ready": true,
+    "required_workflows": [
+      ".github/workflows/module-pr.yaml"
+    ],
+    "ignored_workflows": [
+      ".github/workflows/a38-guard.yml",
+      ".github/workflows/ci-on-ready.yaml"
+    ],
+    "required_checks": {
+      ".github/workflows/module-pr.yaml": [
+        "Lint",
+        "Types",
+        "Test",
+        "Audit"
+      ]
+    }
+  }
+}
