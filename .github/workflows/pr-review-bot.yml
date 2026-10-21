@@ -41,15 +41,25 @@ jobs:
         with:
           script: |
             const prNumber = Number(process.env.PR_NUMBER || context.issue.number);
-            if (!prNumber) {
-              core.setOutput('unverified', 'false');
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.setFailed('A pull request number is required.');
               return;
             }
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            const expected = pr.data.commits;
             const commits = await github.paginate(github.rest.pulls.listCommits, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: prNumber
             });
+            if (!Number.isInteger(expected) || commits.length !== expected) {
+              core.setFailed(`Commit list is incomplete (${commits.length} of ${expected}).`);
+              return;
+            }
             const unverified = commits.filter(c => !c.commit.verification?.verified);
             if (unverified.length > 0) {
               const list = unverified.map(c =>
