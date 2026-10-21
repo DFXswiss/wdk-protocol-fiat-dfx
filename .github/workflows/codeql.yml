@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ matrix.language }}" = "javascript-typescript" ]; then
-            if git ls-files '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' | grep -q .; then
+            if git ls-files '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' | grep -E . >/dev/null; then
               echo "run=true" >> "$GITHUB_OUTPUT"
             else
               echo "run=false" >> "$GITHUB_OUTPUT"
