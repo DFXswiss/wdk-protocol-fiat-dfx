@@ -132,6 +132,16 @@
       "workflow": ".github/workflows/pr-review-bot.yml",
       "job": "review",
       "reason": "Pull request review bot (unverified commits and an advisory lint, types, and audit comment). Not author-measured CI."
+    },
+    {
+      "workflow": ".github/workflows/codeql.yml",
+      "job": "prepare",
+      "reason": "Selects whether CodeQL analyzes. A pull request into develop without ci:full does not analyze. Not a local code test. The workflow job still runs on GitHub."
+    },
+    {
+      "workflow": ".github/workflows/codeql.yml",
+      "job": "analyze",
+      "reason": "GitHub CodeQL for Actions workflows and, once present, JavaScript and TypeScript. A38 does not run CodeQL. The workflow job still runs on GitHub."
     }
   ]
 }
