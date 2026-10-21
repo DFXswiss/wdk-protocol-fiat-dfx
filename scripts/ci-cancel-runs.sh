@@ -2,21 +2,25 @@
 # Cancel leftover GitHub Actions runs for a closed pull request.
 #
 # Usage:
-#   ci-cancel-runs.sh --repo OWNER/REPO --pr NUMBER [--head-sha SHA]
+#   ci-cancel-runs.sh --repo OWNER/REPO --pr NUMBER [--head-sha SHA] [--base-sha SHA]
 # Optional: --dry-run
 #
 # Offline filter (selftest only; no network):
 #   ci-cancel-runs.sh --from-json PATH --pr NUMBER [--head-sha SHA]
 #   ci-cancel-runs.sh --from-json PATH --workflow-name NAME
 #
-# Live cancel is --pr / --head-sha only. There are no live --workflow-name
-# mappings; every live --workflow-name (also combined with --pr / --head-sha)
-# is rejected before any API call.
+# Live cancel is --pr / --head-sha / --base-sha only. There are no live
+# --workflow-name mappings; every live --workflow-name (also combined with
+# --pr / --head-sha / --base-sha) is rejected before any API call.
 # Cancels runs in statuses: queued, pending, waiting, requested, in_progress.
 # Never cancels GITHUB_RUN_ID when that env var is set (current run).
 # --pr selects by pull request number in this repo only (not github.head_ref).
 # After merge the list API often leaves pull_requests empty; --head-sha matches
-# workflow_run.head_sha so leftover CI of the closed PR is still selected.
+# workflow_run.head_sha so leftover pull_request CI of the closed PR is still
+# selected. --base-sha is only another list query: a shared base commit must
+# not cancel another pull request once pull_requests is empty.
+# Active pull_request_target runs are listed by event and status, because their
+# head_sha is the base commit at start and a later base tip can miss them.
 # Only pull_request and pull_request_target runs are cancelled. A push,
 # schedule, or workflow_dispatch run on the same commit is left alone.
 # The live list is paged until a short page or the reported total is in hand.
@@ -29,6 +33,7 @@ set -euo pipefail
 REPO=""
 PR=""
 HEAD_SHA=""
+BASE_SHA=""
 WORKFLOW_NAME=""
 DRY_RUN=0
 FROM_JSON=""
@@ -36,11 +41,11 @@ FROM_JSON=""
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  ci-cancel-runs.sh --repo OWNER/REPO --pr NUMBER [--head-sha SHA]
+  ci-cancel-runs.sh --repo OWNER/REPO --pr NUMBER [--head-sha SHA] [--base-sha SHA]
 Optional: --dry-run
 Offline (selftest): --from-json PATH with --pr [--head-sha SHA] or --workflow-name
 Live has no --workflow-name mappings; every live --workflow-name is rejected
-(including combined with --pr / --head-sha).
+(including combined with --pr / --head-sha / --base-sha).
 EOF
   exit 1
 }
@@ -57,6 +62,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --head-sha)
       HEAD_SHA=${2:-}
+      shift 2
+      ;;
+    --base-sha)
+      BASE_SHA=${2:-}
       shift 2
       ;;
     --workflow-name)
@@ -99,7 +108,7 @@ fi
 # Live has no --workflow-name mappings. Reject every live --workflow-name
 # (including combined with --pr / --head-sha) before curl / tmpdir / api_get.
 if [[ -z "$FROM_JSON" && -n "$WORKFLOW_NAME" ]]; then
-  echo "error: no live --workflow-name mappings (use --pr / --head-sha)" >&2
+  echo "error: no live --workflow-name mappings (use --pr / --head-sha / --base-sha)" >&2
   exit 1
 fi
 
@@ -255,44 +264,59 @@ else
   base=${GITHUB_API_URL:-https://api.github.com}
   tmpdir=$(mktemp -d)
   trap 'rm -rf "$tmpdir"' EXIT
-  # Prefer head_sha query after merge (pull_requests[] is often empty).
   # Live --workflow-name is rejected above (before curl / tmpdir).
-  # Page until a short page or total_count is covered. Stop and fail closed
-  # when the cap is hit while the last page is still full.
-  page=1
-  max_pages=100
-  while true; do
-    if [[ -n "$HEAD_SHA" ]]; then
-      api_get "${base}/repos/${REPO}/actions/runs?per_page=100&page=${page}&head_sha=${HEAD_SHA}" \
-        >"$tmpdir/page${page}.json"
-    else
-      api_get "${base}/repos/${REPO}/actions/runs?per_page=100&page=${page}" \
-        >"$tmpdir/page${page}.json"
-    fi
-    read -r count total <<<"$(python3 -c '
+  # Page each query until a short page or total_count is covered. Stop and
+  # fail closed when the cap is hit while the last page is still full,
+  # before any cancel. head_sha finds pull_request runs. base_sha and the
+  # active pull_request_target statuses find guard runs whose head_sha is
+  # the base commit. The PR-number filter still drops other pull requests.
+  page_query() {
+    local label=$1
+    local extra=$2
+    local page=1
+    local max_pages=100
+    local count=""
+    local total=""
+    local collected=0
+    while true; do
+      api_get "${base}/repos/${REPO}/actions/runs?per_page=100&page=${page}&${extra}" \
+        >"$tmpdir/${label}-${page}.json"
+      read -r count total <<<"$(python3 -c '
 import json, sys
 data = json.load(open(sys.argv[1]))
 runs = data.get("workflow_runs") or []
 total = data.get("total_count")
 print(len(runs), "" if total is None else int(total))
-' "$tmpdir/page${page}.json")"
-    if [[ "$count" -lt 100 ]]; then
-      collected=$(((page - 1) * 100 + count))
-      if [[ -n "$total" && "$collected" -lt "$total" ]]; then
-        echo "error: actions run list ended after ${collected} of ${total}" >&2
+' "$tmpdir/${label}-${page}.json")"
+      if [[ "$count" -lt 100 ]]; then
+        collected=$(((page - 1) * 100 + count))
+        if [[ -n "$total" && "$collected" -lt "$total" ]]; then
+          echo "error: actions run list ${label} ended after ${collected} of ${total}" >&2
+          exit 1
+        fi
+        break
+      fi
+      if [[ -n "$total" && $((page * 100)) -ge "$total" ]]; then
+        break
+      fi
+      if [[ "$page" -ge "$max_pages" ]]; then
+        echo "error: actions run list ${label} is cut off after ${page} pages" >&2
         exit 1
       fi
-      break
-    fi
-    if [[ -n "$total" && $((page * 100)) -ge "$total" ]]; then
-      break
-    fi
-    if [[ "$page" -ge "$max_pages" ]]; then
-      echo "error: actions run list is cut off after ${page} pages" >&2
-      exit 1
-    fi
-    page=$((page + 1))
-  done
+      page=$((page + 1))
+    done
+  }
+  if [[ -n "$HEAD_SHA" ]]; then
+    page_query head "head_sha=${HEAD_SHA}"
+  fi
+  if [[ -n "$BASE_SHA" && "$BASE_SHA" != "$HEAD_SHA" ]]; then
+    page_query base "head_sha=${BASE_SHA}"
+  fi
+  if [[ -n "$PR" ]]; then
+    for status in queued pending waiting requested in_progress; do
+      page_query "target-${status}" "event=pull_request_target&status=${status}"
+    done
+  fi
   raw=$(python3 -c '
 import json, pathlib, sys
 runs = []
@@ -300,7 +324,7 @@ for p in sys.argv[1:]:
     data = json.loads(pathlib.Path(p).read_text())
     runs.extend(data.get("workflow_runs") or [])
 print(json.dumps(runs))
-' "$tmpdir"/page*.json)
+' "$tmpdir"/*.json)
   ids=$(filter_cancel_ids <<<"$raw")
 fi
 

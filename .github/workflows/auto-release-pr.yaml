@@ -7,9 +7,13 @@ on:
 
 permissions:
   contents: read
-  # write is required because the release PR is opened with the workflow's own
-  # GITHUB_TOKEN rather than with a personal access token.
+  # The release pull request is opened by this workflow's own token, so it
+  # stays the Actions bot. pull_request runs are created and wait for a
+  # write user to approve them. pull_request_target is not created at all.
+  # actions: write lets this job dispatch that check. workflow_dispatch is
+  # one of the events this token is allowed to start.
   pull-requests: write
+  actions: write
 
 concurrency:
   group: auto-release-pr
@@ -48,12 +52,33 @@ jobs:
         id: check-diff
         if: steps.check-pr.outputs.pr_exists == 'false'
         run: |
+          set -euo pipefail
           DIFF_COUNT=$(git rev-list --count origin/main..origin/develop)
-          echo "has_changes=$([[ $DIFF_COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
+          set +e
+          git diff --quiet origin/main origin/develop
+          diff_status=$?
+          set -e
+          if [ "$diff_status" -eq 0 ]; then
+            tree_diff=false
+          elif [ "$diff_status" -eq 1 ]; then
+            tree_diff=true
+          else
+            echo "git diff failed with status ${diff_status}" >&2
+            exit "$diff_status"
+          fi
+          # A commit count is not a content change. Identical trees must not
+          # open a release. A count of zero has nothing to merge.
+          if [ "$tree_diff" = true ] && [ "$DIFF_COUNT" -gt 0 ]; then
+            has_changes=true
+          else
+            has_changes=false
+          fi
+          echo "has_changes=${has_changes}" >> "$GITHUB_OUTPUT"
           echo "commit_count=$DIFF_COUNT" >> "$GITHUB_OUTPUT"
-          echo "::notice::Commits ahead of main: $DIFF_COUNT"
+          echo "::notice::Commits ahead of main: $DIFF_COUNT; tree differs: $tree_diff"
 
       - name: Create Release PR
+        id: create-release-pr
         if: steps.check-pr.outputs.pr_exists == 'false' && steps.check-diff.outputs.has_changes == 'true'
         env:
           # The release PR is authored by the Actions bot, not by a person.
@@ -107,5 +132,33 @@ jobs:
           except urllib.error.HTTPError as exc:
               detail = exc.read().decode()
               raise SystemExit(f"create pull failed: {exc.code} {detail}") from exc
+          number = created.get("number")
+          if not isinstance(number, int) or number <= 0:
+              raise SystemExit("create pull returned no pull request number")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"pr_number={number}\n")
           print(f"::notice::Opened release PR {created.get('html_url')}")
           PY
+
+      - name: Start the main-source check
+        if: steps.check-pr.outputs.pr_exists == 'false' && steps.check-diff.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.create-release-pr.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR_NUMBER" ]; then
+            echo "The release pull request number is missing." >&2
+            exit 1
+          fi
+          # pull_request workflows are created and wait for approval. Dispatching
+          # them again would put a second check of the same name on this commit.
+          # pull_request_target is not created, so this dispatch is the only run.
+          # It lands on this develop commit, which is the release head.
+          curl -sS -f -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -d "{\"ref\":\"develop\",\"inputs\":{\"pr\":\"${PR_NUMBER}\"}}" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/main-from-develop.yml/dispatches"
