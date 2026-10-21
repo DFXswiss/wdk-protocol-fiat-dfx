@@ -18,8 +18,8 @@ on:
     - cron: '17,47 * * * *'
   workflow_dispatch:
     inputs:
-      pr_number:
-        description: Pull request number to reconcile
+      pr:
+        description: Pull request number
         required: false
         type: string
       all_open:
@@ -56,15 +56,15 @@ jobs:
       - name: Require a pull request number or an explicit sweep
         if: github.event_name == 'workflow_dispatch'
         env:
-          PR_NUMBER: ${{ inputs.pr_number }}
+          PR: ${{ inputs.pr }}
           ALL_OPEN: ${{ inputs.all_open }}
         run: |
           set -euo pipefail
-          if [ -n "$PR_NUMBER" ] && [ "$ALL_OPEN" = "true" ]; then
+          if [ -n "$PR" ] && [ "$ALL_OPEN" = "true" ]; then
             echo "Give a pull request number or all_open, not both." >&2
             exit 1
           fi
-          if [ -z "$PR_NUMBER" ] && [ "$ALL_OPEN" != "true" ]; then
+          if [ -z "$PR" ] && [ "$ALL_OPEN" != "true" ]; then
             echo "Give a pull request number or set all_open to true." >&2
             exit 1
           fi
@@ -77,5 +77,5 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          pr: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          pr: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr || '' }}
           all_open: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.all_open) }}
