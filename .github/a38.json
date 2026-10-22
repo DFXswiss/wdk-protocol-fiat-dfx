@@ -16,15 +16,8 @@
           "env": {
             "CI": "true"
           },
-          "npm": {
-            "node_major": 22,
-            "canaries": [
-              "standard/package.json"
-            ]
-          },
           "steps": [
-            ["npm", "ci"],
-            ["npm", "run", "lint"]
+            ["bash", ".github/scripts/a38-module-job.sh", "lint"]
           ]
         }
       }
@@ -41,15 +34,8 @@
           "env": {
             "CI": "true"
           },
-          "npm": {
-            "node_major": 22,
-            "canaries": [
-              "typescript/lib/typescript.js"
-            ]
-          },
           "steps": [
-            ["npm", "ci"],
-            ["npm", "run", "build:types"]
+            ["bash", ".github/scripts/a38-module-job.sh", "types"]
           ]
         }
       }
@@ -66,15 +52,8 @@
           "env": {
             "CI": "true"
           },
-          "npm": {
-            "node_major": 22,
-            "canaries": [
-              "jest/bin/jest.js"
-            ]
-          },
           "steps": [
-            ["npm", "ci"],
-            ["npm", "run", "test:coverage"]
+            ["bash", ".github/scripts/a38-module-job.sh", "test"]
           ]
         }
       }
@@ -91,15 +70,8 @@
           "env": {
             "CI": "true"
           },
-          "npm": {
-            "node_major": 22,
-            "canaries": [
-              "standard/package.json"
-            ]
-          },
           "steps": [
-            ["npm", "ci"],
-            ["npm", "audit", "--audit-level=critical"]
+            ["bash", ".github/scripts/a38-module-job.sh", "audit"]
           ]
         }
       }

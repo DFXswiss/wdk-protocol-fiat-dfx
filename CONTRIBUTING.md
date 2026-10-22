@@ -2,7 +2,7 @@
 
 Changes land on `develop`. `main` is updated only by the release pull request from `develop`.
 
-Once `package.json` is present, pull request CI and the local A38 jobs are:
+Until `package.json` exists on the base and the head, pull request CI and the local A38 jobs record that the module is not here yet and succeed. Removing it after it has landed fails them. Once `package.json` is present, those jobs are:
 
 - `npm ci` and `npm run lint`
 - `npm ci` and `npm run build:types`
