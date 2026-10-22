@@ -22,14 +22,14 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: Check for unverified commits
         id: verify-commits
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const prNumber = Number(process.env.PR_NUMBER || context.issue.number);
@@ -73,7 +73,7 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         if: steps.module.outputs.present == 'true'
         with:
           node-version: '22.22.0'
@@ -133,7 +133,7 @@ jobs:
       - name: Post PR comment
         if: always() && env.PR_NUMBER != ''
         continue-on-error: true
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           UNVERIFIED: ${{ steps.verify-commits.outputs.unverified }}
           UNVERIFIED_LIST: ${{ steps.verify-commits.outputs.unverified_list }}
