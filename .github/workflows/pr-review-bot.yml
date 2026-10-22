@@ -22,7 +22,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 0
