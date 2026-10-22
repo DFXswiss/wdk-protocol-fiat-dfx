@@ -1,0 +1,51 @@
+{
+  "schema": "pr-guard/v1",
+  "a38": {
+    "enforce": [
+      "develop"
+    ],
+    "exclude": [
+      "main"
+    ],
+    "default": "enforce"
+  },
+  "workflow_approval": {
+    "enabled": true,
+    "workflows": [
+      ".github/workflows/module-pr.yaml",
+      ".github/workflows/pr-review-bot.yml",
+      ".github/workflows/codeql.yml",
+      ".github/workflows/ci-on-ready.yaml",
+      ".github/workflows/main-from-develop.yml"
+    ]
+  },
+  "lifecycle": {
+    "enabled": true,
+    "auto_ready": true,
+    "required_workflows": [
+      ".github/workflows/module-pr.yaml",
+      ".github/workflows/pr-review-bot.yml",
+      ".github/workflows/codeql.yml"
+    ],
+    "ignored_workflows": [
+      ".github/workflows/a38-guard.yml",
+      ".github/workflows/ci-on-ready.yaml"
+    ],
+    "required_checks": {
+      ".github/workflows/module-pr.yaml": [
+        "Lint",
+        "Types",
+        "Test",
+        "Audit"
+      ],
+      ".github/workflows/pr-review-bot.yml": [
+        "Review"
+      ],
+      ".github/workflows/codeql.yml": [
+        "Select CodeQL scope",
+        "Analyze (actions)",
+        "Analyze (javascript-typescript)"
+      ]
+    }
+  }
+}

@@ -1,0 +1,24 @@
+# Ready is not a CI switch. Drafts already run PR CI. After a fresh A38
+# enforce pass, dfx pr guard approves held fork runs. This workflow must
+# not dispatch suites, add labels, or convert the pull request back to draft.
+
+name: Ready is not a CI switch
+
+on:
+  pull_request:
+    types: [ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  ensure-ci-label:
+    name: Ready notice
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ready does not start CI
+        run: |
+          echo "Ready is not a CI switch."
+          echo "Drafts already run PR CI."
+          echo "dfx pr guard approves held fork runs after an A38 enforce pass."

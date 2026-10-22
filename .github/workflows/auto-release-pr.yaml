@@ -1,0 +1,166 @@
+name: Auto Release PR
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # The release pull request is opened by this workflow's own token, so it
+  # stays the Actions bot. pull_request runs are created and wait for a
+  # write user to approve them. pull_request_target is not created at all.
+  # actions: write lets this job dispatch that check. workflow_dispatch is
+  # one of the events this token is allowed to start.
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: auto-release-pr
+  cancel-in-progress: false
+
+jobs:
+  create-release-pr:
+    name: Create Release PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Fetch main branch
+        run: git fetch origin main
+
+      - name: Check for existing PR
+        id: check-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          body=$(curl -sS -f \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls?base=main&head=${GITHUB_REPOSITORY_OWNER}%3Adevelop&state=open")
+          PR_COUNT=$(printf '%s' "$body" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
+          echo "pr_exists=$([[ $PR_COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
+          echo "::notice::Open PRs from develop to main: $PR_COUNT"
+
+      - name: Check for differences
+        id: check-diff
+        if: steps.check-pr.outputs.pr_exists == 'false'
+        run: |
+          set -euo pipefail
+          DIFF_COUNT=$(git rev-list --count origin/main..origin/develop)
+          set +e
+          git diff --quiet origin/main origin/develop
+          diff_status=$?
+          set -e
+          if [ "$diff_status" -eq 0 ]; then
+            tree_diff=false
+          elif [ "$diff_status" -eq 1 ]; then
+            tree_diff=true
+          else
+            echo "git diff failed with status ${diff_status}" >&2
+            exit "$diff_status"
+          fi
+          # A commit count is not a content change. Identical trees must not
+          # open a release. A count of zero has nothing to merge.
+          if [ "$tree_diff" = true ] && [ "$DIFF_COUNT" -gt 0 ]; then
+            has_changes=true
+          else
+            has_changes=false
+          fi
+          echo "has_changes=${has_changes}" >> "$GITHUB_OUTPUT"
+          echo "commit_count=$DIFF_COUNT" >> "$GITHUB_OUTPUT"
+          echo "::notice::Commits ahead of main: $DIFF_COUNT; tree differs: $tree_diff"
+
+      - name: Create Release PR
+        id: create-release-pr
+        if: steps.check-pr.outputs.pr_exists == 'false' && steps.check-diff.outputs.has_changes == 'true'
+        env:
+          # The release PR is authored by the Actions bot, not by a person.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT_COUNT: ${{ steps.check-diff.outputs.commit_count }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.error, urllib.request
+
+          token = os.environ["GH_TOKEN"]
+          api = os.environ["GITHUB_API_URL"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          count = os.environ["COMMIT_COUNT"]
+          body = "\n".join(
+              [
+                  "## Automatic Release PR",
+                  "",
+                  "This PR was automatically created after changes were pushed to develop.",
+                  "",
+                  f"**Commits:** {count} new commit(s)",
+                  "",
+                  "### Checklist",
+                  "- [ ] Review all changes",
+                  "- [ ] Verify CI passes",
+                  "- [ ] Approve and merge when ready for production",
+              ]
+          )
+          payload = json.dumps(
+              {
+                  "title": "Release: develop -> main",
+                  "head": "develop",
+                  "base": "main",
+                  "body": body,
+              }
+          ).encode()
+          req = urllib.request.Request(
+              f"{api}/repos/{repo}/pulls",
+              data=payload,
+              method="POST",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "Content-Type": "application/json",
+              },
+          )
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  created = json.load(resp)
+          except urllib.error.HTTPError as exc:
+              detail = exc.read().decode()
+              raise SystemExit(f"create pull failed: {exc.code} {detail}") from exc
+          number = created.get("number")
+          if not isinstance(number, int) or number <= 0:
+              raise SystemExit("create pull returned no pull request number")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"pr_number={number}\n")
+          print(f"::notice::Opened release PR {created.get('html_url')}")
+          PY
+
+      - name: Start the main-source check
+        if: steps.check-pr.outputs.pr_exists == 'false' && steps.check-diff.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.create-release-pr.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR_NUMBER" ]; then
+            echo "The release pull request number is missing." >&2
+            exit 1
+          fi
+          # This token creates the pull request, so pull_request_target does not
+          # start for that open. A later push to develop is not made by this
+          # token, and that push starts pull_request_target on the new commit.
+          # Dispatch only on create. Dispatching again on a later push would
+          # post a second check of the same name. pull_request workflows are
+          # created and wait for approval; they are not dispatched here.
+          curl -sS -f -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -d "{\"ref\":\"develop\",\"inputs\":{\"pr\":\"${PR_NUMBER}\"}}" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/main-from-develop.yml/dispatches"

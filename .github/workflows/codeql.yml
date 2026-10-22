@@ -1,0 +1,111 @@
+# CodeQL for this public repository.
+# A pull request into develop does not analyze. Push to develop or main,
+# a pull request into main, and the ci:full label do. The analyze job still
+# runs and succeeds when analysis is not required. A skipped job is not used,
+# because a skipped required check counts as passing.
+# JavaScript and TypeScript analysis starts when those sources exist.
+# Ready does not dispatch this workflow.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number for a manual run
+        required: false
+        type: string
+      base_ref:
+        description: Pull request base. Empty or main analyzes. develop does not.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Select CodeQL scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      analyze: ${{ steps.scope.outputs.analyze }}
+    steps:
+      - id: scope
+        shell: bash
+        env:
+          ANALYZE: "${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && (github.base_ref == 'main' || contains(github.event.pull_request.labels.*.name, 'ci:full'))) || (github.event_name == 'workflow_dispatch' && (inputs.base_ref == '' || inputs.base_ref == 'main'))) && 'true' || 'false' }}"
+        run: |
+          set -euo pipefail
+          if [ "$ANALYZE" = "true" ]; then
+            echo "analyze=true" >> "$GITHUB_OUTPUT"
+            echo "CodeQL analysis will run."
+          else
+            echo "analyze=false" >> "$GITHUB_OUTPUT"
+            echo "This pull request does not require analysis. Push to develop or main remains the backstop."
+          fi
+
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+          - language: javascript-typescript
+    steps:
+      - name: Analysis not required
+        if: needs.prepare.outputs.analyze != 'true'
+        run: echo "This pull request does not require analysis. Push to develop or main remains the backstop."
+
+      - name: Checkout repository
+        if: needs.prepare.outputs.analyze == 'true'
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Detect sources
+        id: sources
+        if: needs.prepare.outputs.analyze == 'true'
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.language }}" = "javascript-typescript" ]; then
+            if git ls-files '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.mts' '*.cts' | grep -E . >/dev/null; then
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              echo "No JavaScript or TypeScript sources yet."
+            fi
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Initialize CodeQL
+        if: needs.prepare.outputs.analyze == 'true' && steps.sources.outputs.run == 'true'
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Perform CodeQL Analysis
+        if: needs.prepare.outputs.analyze == 'true' && steps.sources.outputs.run == 'true'
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
