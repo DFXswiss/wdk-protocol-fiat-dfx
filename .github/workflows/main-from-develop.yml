@@ -46,6 +46,8 @@ jobs:
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           THIS_REPO: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF: ${{ github.ref }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           API_URL: ${{ github.api_url }}
         run: |
@@ -60,7 +62,19 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "${API_URL}/repos/${THIS_REPO}/pulls/${PR_NUMBER}")
-            eval "$(printf '%s' "$body" | python3 -c 'import json,shlex,sys; pr=json.load(sys.stdin); head=pr.get("head") or {}; base=pr.get("base") or {}; repo=(head.get("repo") or {}).get("full_name") or ""; ref=head.get("ref") or ""; base_ref=base.get("ref") or ""; print("HEAD_REF="+shlex.quote(ref)); print("HEAD_REPO="+shlex.quote(repo)); print("BASE_REF="+shlex.quote(base_ref))')"
+            eval "$(printf '%s' "$body" | python3 -c 'import json,shlex,sys; pr=json.load(sys.stdin); head=pr.get("head") or {}; base=pr.get("base") or {}; repo=(head.get("repo") or {}).get("full_name") or ""; ref=head.get("ref") or ""; base_ref=base.get("ref") or ""; sha=head.get("sha") or ""; state=pr.get("state") or ""; sha=sha if isinstance(sha, str) else ""; state=state if isinstance(state, str) else ""; print("HEAD_REF="+shlex.quote(ref)); print("HEAD_REPO="+shlex.quote(repo)); print("BASE_REF="+shlex.quote(base_ref)); print("HEAD_SHA="+shlex.quote(sha)); print("PR_STATE="+shlex.quote(state))')"
+            if [ "$PR_STATE" != "open" ]; then
+              echo "::error::The pull request must be open (got '${PR_STATE}')."
+              exit 1
+            fi
+            if [ -z "$HEAD_SHA" ] || [ "$HEAD_SHA" != "$GITHUB_SHA" ]; then
+              echo "::error::The pull request head is not the dispatched commit."
+              exit 1
+            fi
+            if [ "$GITHUB_REF" != "refs/heads/develop" ]; then
+              echo "::error::Dispatch this check from refs/heads/develop (got '${GITHUB_REF}')."
+              exit 1
+            fi
           fi
           if [ "$BASE_REF" != "main" ]; then
             echo "::error::This check only applies to a pull request into main (got '${BASE_REF}')."
