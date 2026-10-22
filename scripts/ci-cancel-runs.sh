@@ -26,8 +26,8 @@
 # The live list is paged until a short page or the reported total is in hand.
 # A full page past the page cap is a cut-off and exits 1 before any cancel.
 # No-op (nothing to cancel) exits 0.
-# Cancel treats HTTP 202/409 as success. 502/503/429 retry then continue
-# (best-effort — a GitHub blip must not fail the calling workflow).
+# Cancel treats HTTP 202/409 as success. 502/503/429 and a transport
+# error retry, then continue, so one failed cancel does not stop the rest.
 set -euo pipefail
 
 REPO=""
@@ -230,18 +230,29 @@ api_cancel() {
   token=$(api_token)
   local base=${GITHUB_API_URL:-https://api.github.com}
   # 202 = accepted; 409 = already completed. Both are success.
-  # 502/503/429 are retried. A transient outage must not fail the closing workflow.
+  # 502/503/429 and transport errors retry, then continue, so one
+  # failure does not skip later runs.
   local code=""
+  local curl_rc=0
   local attempt=0
   local max=6
   while ((attempt < max)); do
     attempt=$((attempt + 1))
-    code=$(curl -sS -o /dev/null -w '%{http_code}' \
+    if code=$(curl -sS --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' \
       -X POST \
       -H "Authorization: Bearer ${token}" \
       -H "Accept: application/vnd.github+json" \
       -H "X-GitHub-Api-Version: 2022-11-28" \
-      "${base}/repos/${REPO}/actions/runs/${id}/cancel")
+      "${base}/repos/${REPO}/actions/runs/${id}/cancel"); then
+      curl_rc=0
+    else
+      curl_rc=$?
+    fi
+    if [[ "$curl_rc" -ne 0 || -z "$code" || "$code" == "000" ]]; then
+      echo "cancel run ${id} transport error ${curl_rc}, retry ${attempt}/${max}" >&2
+      sleep "$attempt"
+      continue
+    fi
     if [[ "$code" == "202" || "$code" == "409" ]]; then
       return 0
     fi
@@ -253,7 +264,7 @@ api_cancel() {
     echo "error: cancel run ${id} returned HTTP ${code}" >&2
     exit 1
   done
-  echo "warning: cancel run ${id} still HTTP ${code} after ${max} retries; continuing" >&2
+  echo "warning: cancel run ${id} still failing after ${max} retries; continuing" >&2
   return 0
 }
 
