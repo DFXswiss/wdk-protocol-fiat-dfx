@@ -167,7 +167,16 @@ jobs:
               repo: context.repo.repo,
               issue_number: prNumber
             });
-            const botComment = existing.find(c => (c.body || '').includes(MARKER));
+            const botComment = existing
+              .filter(c => {
+                const app = c.performed_via_github_app;
+                return app && app.slug === 'github-actions' && (c.body || '').includes(MARKER);
+              })
+              .sort((a, b) => {
+                const byTime = String(b.created_at || '').localeCompare(String(a.created_at || ''));
+                if (byTime !== 0) return byTime;
+                return (b.id || 0) - (a.id || 0);
+              })[0];
 
             if (lines.length === 0) {
               if (botComment) {
