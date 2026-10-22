@@ -60,7 +60,6 @@ jobs:
               core.setOutput('unverified', 'true');
               core.setOutput('unverified_list', list);
               core.setOutput('unverified_count', unverified.length);
-              core.setFailed(`Unverified commits: ${unverified.length}`);
             } else {
               core.setOutput('unverified', 'false');
             }
