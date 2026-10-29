@@ -95,8 +95,8 @@ See [`e2e/README.md`](e2e/README.md) for prerequisites and side effects before r
 On this branch (2026-10-20), `npm run lint` printed nothing and `npm test` passed 711 tests in 2 suites (Node v26.7.0).
 `npm run test:integration` passed 35 tests in 1 suite on that same Node version.
 `npm run test:coverage` on that same Node version passed 746 tests in 3 suites and reached 100 % coverage in all four categories.
-On 2026-10-29, the jobs listed in the `CONTRIBUTING.md` of `DFXswiss/wdk-protocol-fiat-dfx`, the repository this module
-is meant to land in, were re-run on Node v22.23.4: `npm ci`, `npm run lint`
+On 2026-10-29, the jobs listed in this repository's `CONTRIBUTING.md` were re-run on Node v22.23.4: `npm ci`,
+`npm run lint`
 (output empty), `npm run build:types` (exit 0), `npm run test:coverage` (746/746 in 3 suites, 100 % in all four categories) and
 `npm audit --audit-level=critical` (exit 0, 6 low-severity findings). In the development repository
 `npm run build:types` rewrote the hand-written declarations under `types/`, so the committed `types/` were restored
