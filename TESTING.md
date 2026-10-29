@@ -98,8 +98,9 @@ On this branch (2026-10-20), `npm run lint` printed nothing and `npm test` passe
 On 2026-10-29, the jobs listed in the `CONTRIBUTING.md` of `DFXswiss/wdk-protocol-fiat-dfx`, the repository this module
 is meant to land in, were re-run on Node v22.23.4: `npm ci`, `npm run lint`
 (output empty), `npm run build:types` (exit 0), `npm run test:coverage` (746/746 in 3 suites, 100 % in all four categories) and
-`npm audit --audit-level=critical` (exit 0, 6 low-severity findings). `npm run build:types` rewrites the hand-written
-declarations under `types/`; it does the same on `main`, so the committed `types/` were restored after the run. The
+`npm audit --audit-level=critical` (exit 0, 6 low-severity findings). In the development repository
+`npm run build:types` rewrote the hand-written declarations under `types/`, so the committed `types/` were restored
+after that run; in this repository `tsc` writes to the ignored `.types-build/` instead. The
 session scenarios that build state across successive public calls live in the integration suite
 (skill rule R3). Parallel calls to the same method within one Act belong in unit tests. All
 unit tests use an injected `fetch` routed by method and URL and cover

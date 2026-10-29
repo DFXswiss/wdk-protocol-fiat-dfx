@@ -410,8 +410,9 @@ Tests route injected fetch calls by HTTP method and URL. Coverage thresholds are
 CI gate. The coverage threshold applies to the combined unit and integration
 suites because scenarios that build state across successive public calls belong
 in the integration suite (R3); parallel calls to the same method in one Act belong
-in unit tests. Type declarations are maintained manually. `npm run build:types`
-runs as a type check in CI and rewrites them; do not commit that output.
+in unit tests. Type declarations under `types/` are maintained manually.
+`npm run build:types` checks that `tsc` can generate declarations; it writes them
+to the ignored `.types-build/` and leaves `types/` unchanged.
 
 Local integration tests in `tests/integration/*.test.js` are excluded from
 the default unit-test run (`npm test`) and included in `npm run test:coverage`.
