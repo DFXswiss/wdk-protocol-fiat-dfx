@@ -546,7 +546,7 @@ Production uses the same code; it was not tested there. The module cannot work a
 - **Identification itself (Sumsub) and the external name check.** Both are external providers. The UI flow stops at
   the identification call, and the lifecycle test simulates a completed identification. In the real purchase
   (section 9) the account was already verified.
-- **Real sell.** Only a real buy was made (section 9). Selling with real crypto was not tested.
+- **Real sell.** Only real buys were made (sections 9, 14 and 16). Selling with real crypto was not tested.
 - **A token bought with real money into an ERC-4337 account.** The real purchase into a smart account was ETH
   (section 14); the real purchase of USDC paid out to an EOA (section 16). USDC into a smart account is covered by
   quotes and widget tests only. `e2e/safe-rescue.mjs` moved USDC out of a Safe only on a fork; `e2e/bundler-send.mjs` sent 1 USDC out of a
@@ -714,7 +714,8 @@ steps in the widget, including the bank transfer, were completed by hand.
 
 The simulator's call log and order list were saved once, after the status had been fetched:
 [`e2e/evidence/2026-10-30-production-usdc-module-calls.jsonl`](e2e/evidence/2026-10-30-production-usdc-module-calls.jsonl).
-The call log keeps no times; the times below come from the order list and from Base blocks. It holds 19 calls, each
+The call log keeps no times; the times below come from the order list, from Base blocks and from the time the
+snapshot was taken. It holds 19 calls, each
 `ok` except one of the four `quoteBuy` calls (the call log keeps no error reason): loading the wallet, the catalog,
 `quoteBuy`, `buy` on `base` (638 ms) and `getTransactionDetail` on `base` (871 ms). The two orders of 2026-10-29 in the
 list show `started` because the simulator lists a loaded order as `started` until its status is fetched; their status
@@ -725,7 +726,7 @@ was not fetched this time.
 | 16:26:02 | order list | `buy` on `base` succeeded: order `wallet-1793377562117-4864b0a874a8`, 15 EUR of USDC | 0 USDC |
 | 16:28:35 | Base block 53294184 | payout [`0xe11fd97d498b01c3fdb21a57bf2a9d9e6505bb71c3af069d60a8d6756cb75702`](https://basescan.org/tx/0xe11fd97d498b01c3fdb21a57bf2a9d9e6505bb71c3af069d60a8d6756cb75702), 12.528366 USDC from `0xFAEefD557ffD2714f16e1A44A165FCd5d6a6b6a0` (the payout address of sections 9 and 14) | **12.528366 USDC** |
 | 16:28:35 | Base block 53294184 | [`0x5cbaf67328d9ba1e0287cb1ddd160f8a693c8b7d01c8ee6c9af271d530ba5715`](https://basescan.org/tx/0x5cbaf67328d9ba1e0287cb1ddd160f8a693c8b7d01c8ee6c9af271d530ba5715), 0.00027499 ETH from the same address | 12.528366 USDC |
-| before 16:35:18 | simulator | `getTransactionDetail` on `base`: `completed`, USDC, EUR | 12.528366 USDC |
+| after 16:33:51, before 16:35:18 | simulator | `getTransactionDetail` on `base`: the order list shows `completed` | 0 USDC (moved out at 16:33:51, below) |
 
 The ETH is DFX's network start fee: for a token bought on Base, the DFX API source adds a fee of 0.5 CHF, paid out in
 the native coin, when the address holds less than 0.00001 of it. The EOA held 0.000000843624377087 ETH, because its ETH had been moved earlier
