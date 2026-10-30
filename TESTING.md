@@ -2,15 +2,16 @@
 
 This document records how `@dfx.swiss/wdk-protocol-fiat-dfx` was verified, what each test layer proves, and what it
 does not prove. Every result below was produced by running the named command, except the steps a person carried out
-by hand in the two real purchases (the DFX widget steps and the bank transfer in sections 9 and 14), which those
-sections name as such. A row that says the script was not
+by hand in the two real purchases (the DFX widget steps and the bank transfer in sections 9 and 14) and the funding
+of the account in section 15, which those sections name as such. A row that says the script was not
 re-run states what that script expects, not a measured result. Nothing is inferred from reading code
 unless it says so.
 
 The revisions named below are commits of the development repository
 [joshuakrueger-dfx/wdk-modul-dfx](https://github.com/joshuakrueger-dfx/wdk-modul-dfx); this repository received the
 module as one squashed commit. "This branch" is that repository's pull request #2 (`fix/issue-258`), whose last
-commit is `090e82c`.
+commit is `090e82c`. Results dated 2026-10-30 (section 15) belong to this repository's branch
+`feat/dfx-fiat-module`, which adds `e2e/bundler-send.mjs`.
 
 - **Which code each result belongs to.** Results belong to the explicitly named revisions:
   - **This branch:** the lint, unit, integration and coverage rows, recorded in section 1, and the ERC-4337 fork probe
@@ -43,6 +44,7 @@ commit is `090e82c`.
     byte for byte with the repository before the run. Section 11 keeps the earlier run against `ec9b788`.
     Both live-matrix counts in the summary come from this branch (2026-10-29). A summary row
     that says the script on this branch was not re-run is not this run.
+  - **This repository, 2026-10-30:** the sends through a bundler of section 15, on Base and on a fork.
   - **Real purchase:** paid on 2026-09-28 with library code `0be1b6d` (section 9). The payment itself was not repeated;
     on 2026-09-29 the same production order, wallet and DFX account were re-checked with `20ec94d` without a payment
     (section 12). A second real purchase, into an undeployed ERC-4337 account on Base, was paid on 2026-10-29 with this
@@ -52,7 +54,8 @@ commit is `090e82c`.
 - **Runtime:** Historical runs used Node.js `v22.22.0`. On this branch, lint, unit, integration, coverage and the 2026-10-20 fork probe used Node v26.7.0; the 2026-10-23
   runs (sandbox live matrix, two wallet journeys, fork probe) used Node v26.12.1. On 2026-10-29, `npm ci`, lint, `build:types`,
   coverage and `npm audit --audit-level=critical` were re-run on Node v22.23.4 (section 1); the sandbox and production
-  live matrix, the wallet simulator and `e2e/safe-rescue.mjs` of section 14 ran on Node v26.12.1. macOS arm64. The Bare entry point ran on the Bare runtime v1.35.0 (npm package `bare@1.34.1`), see the summary row.
+  live matrix, the wallet simulator and `e2e/safe-rescue.mjs` of section 14 ran on Node v26.12.1. The runs of section 15
+  (2026-10-30) used Node v22.23.4. macOS arm64. The Bare entry point ran on the Bare runtime v1.35.0 (npm package `bare@1.34.1`), see the summary row.
 - **WDK packages used by `tests/integration`:** root-lockfile versions `@tetherto/wdk-wallet` 1.0.0-beta.17
   (a single copy, also used by `@tetherto/wdk-wallet-evm`; 1.0.0-beta.19 before 2026-10-02)
   and `@tetherto/wdk-wallet-evm` 1.0.0-beta.19.
@@ -86,6 +89,7 @@ commit is `090e82c`.
 | Bare entry point | `cd e2e && npx --yes bare@1.34.1 bare-smoke.mjs` | 4/4 checks on this branch (2026-10-20, Bare runtime v1.35.0): `bare.js` loads `DfxProtocol`, and a sandbox sign-in on Polygon through stubbed `fetch` posts the predicted Safe address with exactly the ERC-6492 signature in `e2e/fixtures/bare-smoke-expected.json`, then the stubbed detail request answers 404. With one hex digit of that fixture changed the probe reports 3/4. No network, no DFX API |
 | Deployed ERC-4337 account | `cd e2e && ANVIL_FORK_URL=https://polygon.drpc.org node safe-deployed.mjs` | 11/11 steps on this branch (2026-10-20): before deployment the posted signature is ERC-6492-wrapped and viem 2.38.5 verifies it on the fork while the Safe has no code; after deployment the inner signature passes ERC-1271 and the wrapped one passes viem; sandbox result `accepted` in all three sign-ins on 2026-10-23, `rejected` on 2026-10-20 (section 8) |
 | Real purchase into an undeployed ERC-4337 account | wallet simulator in production; `cd e2e && node safe-rescue.mjs --native …` | On this branch (2026-10-29): 15 EUR of ETH bought for the Base smart account, which signed in to production DFX while it had no code; DFX paid 0.00565071 ETH to it and the module reports `completed`; the owner then deployed it without a bundler and moved the full balance out (section 14) |
+| Sending from an ERC-4337 account through a bundler | `cd e2e && node bundler-send.mjs …` | On 2026-10-30, on Base itself through the public Candide bundler: three UserOperations from an account that had no code; the first deployed it, and each settled with receipt status 1 and a `UserOperationEvent` with `success = true`. On an `anvil` fork of Base with a local Alto bundler, the committed script: four sends (ETH that deploys, ETH, USDC `transfer`, `--all`) exit 0, four refusals before sending, and 7/7 mutations or removed checks detected (section 15) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
 See [`e2e/README.md`](e2e/README.md) for prerequisites and side effects before running anything under `e2e/`.
@@ -540,10 +544,9 @@ Production uses the same code; it was not tested there. The module cannot work a
   (section 9) the account was already verified.
 - **Real sell.** Only a real buy was made (section 9). Selling with real crypto was not tested.
 - **USDC with real money.** Both real purchases were ETH (sections 9 and 14). USDC is covered by quotes and widget
-  tests only; `e2e/safe-rescue.mjs` moved USDC out of a Safe only on a fork.
-- **Sending from an ERC-4337 account through WDK.** The funds of section 14 were moved by two ordinary owner
-  transactions without a bundler. WDK's own UserOperation path (bundler, paymaster or the Safe paying its own gas) was
-  not exercised.
+  tests only; `e2e/safe-rescue.mjs` and `e2e/bundler-send.mjs` moved USDC out of a Safe only on a fork.
+- **Paymasters.** WDK's UserOperation path was exercised with the account paying its own gas in ETH (section 15).
+  Sponsored and token paymasters were not exercised.
 - **Deposit detection on a real chain.** The sale in the local tests starts from a deposit row as the blockchain scan
   would write it; the scan itself is not exercised.
 - **Drift between the recorded sandbox and the live API.** The integration fixtures are a snapshot of
@@ -623,3 +626,56 @@ and again within the full sandbox run of 2026-10-29 (section 2).
 This is the first run in which an undeployed ERC-4337 account went through every step with real money: sign-in to
 production DFX via ERC-6492, widget, bank transfer, on-chain payout, status through the module, and recovery of the
 funds with the owner key alone.
+
+## 15. Sending from an ERC-4337 account through a bundler (Base, 2026-10-30)
+
+Section 14 moved the funds out with ordinary owner transactions. This section exercises WDK's own path: the account
+builds a UserOperation, the owner key signs it, and a bundler submits it to the EntryPoint
+(`0x0000000071727De22E5E9d8BAf0edAc6f37da032`). The account pays its own gas in ETH (`useNativeCoins`); no paymaster
+is involved.
+
+**Base itself.** Account 1 of the prepared wallet of sections 9 and 14, `0xdB2E331855F618580c73C66E054dF9C99dA2FD21`,
+had no code. 0.0005 ETH was sent to it by hand. Three UserOperations then went through the public bundler
+`https://api.candide.dev/public/v3/8453` to `0x3e0004935eAD42cefB1ecf461847bdB1591f337f`. A one-off script, not
+committed, sent them with the same WDK calls that `e2e/bundler-send.mjs` makes (`quoteSendTransaction`,
+`sendTransaction`, `getUserOperationReceipt`) and wrote one JSON line per step:
+[`e2e/evidence/2026-10-30-bundler-sends.jsonl`](e2e/evidence/2026-10-30-bundler-sends.jsonl). Each bundling
+transaction was then read from a Base RPC, not from the bundler: status 1 and one `UserOperationEvent` with
+`success = true`. Times are UTC, when the step was logged after its receipt.
+
+| Time (UTC) | Base block | Transaction | Sent | Gas (`actualGasCost`) |
+| --- | --- | --- | --- | --- |
+| 10:09:58 | 53282825 | [`0xe69dd32c5865995af2a5be9661af9a3a07c153a5633a8778323e5599e06734f8`](https://basescan.org/tx/0xe69dd32c5865995af2a5be9661af9a3a07c153a5633a8778323e5599e06734f8) | 0.0001 ETH; the account had no code before and has code after | 0.0000026534636 ETH |
+| 10:10:10 | 53282831 | [`0x0f877e6e0b731e63fa3db480ebd7cd83bd68f86562c5651398f0b92de81f7882`](https://basescan.org/tx/0x0f877e6e0b731e63fa3db480ebd7cd83bd68f86562c5651398f0b92de81f7882) | 0.0001 ETH | 0.0000007898366 ETH |
+| 10:10:28 | 53282840 | [`0x19454c9d48b129b8053875d7db75efa96161b62d13ff8ceea7c854b29aabde11`](https://basescan.org/tx/0x19454c9d48b129b8053875d7db75efa96161b62d13ff8ceea7c854b29aabde11) | 0.00029372004904 ETH, the balance less a reserve for gas | 0.0000007901838 ETH |
+
+The destination received 0.00049372004904 ETH in total. Of the remaining 0.00000627995096 ETH, 0.000004233484 ETH was
+gas, 0.00000154088836 ETH stayed in the account and 0.0000005055786 ETH stayed as its deposit in the EntryPoint. Each
+send's account spending was its amount plus the part of the gas prefund its EntryPoint deposit did not cover; the
+unspent prefund stays as that deposit.
+
+**The committed script on a fork.** `e2e/bundler-send.mjs` ran with a random seed on an `anvil` fork of Base
+(block 53284892; restarted at 53285479 after the public RPC refused state of the older block) with Pimlico Alto 0.0.21
+as the local bundler (`--safe-mode false`). Fork gas used `anvil`'s 1 gwei priority fee, so its amounts are far above
+Base's.
+
+- Exit 0: a dry run; an ETH send of 0.001 that deployed the account; an ETH send of 0.002; a USDC `transfer` of 1.25
+  (account 5 → 3.75 USDC, destination credited exactly); `--all`, which sent 0.0056763440854 ETH and left
+  0.0002545312376 ETH in the account and 0.000071362987 ETH in the EntryPoint.
+- Exit 1 before any UserOperation: `--send` without `--confirm`; `--bundler` pointing to the plain RPC
+  (`eth_supportedEntryPoints` not found); an amount above the account's ETH; account ETH of 0.001 below an amount of
+  0.002 while its EntryPoint deposit was 0.05 ETH. ETH sent to the USDC contract, which rejects ETH, was refused by the
+  bundler at gas estimation; nothing was sent.
+- Six mutations of the checks after sending were each detected with exit 1: the destination expected to hold one unit
+  more; the event's and the bundler's `success` checks inverted; the exactly-one-event check changed; the upper bound
+  of the ETH spent set to the amount; the account's token balance expected one unit lower. With the check "account
+  ETH below the amount" removed, the case with the 0.05 ETH deposit sent a UserOperation that settled with
+  `success = false` and was charged gas; the script reported `UserOperationEvent success is false`, exit 1.
+
+On Base itself, a dry run of the committed script for account 1 passed the bundler checks and quoted
+0.00000155875104 ETH for a send of 0.000001 ETH; `--all` stopped because the remainder was below 1.5 times the quoted
+fee.
+
+**Not shown here:** paymasters (sponsored or token); USDC through a bundler with real money; the committed script
+moving real funds (the real sends above used the one-off script with the same WDK calls); bundlers other than
+Candide on Base and Alto on a fork.

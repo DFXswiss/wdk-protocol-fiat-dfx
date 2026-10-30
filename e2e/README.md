@@ -438,3 +438,57 @@ node safe-rescue.mjs --native --to <address> --priority-fee-gwei 0.001 \
 node safe-rescue.mjs --native --rpc https://base-rpc.publicnode.com --to <address> \
   --send --confirm <smart-account address>
 ```
+
+### Sending from an ERC-4337 account through a bundler
+
+`bundler-send.mjs` sends from the Base smart account of a seed (chain id 8453)
+through WDK's own UserOperation path: `quoteSendTransaction` and
+`sendTransaction` for ETH, `quoteTransfer` and `transfer` for a token. The
+account pays its own gas in ETH (`useNativeCoins`); no paymaster is involved.
+If the account has no code yet, the first UserOperation deploys it.
+
+Before anything is signed, the script checks the chain id of `--rpc`, and that
+`--bundler` answers chain id 8453 and lists EntryPoint v0.7
+(`0x0000000071727De22E5E9d8BAf0edAc6f37da032`). It reads the seed like
+`safe-rescue.mjs` and never prints it.
+
+- Without `--send` it is a dry run: account, balances, amount and the fee WDK
+  quotes.
+- `--native` sends ETH; otherwise the token given by `--token` (default: Base
+  USDC). `--amount` is in the asset's units. `--all` (ETH only) sends the
+  balance minus 1.5 times the fee quoted for a 1-wei send; that remainder and
+  any unspent gas deposit in the EntryPoint stay with the account.
+- `--account` selects the account index (default 0). `--max-fee` (ETH) is
+  passed to WDK as `transactionMaxFee` or `transferMaxFee`.
+- `--rpc` defaults to `http://127.0.0.1:8547`. `--fork-fund` works only on a
+  local RPC, as in `safe-rescue.mjs`. `--send` always needs `--confirm` with the
+  exact smart-account address.
+- It stops before sending if the account holds less than the amount, or if its
+  ETH plus its EntryPoint deposit is below the amount (for ETH) plus the quoted
+  fee. It prints the UserOperation hash as soon as the bundler accepts it.
+- After inclusion it reads the bundling transaction from `--rpc`, not from the
+  bundler: status 1 and exactly one `UserOperationEvent` for this hash and
+  account with `success = true`. It then checks that the account has code, the
+  destination received exactly the amount, and, for a token, the account holds
+  exactly the amount less; for ETH, the account spent at least the amount and at
+  most the amount plus twice the quoted fee.
+
+On a fork, a local bundler has to submit to that fork; a public bundler sends
+to Base itself. Pimlico's Alto runs against `anvil`:
+
+```sh
+anvil --fork-url https://base-rpc.publicnode.com --port 8547
+npx --yes @pimlico/alto@0.0.21 --entrypoints 0x0000000071727De22E5E9d8BAf0edAc6f37da032 \
+  --executor-private-keys <anvil test key> --utility-private-key <another anvil test key> \
+  --rpc-url http://127.0.0.1:8547 --safe-mode false --chain-type op-stack --port 4337
+node bundler-send.mjs --native --bundler http://127.0.0.1:4337 --to <address> \
+  --amount 0.001 --fork-fund 0.01 --send --confirm <smart-account address>
+# Base itself, after a dry run without --send:
+node bundler-send.mjs --native --rpc https://base-rpc.publicnode.com \
+  --bundler https://api.candide.dev/public/v3/8453 --account 1 --to <address> \
+  --amount 0.0001 --send --confirm <smart-account address>
+```
+
+`--safe-mode false` turns off Alto's enforcement of the ERC-4337 validation
+rules; the recorded fork runs used it. This moves real funds when `--rpc` and
+`--bundler` point to Base.
