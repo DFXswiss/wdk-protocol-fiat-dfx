@@ -2,7 +2,7 @@
 
 This document records how `@dfx.swiss/wdk-protocol-fiat-dfx` was verified, what each test layer proves, and what it
 does not prove. Every result below was produced by running the named command, except the steps a person carried out
-by hand in the two real purchases (the DFX widget steps and the bank transfer in sections 9 and 14) and the two fundings
+by hand in the three real purchases (the DFX widget steps and the bank transfer in sections 9, 14 and 16) and the two fundings
 of the account in section 15, which those sections name as such. The first three sends on Base in section 15 were made
 by a one-off script that is not in this repository, the two after them by `e2e/bundler-send.mjs`; section 15 says so. A row that says the script was not
 re-run states what that script expects, not a measured result. Nothing is inferred from reading code
@@ -11,7 +11,7 @@ unless it says so.
 The revisions named below are commits of the development repository
 [joshuakrueger-dfx/wdk-modul-dfx](https://github.com/joshuakrueger-dfx/wdk-modul-dfx); this repository received the
 module as one squashed commit. "This branch" is that repository's pull request #2 (`fix/issue-258`), whose last
-commit is `090e82c`. Results dated 2026-10-30 (section 15) belong to this repository's branch
+commit is `090e82c`. Results dated 2026-10-30 (sections 15 and 16) belong to this repository's branch
 `feat/dfx-fiat-module`, which adds `e2e/bundler-send.mjs`.
 
 - **Which code each result belongs to.** Results belong to the explicitly named revisions:
@@ -45,18 +45,20 @@ commit is `090e82c`. Results dated 2026-10-30 (section 15) belong to this reposi
     byte for byte with the repository before the run. Section 11 keeps the earlier run against `ec9b788`.
     Both live-matrix counts in the summary come from this branch (2026-10-29). A summary row
     that says the script on this branch was not re-run is not this run.
-  - **This repository, 2026-10-30:** the sends through a bundler of section 15, on Base and on a fork.
+  - **This repository, 2026-10-30:** the sends through a bundler of section 15, on Base and on a fork, and the real
+    purchase of USDC of section 16.
   - **Real purchase:** paid on 2026-09-28 with library code `0be1b6d` (section 9). The payment itself was not repeated;
     on 2026-09-29 the same production order, wallet and DFX account were re-checked with `20ec94d` without a payment
     (section 12). A second real purchase, into an undeployed ERC-4337 account on Base, was paid on 2026-10-29 with this
-    branch (section 14).
+    branch (section 14). A third, of USDC into the EOA account on Base, was paid on 2026-10-30 with this repository's
+    branch (section 16).
 - **First runs:** 2026-09-24 (sections 1–5) and 2026-09-25 (sections 6–8) against `0be1b6d`; the numbers in this document
   are those of the 2026-09-28 re-run unless a section says otherwise.
 - **Runtime:** Historical runs used Node.js `v22.22.0`. On this branch, lint, unit, integration, coverage and the 2026-10-20 fork probe used Node v26.7.0; the 2026-10-23
   runs (sandbox live matrix, two wallet journeys, fork probe) used Node v26.12.1. On 2026-10-29, `npm ci`, lint, `build:types`,
   coverage and `npm audit --audit-level=critical` were re-run on Node v22.23.4 (section 1); the sandbox and production
-  live matrix, the wallet simulator and `e2e/safe-rescue.mjs` of section 14 ran on Node v26.12.1. The runs of section 15
-  (2026-10-30) used Node v22.23.4. macOS arm64. The Bare entry point ran on the Bare runtime v1.35.0 (npm package `bare@1.34.1`), see the summary row.
+  live matrix, the wallet simulator and `e2e/safe-rescue.mjs` of section 14 ran on Node v26.12.1. The runs of sections 15 and 16
+  (2026-10-30), including the wallet simulator of section 16, used Node v22.23.4. macOS arm64. The Bare entry point ran on the Bare runtime v1.35.0 (npm package `bare@1.34.1`), see the summary row.
 - **WDK packages used by `tests/integration`:** root-lockfile versions `@tetherto/wdk-wallet` 1.0.0-beta.17
   (a single copy, also used by `@tetherto/wdk-wallet-evm`; 1.0.0-beta.19 before 2026-10-02)
   and `@tetherto/wdk-wallet-evm` 1.0.0-beta.19.
@@ -91,6 +93,7 @@ commit is `090e82c`. Results dated 2026-10-30 (section 15) belong to this reposi
 | Deployed ERC-4337 account | `cd e2e && ANVIL_FORK_URL=https://polygon.drpc.org node safe-deployed.mjs` | 11/11 steps on this branch (2026-10-20): before deployment the posted signature is ERC-6492-wrapped and viem 2.38.5 verifies it on the fork while the Safe has no code; after deployment the inner signature passes ERC-1271 and the wrapped one passes viem; sandbox result `accepted` in all three sign-ins on 2026-10-23, `rejected` on 2026-10-20 (section 8) |
 | Real purchase into an undeployed ERC-4337 account | wallet simulator in production; `cd e2e && node safe-rescue.mjs --native …` | On this branch (2026-10-29): 15 EUR of ETH bought for the Base smart account, which signed in to production DFX while it had no code; DFX paid 0.00565071 ETH to it and the module reports `completed`; the owner then deployed it without a bundler and moved the full balance out (section 14) |
 | Sending from an ERC-4337 account through a bundler | on Base a one-off script (not committed), then `cd e2e && node bundler-send.mjs …`; on a fork the same script | On 2026-10-30, on Base itself through the public Candide bundler: three UserOperations from an account that had no code; the first deployed it, and each settled with receipt status 1 and a `UserOperationEvent` with `success = true`; then the committed script sent 1 USDC (`transfer`) and the remaining ETH (`--all`) through the same bundler, each exit 0. On an `anvil` fork of Base with a local Alto bundler, the committed script: four sends (ETH that deploys, ETH, USDC `transfer`, `--all`) exit 0, five runs that sent no UserOperation (four stopped by the script, one refused by the bundler at gas estimation), and 7/7 mutations or removed checks detected (section 15) |
+| Real purchase of USDC | wallet simulator in production; `cast send` for the transfer out | On 2026-10-30: 15 EUR of USDC bought for the Base EOA account; DFX paid 12.528366 USDC and a network start fee of 0.00027499 ETH to it, and the module reports `completed`; the owner then moved the full USDC out with one ERC-20 `transfer` (section 16) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
 See [`e2e/README.md`](e2e/README.md) for prerequisites and side effects before running anything under `e2e/`.
@@ -544,8 +547,9 @@ Production uses the same code; it was not tested there. The module cannot work a
   the identification call, and the lifecycle test simulates a completed identification. In the real purchase
   (section 9) the account was already verified.
 - **Real sell.** Only a real buy was made (section 9). Selling with real crypto was not tested.
-- **USDC with real money.** Both real purchases were ETH (sections 9 and 14). A USDC purchase is covered by quotes and
-  widget tests only. `e2e/safe-rescue.mjs` moved USDC out of a Safe only on a fork; `e2e/bundler-send.mjs` sent 1 USDC out of a
+- **A token bought with real money into an ERC-4337 account.** The real purchase into a smart account was ETH
+  (section 14); the real purchase of USDC paid out to an EOA (section 16). USDC into a smart account is covered by
+  quotes and widget tests only. `e2e/safe-rescue.mjs` moved USDC out of a Safe only on a fork; `e2e/bundler-send.mjs` sent 1 USDC out of a
   Safe through a bundler on Base (section 15), USDC that was sent to the account by hand, not bought.
 - **Paymasters.** WDK's UserOperation path was exercised with the account paying its own gas in ETH (section 15).
   Sponsored and token paymasters were not exercised.
@@ -692,5 +696,52 @@ On Base itself, a dry run of the committed script for account 1 passed the bundl
 0.00000155875104 ETH for a send of 0.000001 ETH; `--all` stopped because the remainder was below 1.5 times the quoted
 fee.
 
-**Not shown here:** paymasters (sponsored or token); a purchase of USDC; bundlers other than Candide on Base and Alto
+**Not shown here:** paymasters (sponsored or token); a purchase of USDC into this account (section 16 bought USDC
+for an EOA); bundlers other than Candide on Base and Alto
 on a fork.
+
+## 16. Real purchase of USDC (production, 2026-10-30)
+
+A real buy of USDC was made from the wallet simulator running against **production** with the prepared wallet of
+sections 9 and 14. The installed module copy in `e2e/` had `src/`, `index.js` and `package.json` identical to `d0ecfb2`
+of this repository's branch. The order was placed for the **EOA account on Base** (`base`), not for the smart account;
+the real purchase into an ERC-4337 account is section 14.
+
+- **EOA:** `0x463e558CC8842078CD1FeC6dF1Ff7F54058BE6C7` (the owner of section 14).
+
+The user flow in the wallet: *Vorbereitete Wallet laden* → *Kaufen* → USDC · Base, 15 EUR → *Weiter zu DFX*. The DFX
+steps in the widget, including the bank transfer, were completed by hand.
+
+The simulator's call log and order list were saved once, after the status had been fetched:
+[`e2e/evidence/2026-10-30-production-usdc-module-calls.jsonl`](e2e/evidence/2026-10-30-production-usdc-module-calls.jsonl).
+The call log keeps no times; the times below come from the order list and from Base blocks. It holds 19 calls, each
+`ok` except one of the four `quoteBuy` calls (the call log keeps no error reason): loading the wallet, the catalog,
+`quoteBuy`, `buy` on `base` (638 ms) and `getTransactionDetail` on `base` (871 ms). The two orders of 2026-10-29 in the
+list show `started` because the simulator lists a loaded order as `started` until its status is fetched; their status
+was not fetched this time.
+
+| Time (UTC) | Source | Event | EOA USDC balance |
+| --- | --- | --- | --- |
+| 16:26:02 | order list | `buy` on `base` succeeded: order `wallet-1793377562117-4864b0a874a8`, 15 EUR of USDC | 0 USDC |
+| 16:28:35 | Base block 53294184 | payout [`0xe11fd97d498b01c3fdb21a57bf2a9d9e6505bb71c3af069d60a8d6756cb75702`](https://basescan.org/tx/0xe11fd97d498b01c3fdb21a57bf2a9d9e6505bb71c3af069d60a8d6756cb75702), 12.528366 USDC from `0xFAEefD557ffD2714f16e1A44A165FCd5d6a6b6a0` (the payout address of sections 9 and 14) | **12.528366 USDC** |
+| 16:28:35 | Base block 53294184 | [`0x5cbaf67328d9ba1e0287cb1ddd160f8a693c8b7d01c8ee6c9af271d530ba5715`](https://basescan.org/tx/0x5cbaf67328d9ba1e0287cb1ddd160f8a693c8b7d01c8ee6c9af271d530ba5715), 0.00027499 ETH from the same address | 12.528366 USDC |
+| before 16:35:18 | simulator | `getTransactionDetail` on `base`: `completed`, USDC, EUR | 12.528366 USDC |
+
+The ETH is DFX's network start fee: for a token bought on Base, the DFX API source adds a fee of 0.5 CHF, paid out in
+the native coin, when the address holds less than 0.00001 of it. The EOA held 0.000000843624377087 ETH, because its ETH had been moved earlier
+that day to the account of section 15
+([`0xfe2f1c5c5ab69bdee18ab49d93bf7e40ef3fd8426c8677e15d840928317fe5a1`](https://basescan.org/tx/0xfe2f1c5c5ab69bdee18ab49d93bf7e40ef3fd8426c8677e15d840928317fe5a1))
+and from there by `e2e/bundler-send.mjs --account 1 --native --all` to the smart account of section 14
+([`0xae48d718e4aff5d535cc5ecab17218b91f6c6b41c133a9576bcce06542414102`](https://basescan.org/tx/0xae48d718e4aff5d535cc5ecab17218b91f6c6b41c133a9576bcce06542414102),
+block 53294065, exit 0).
+
+**Moving the USDC out.** The owner sent the full 12.528366 USDC with one ERC-20 `transfer`, signed by `cast send`
+from the seed file (`--mnemonic-index 0`) and paid from the start-fee ETH:
+[`0x7bce1537feb4118926ff6f815ba0b9d9c7dad7d8da49c6e93e7920866e9d0678`](https://basescan.org/tx/0x7bce1537feb4118926ff6f815ba0b9d9c7dad7d8da49c6e93e7920866e9d0678),
+Base block 53294342 (16:33:51), gas used 40247. `cast send` exited 1 after broadcasting, because the public RPC
+refused a later archive request; the receipt was then read from `https://mainnet.base.org`: status 1. Afterwards the
+EOA held 0 USDC and `0x3e0004935eAD42cefB1ecf461847bdB1591f337f` 13.528366 USDC, 12.528366 more than its 1 USDC
+before; 0.000275586201519971 ETH stayed in the EOA.
+
+This is the first real purchase of a token. It shows the module's buy and status path for USDC on Base with real
+money; a token payout into an ERC-4337 account is not shown with real money.
