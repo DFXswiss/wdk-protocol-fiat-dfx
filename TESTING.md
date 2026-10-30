@@ -656,8 +656,8 @@ gas, 0.00000154088836 ETH stayed in the account and 0.0000005055786 ETH stayed a
 send's account spending was its amount plus the part of the gas prefund its EntryPoint deposit did not cover; the
 unspent prefund stays as that deposit.
 
-**The committed script on Base.** Later that day, 1 USDC and 0.000464010175487453 ETH were sent to the same account
-by hand. `e2e/bundler-send.mjs` as of `f8888c1` then sent both to the same destination through the same bundler: a
+**The committed script on Base.** Later that day, 1 USDC and 0.000462469287127453 ETH were sent to the same account
+by hand, which with the remainder above made 0.000464010175487453 ETH. `e2e/bundler-send.mjs` as of `f8888c1` then sent both to the same destination through the same bundler: a
 dry run first, then each send with `--send --confirm`. Both runs exited 0, so every check of the script passed:
 receipt status 1 read from the Base RPC, exactly one `UserOperationEvent` for the hash and the account with
 `success = true`, and the exact credit. Its `result:` lines:
