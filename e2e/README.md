@@ -492,3 +492,61 @@ node bundler-send.mjs --native --rpc https://base-rpc.publicnode.com \
 `--safe-mode false` turns off Alto's enforcement of the ERC-4337 validation
 rules; the recorded fork runs used it. This moves real funds when `--rpc` and
 `--bundler` point to Base.
+
+### Real sell on Sepolia against the DFX sandbox
+
+`real-sell.mjs` sells through the module the way a wallet user does: a real
+WDK account on Sepolia, `quoteSell` and `sell` against the DFX sandbox, then
+the widget in headless Chromium. It reads `PUT /v1/sell/paymentInfos` as the
+page receives it. Nothing is stubbed and no response is rewritten.
+
+The wallet address needs a DFX dev account with an IBAN invented for this
+test, Sepolia ETH, and Sepolia USDT
+(`0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0`). Install Playwright's Chromium
+as in the prerequisites above. The seed file and the IBAN file have no default
+path. Each must be a non-empty regular file owned by the current user, with
+owner-only permissions (for example `0600`), and must not be a symlink. The
+seed file contains only the phrase and the IBAN file only the IBAN. The widget
+must open on "Add or select your IBAN"; an IBAN that is already selected is
+not accepted. The script clicks only the option whose text, with whitespace
+removed, equals that IBAN. Any other IBAN on the same account is never clicked.
+If that option is missing, the run stops and nothing is sent.
+
+```sh
+node real-sell.mjs --seed-file <path> --iban-file <path> [--asset USDT|ETH|all] \
+  [--rpc <url>] [--lock <dir>] [--out <path>]
+node real-sell.mjs --seed-file <path> --iban-file <path> --send --confirm
+```
+
+`--asset` defaults to `all`, USDT first and then ETH. USDT sells 1 USDT. ETH
+sells 0.0001 ETH. `--rpc` defaults to
+`https://ethereum-sepolia-rpc.publicnode.com`; the script checks `eth_chainId`
+11155111 before any other network call. `--lock` creates that directory, not
+recursively, before the first network call. If it already exists, the script
+exits 3 and prints `not run: wallet locked`. It removes the directory at the
+end only when this process created it. `--out` repeats the JSON lines in that
+file with mode `0600`.
+
+Without both `--send` and `--confirm` the script stops once a valid
+payment-info response is on screen and the deposit address is visible, then
+prints `dry run: nothing sent` and exits 0. Passing only one of the two flags
+is an error. With both, each asset is sent once, with no retry. The receipt is
+read from the RPC, not from the wallet. `GET /v1/transaction` is polled until
+that hash is present. The module is then asked for the same sale by the
+external id and by the DFX uid.
+
+Exit 0 means the run passed. Exit 1 means a check failed at or after
+`quoteSell`. Exit 2 means the command line is wrong. Exit 3 means the run did
+not start: the lock is held, the seed or IBAN file is missing or unsafe, the
+chain id is wrong, the RPC or `https://dev.api.dfx.swiss/version` is
+unreachable, or, with `--send`, the balance is too small. The ETH balance must
+cover every ETH case plus 0.002 ETH. The USDT balance must cover every USDT case.
+
+A dry run still opens the widget, so it creates sell requests on dev. `--send
+--confirm` sends test ETH or USDT to the DFX dev deposit address and, when the
+whole run passes, writes `echter-lauf.json` under the repository `.git`
+directory (`git rev-parse --git-path`). Stdout is one JSON object per line.
+The seed, the IBAN, the session token and the full sell URL are never printed.
+There are no screenshots, traces or video. The script does not check the bank
+payout: a sell ends when the dev API recognizes the deposit. WDK has no
+confirmation dialog, so a rejected wallet prompt is not covered.
