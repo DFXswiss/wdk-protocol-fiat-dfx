@@ -532,7 +532,7 @@ exits 3 and prints `not run: wallet locked`. It removes the directory at the
 end only when this process created it. `--out` repeats the JSON lines in that
 file with mode `0600`.
 
-Without both `--send` and `--confirm` the script stops once a valid
+When neither `--send` nor `--confirm` is given, the script stops once a valid
 payment-info response is on screen and the deposit address is visible, then
 prints `dry run: nothing sent` and exits 0. Passing only one of the two flags
 is an error. With both, each asset is sent once, with no retry. The receipt is

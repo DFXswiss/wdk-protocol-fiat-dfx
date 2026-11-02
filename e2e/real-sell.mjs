@@ -394,17 +394,19 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
     if (url.origin !== API || url.pathname !== '/v1/sell/paymentInfos' || response.request().method() !== 'PUT') return
     const task = (async () => {
       const bodyText = await response.text()
-      let body = null
+      let body
       try {
         body = JSON.parse(bodyText)
       } catch {
-        body = null
+        captures.push({ captureError: 'response body is not JSON' })
+        return
       }
-      let request = null
+      let request
       try {
         request = response.request().postDataJSON()
       } catch {
-        request = null
+        captures.push({ captureError: 'request body is not JSON' })
+        return
       }
       captures.push({ status: response.status(), request, body })
     })().catch(error => captures.push({ captureError: error.message }))
