@@ -502,10 +502,10 @@ async function assertChain (provider, hash, receipt, spec, account, depositAddre
     if (!tx.to || getAddress(tx.to) !== depositAddress) throw new Error('ETH transaction to is not the deposit address')
     if (tx.value !== spec.amount) throw new Error(`ETH value is ${tx.value}; expected ${spec.amount}`)
   }
-  if (typeof receipt.gasUsed !== 'bigint' || typeof receipt.effectiveGasPrice !== 'bigint') {
-    throw new Error('Receipt has no gasUsed or effectiveGasPrice')
+  if (typeof receipt.gasUsed !== 'bigint' || typeof receipt.gasPrice !== 'bigint') {
+    throw new Error('Receipt has no gasUsed or gasPrice')
   }
-  return { gasCost: receipt.gasUsed * receipt.effectiveGasPrice, value: tx.value }
+  return { gasCost: receipt.gasUsed * receipt.gasPrice, value: tx.value }
 }
 
 async function readBalances (provider, usdt, account, blockTag) {
@@ -674,7 +674,7 @@ async function runCase (spec, tools, evidence) {
       status: receipt.status,
       block: String(receipt.blockNumber),
       gasUsed: receipt.gasUsed.toString(),
-      effectiveGasPrice: receipt.effectiveGasPrice.toString()
+      effectiveGasPrice: receipt.gasPrice.toString()
     })
 
     step = 'balances-after'
