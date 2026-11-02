@@ -401,11 +401,19 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
         captures.push({ captureError: 'response body is not JSON' })
         return
       }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        captures.push({ captureError: 'response body is not a JSON object' })
+        return
+      }
       let request
       try {
         request = response.request().postDataJSON()
       } catch {
         captures.push({ captureError: 'request body is not JSON' })
+        return
+      }
+      if (request === null || typeof request !== 'object' || Array.isArray(request)) {
+        captures.push({ captureError: 'request body is missing or not a JSON object' })
         return
       }
       captures.push({ status: response.status(), request, body })
