@@ -510,7 +510,11 @@ seed file contains only the phrase and the IBAN file only the IBAN. The widget
 must open on "Add or select your IBAN"; an IBAN that is already selected is
 not accepted. The script clicks only the option whose text, with whitespace
 removed, equals that IBAN. Any other IBAN on the same account is never clicked.
-If that option is missing, the run stops and nothing is sent.
+If that option is missing, the run stops before that asset is sent; with
+`--asset all`, a USDT sale sent earlier in the same run stays sent. Once the
+address is taken, the script checks again that the latest payment-info
+response and the visible address are unchanged, and stops before sending if
+not.
 
 ```sh
 node real-sell.mjs --seed-file <path> --iban-file <path> [--asset USDT|ETH|all] \

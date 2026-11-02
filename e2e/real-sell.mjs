@@ -414,6 +414,7 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
     let stableKey = null
     let stableSince = 0
     let facts = null
+    let acceptedKey = null
     let rejected = null
     while (Date.now() <= deadline) {
       await Promise.allSettled([...pending])
@@ -436,6 +437,7 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
           const key = `${matches.length}:${next.id}:${next.depositAddress}:${next.currency}`
           if (heading && visible && key === stableKey && Date.now() - stableSince >= PAYMENT_QUIET_MS) {
             facts = next
+            acceptedKey = key
             break
           }
           if (heading && visible && key !== stableKey) {
@@ -451,6 +453,23 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
       await delay(250)
     }
     if (!facts) throw rejected || new Error('No valid paymentInfos response with the deposit address visible')
+    await Promise.allSettled([...pending])
+    const matches = captures.filter(capture => paymentCandidate(capture, ext, iban, spec))
+    const latest = matches[matches.length - 1]
+    let confirmedKey = null
+    if (latest) {
+      try {
+        const confirmed = paymentFacts(latest)
+        confirmedKey = `${matches.length}:${confirmed.id}:${confirmed.depositAddress}:${confirmed.currency}`
+      } catch {
+        confirmedKey = null
+      }
+    }
+    const text = await page.locator('body').innerText().catch(() => '')
+    const visible = text.toLowerCase().includes(facts.depositAddress.toLowerCase())
+    if (confirmedKey !== acceptedKey || !visible) {
+      throw new Error('paymentInfos changed after the address was taken')
+    }
     return facts
   } finally {
     await Promise.allSettled([...pending])
