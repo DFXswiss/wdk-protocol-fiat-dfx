@@ -211,6 +211,11 @@ function invocation () {
       i += 1
       continue
     }
+    if (name === '--rpc') {
+      parts.push(name, new URL(process.argv[i + 1]).origin)
+      i += 1
+      continue
+    }
     parts.push(name)
   }
   return parts.join(' ')
@@ -378,6 +383,7 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
   page.setDefaultTimeout(45_000)
   const captures = []
   const pending = new Set()
+  let contextClosed = false
   page.on('response', response => {
     let url
     try {
@@ -453,7 +459,13 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
       await delay(250)
     }
     if (!facts) throw rejected || new Error('No valid paymentInfos response with the deposit address visible')
+    const text = await page.locator('body').innerText().catch(() => '')
+    await context.close()
+    contextClosed = true
     await Promise.allSettled([...pending])
+    if (captures.some(capture => capture.captureError != null)) {
+      throw new Error('a paymentInfos response could not be read')
+    }
     const matches = captures.filter(capture => paymentCandidate(capture, ext, iban, spec))
     const latest = matches[matches.length - 1]
     let confirmedKey = null
@@ -465,7 +477,6 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
         confirmedKey = null
       }
     }
-    const text = await page.locator('body').innerText().catch(() => '')
     const visible = text.toLowerCase().includes(facts.depositAddress.toLowerCase())
     if (confirmedKey !== acceptedKey || !visible) {
       throw new Error('paymentInfos changed after the address was taken')
@@ -473,7 +484,7 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
     return facts
   } finally {
     await Promise.allSettled([...pending])
-    await context.close()
+    if (!contextClosed) await context.close()
   }
 }
 

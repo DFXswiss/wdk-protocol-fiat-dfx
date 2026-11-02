@@ -512,9 +512,10 @@ not accepted. The script clicks only the option whose text, with whitespace
 removed, equals that IBAN. Any other IBAN on the same account is never clicked.
 If that option is missing, the run stops before that asset is sent; with
 `--asset all`, a USDT sale sent earlier in the same run stays sent. Once the
-address is taken, the script checks again that the latest payment-info
-response and the visible address are unchanged, and stops before sending if
-not.
+address is taken, the script reads the visible page, closes the widget, and
+only then checks that every payment-info response received until the widget
+closed was readable and that the latest matching one and the visible address
+are unchanged; otherwise it stops before sending.
 
 ```sh
 node real-sell.mjs --seed-file <path> --iban-file <path> [--asset USDT|ETH|all] \

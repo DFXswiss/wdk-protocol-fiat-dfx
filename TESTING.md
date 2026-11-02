@@ -833,10 +833,10 @@ it: the backend's external ID expected with one extra character (`backend`), the
 (`receipt`), and the `Transfer` value expected one unit higher (`receipt`). Their deposits were
 `0xfa322b48…`, `0xffde4707…`, `0xadcde36a…`, `0x0bcfc536…` and `0x85453676…`.
 
-After review, the script checks once more, just before it closes the widget, that the latest matching payment-info
-response and the visible address are unchanged since the address was taken. That check was added after the runs
-above and was not triggered by a real change of the address; a response that arrives after that last check and
-before the page closes is not seen.
+After review, the script reads the visible page, closes the widget and only then checks that every payment-info
+response received until the widget closed was readable and that the latest matching response and the visible address
+are unchanged since the address was taken. That check was added after the runs above and was not triggered by a real
+change of the address.
 
 This shows the sell path with real deposits up to the point where DFX recognizes them. It does not show the bank
 payout, a sale with real money in production, or a rejected transfer (section "Not covered").
