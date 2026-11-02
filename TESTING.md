@@ -5,7 +5,10 @@ does not prove. Every result below was produced by running the named command, ex
 by hand in the three real purchases (the DFX widget steps and the bank transfer in sections 9, 14 and 16) and the two fundings
 of the account in section 15, which those sections name as such. The first three sends on Base in section 15 were made
 by a one-off script that is not in this repository, the two after them by `e2e/bundler-send.mjs`; section 15 says so. The first sale of section 17 was made by a hand-written probe
-that is not in this repository; section 17 says so. A row that says the script was not
+that is not in this repository, and the DFX records added to sections 9, 14 and 16 were read by another hand-written
+script that is not in this repository; its output is
+[`e2e/evidence/2026-11-02-production-dfx-records.jsonl`](e2e/evidence/2026-11-02-production-dfx-records.jsonl), and
+those sections say so. A row that says the script was not
 re-run states what that script expects, not a measured result. Nothing is inferred from reading code
 unless it says so.
 
@@ -397,8 +400,9 @@ on-chain balance every 60 s:
   address in MetaMask (checked by deriving it with `ethers`).
 - **Payout:** [`0x081eb861f4f9d2d34f29b2f1bf3595c415ce3603f9be734cb576c7bd9dca5902`](https://arbiscan.io/tx/0x081eb861f4f9d2d34f29b2f1bf3595c415ce3603f9be734cb576c7bd9dca5902),
   08:42:37 UTC, 0.00717295 ETH from `0xFAEefD557ffD2714f16e1A44A165FCd5d6a6b6a0`, status ok (Blockscout).
-- **DFX record:** read on 2026-11-02 through the module's production session for this address (a `buy()` call that
-  signs in; no order was placed): `GET /v1/transaction/detail/single` by the external ID returns `Buy`, `Completed`,
+- **DFX record:** read on 2026-11-02 by a hand-written script that is not in this repository, through the module's
+  production session for this address (a `buy()` call that signs in; no order was placed; output in
+  [`e2e/evidence/2026-11-02-production-dfx-records.jsonl`](e2e/evidence/2026-11-02-production-dfx-records.jsonl)): `GET /v1/transaction/detail/single` by the external ID returns `Buy`, `Completed`,
   uid `T552021ABD9F863EB`, `outputTxId` equal to the payout hash above and `outputAmount` 0.007173 ETH (rounded by
   the API). The production backend was then at `b0473fcdb`, the last production deployment before the order; this is
   taken from the deployment runs, not read from `/version` during the purchase.
@@ -819,12 +823,20 @@ itself; the client never reported the hash. The run also wrote its own run recor
 content.
 
 **Mutations.** Six checks of the script were changed one at a time in a copy of `3041a0b` (each pattern matched exactly
-once) and run with `--asset USDT`; all six runs exited 1 at the changed check. Picking an IBAN other than the account's
+once) and run with `--asset USDT`; all six runs exited 1 at the changed check
+([`e2e/evidence/2026-11-02-sandbox-real-sell-mutations.jsonl`](e2e/evidence/2026-11-02-sandbox-real-sell-mutations.jsonl)).
+A first attempt of the five sending mutations passed `--send --confirm` as one argument and stopped with exit 2
+before anything was sent; its logs were overwritten by the runs recorded here. Picking an IBAN other than the account's
 own stopped at the payment information before anything was sent. The five others each sent 1 USDT and stopped after
 it: the backend's external ID expected with one extra character (`backend`), the USDT balance expected one unit lower
 (`balances-after`), the module status required to be `completed` (`module`), receipt status 1 treated as a failure
 (`receipt`), and the `Transfer` value expected one unit higher (`receipt`). Their deposits were
 `0xfa322b48…`, `0xffde4707…`, `0xadcde36a…`, `0x0bcfc536…` and `0x85453676…`.
+
+After review, the script checks once more, just before it closes the widget, that the latest matching payment-info
+response and the visible address are unchanged since the address was taken. That check was added after the runs
+above and was not triggered by a real change of the address; a response that arrives after that last check and
+before the page closes is not seen.
 
 This shows the sell path with real deposits up to the point where DFX recognizes them. It does not show the bank
 payout, a sale with real money in production, or a rejected transfer (section "Not covered").
