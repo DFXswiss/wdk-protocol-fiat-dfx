@@ -612,11 +612,39 @@ async function assertChain (provider, hash, receipt, spec, account, depositAddre
   return { gasCost: receipt.gasUsed * receipt.gasPrice, value: tx.value }
 }
 
+// Public RPC nodes can lag behind the node that returned the receipt block.
+async function readAtBlock (blockNumber, read) {
+  if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) throw new Error('A fixed block number is required')
+  const deadline = Date.now() + 60_000
+  while (true) {
+    try {
+      return await read()
+    } catch (error) {
+      const pending = [error]
+      const seen = new Set()
+      let blockNotFound = false
+      while (pending.length) {
+        const item = pending.pop()
+        if (!item || typeof item !== 'object' || seen.has(item)) continue
+        seen.add(item)
+        if (item.code === -32001 || (typeof item.message === 'string' && /block not found/i.test(item.message))) {
+          blockNotFound = true
+          break
+        }
+        pending.push(item.error, item.info)
+      }
+      if (!blockNotFound || Date.now() + 2_000 >= deadline) throw error
+      await delay(2_000)
+    }
+  }
+}
+
 async function readBalances (provider, usdt, account, blockTag) {
+  const read = fn => typeof blockTag === 'number' ? readAtBlock(blockTag, fn) : fn()
   const [usdtBalance, ethBalance, nonce] = await Promise.all([
-    usdt.balanceOf(account, { blockTag }),
-    provider.getBalance(account, blockTag),
-    provider.getTransactionCount(account, blockTag)
+    read(() => usdt.balanceOf(account, { blockTag })),
+    read(() => provider.getBalance(account, blockTag)),
+    read(() => provider.getTransactionCount(account, blockTag))
   ])
   return { usdtBalance, ethBalance, nonce: BigInt(nonce) }
 }
@@ -766,7 +794,8 @@ function assertUserOperation (receipt, hash, safe) {
 }
 
 async function assetBalance (provider, usdt, spec, address, blockTag) {
-  return spec.asset === 'USDT' ? usdt.balanceOf(address, { blockTag }) : provider.getBalance(address, blockTag)
+  const read = () => spec.asset === 'USDT' ? usdt.balanceOf(address, { blockTag }) : provider.getBalance(address, blockTag)
+  return typeof blockTag === 'number' ? readAtBlock(blockTag, read) : read()
 }
 
 async function fundSafe (eoa, safe, cases, provider, usdt, evidence) {
@@ -868,7 +897,7 @@ async function runCase (spec, tools, evidence) {
       if (current !== previous + spec.amount) throw new Error('Deposit balance did not increase by the exact amount in the receipt block')
       depositAfter = current
       emit({ step: 'deposit-block-balances', asset: spec.asset, ok: true, previous, current })
-      if ((await tools.provider.getCode(tools.accountAddress, receipt.blockNumber)) === '0x') throw new Error('Safe has no code after the user operation')
+      if ((await readAtBlock(receipt.blockNumber, () => tools.provider.getCode(tools.accountAddress, receipt.blockNumber))) === '0x') throw new Error('Safe has no code after the user operation')
     } else {
       gasCost = (await assertChain(tools.provider, hash, receipt, spec, tools.accountAddress, payment.depositAddress)).gasCost
     }
@@ -889,8 +918,8 @@ async function runCase (spec, tools, evidence) {
       const entryPoint = new Contract(ENTRY_POINT, ['function balanceOf(address) view returns (uint256)'], tools.provider)
       const [blockBefore, entryPointBefore, entryPointAfter] = await Promise.all([
         readBalances(tools.provider, tools.usdt, tools.accountAddress, receipt.blockNumber - 1),
-        entryPoint.balanceOf(tools.accountAddress, { blockTag: receipt.blockNumber - 1 }),
-        entryPoint.balanceOf(tools.accountAddress, { blockTag: receipt.blockNumber })
+        readAtBlock(receipt.blockNumber - 1, () => entryPoint.balanceOf(tools.accountAddress, { blockTag: receipt.blockNumber - 1 })),
+        readAtBlock(receipt.blockNumber, () => entryPoint.balanceOf(tools.accountAddress, { blockTag: receipt.blockNumber }))
       ])
       const ethAmount = spec.asset === 'ETH' ? spec.amount : 0n
       const ethMatches = blockBefore.ethBalance - after.ethBalance === ethAmount + entryPointAfter - entryPointBefore + gasCost
