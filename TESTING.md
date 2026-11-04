@@ -4,8 +4,8 @@ This document records how `@dfx.swiss/wdk-protocol-fiat-dfx` was verified, what 
 does not prove. Every result below was produced by running the named command, except the steps a person carried out
 by hand in the three real purchases (the DFX widget steps and the bank transfer in sections 9, 14 and 16) and the two fundings
 of the account in section 15, which those sections name as such. The first three sends on Base in section 15 were made
-by a one-off script that is not in this repository, the two after them by `e2e/bundler-send.mjs`; section 15 says so. The first sale of section 17 was made by a hand-written probe
-that is not in this repository, and the DFX records added to sections 9, 14 and 16 were read by another hand-written
+by a one-off script that is not in this repository, the two after them by `e2e/bundler-send.mjs`; section 15 says so. The first sale of section 17 and the first smart account sale were made by hand-written
+probes that are not in this repository, and the DFX records added to sections 9, 14 and 16 were read by another hand-written
 script that is not in this repository; its output is
 [`e2e/evidence/2026-11-02-production-dfx-records.jsonl`](e2e/evidence/2026-11-02-production-dfx-records.jsonl), and
 those sections say so. A row that says the script was not
@@ -15,7 +15,7 @@ unless it says so.
 The revisions named below are commits of the development repository
 [joshuakrueger-dfx/wdk-modul-dfx](https://github.com/joshuakrueger-dfx/wdk-modul-dfx); this repository received the
 module as one squashed commit. "This branch" is that repository's pull request #2 (`fix/issue-258`), whose last
-commit is `090e82c`. Results dated 2026-10-30 (sections 15 and 16) and 2026-11-02 (section 17 and the DFX records added to sections 9, 14
+commit is `090e82c`. Results dated 2026-10-30 (sections 15 and 16), 2026-11-02 and 2026-11-04 (section 17 and the DFX records added to sections 9, 14
 and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e2e/bundler-send.mjs` and
 `e2e/real-sell.mjs`.
 
@@ -52,8 +52,9 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
     that says the script on this branch was not re-run is not this run.
   - **This repository, 2026-10-30:** the sends through a bundler of section 15, on Base and on a fork, and the real
     purchase of USDC of section 16.
-  - **This repository, 2026-11-02:** the real sales on Sepolia of section 17, and the DFX records of the three real
-    purchases read back through the module (sections 9, 14 and 16).
+  - **This repository, 2026-11-02 and 2026-11-04:** the real sales on Sepolia of section 17, from an EOA and from an
+    undeployed smart account, and the DFX records of the three real purchases read back through the module (sections
+    9, 14 and 16).
   - **Real purchase:** paid on 2026-09-28 with library code `0be1b6d` (section 9). The payment itself was not repeated;
     on 2026-09-29 the same production order, wallet and DFX account were re-checked with `20ec94d` without a payment
     (section 12). A second real purchase, into an undeployed ERC-4337 account on Base, was paid on 2026-10-29 with this
@@ -65,7 +66,7 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
   runs (sandbox live matrix, two wallet journeys, fork probe) used Node v26.12.1. On 2026-10-29, `npm ci`, lint, `build:types`,
   coverage and `npm audit --audit-level=critical` were re-run on Node v22.23.4 (section 1); the sandbox and production
   live matrix, the wallet simulator and `e2e/safe-rescue.mjs` of section 14 ran on Node v26.12.1. The runs of sections 15 and 16
-  (2026-10-30), including the wallet simulator of section 16, and of section 17 (2026-11-02) used Node v22.23.4. macOS arm64. The Bare entry point ran on the Bare runtime v1.35.0 (npm package `bare@1.34.1`), see the summary row.
+  (2026-10-30), including the wallet simulator of section 16, and of section 17 (2026-11-02 and 2026-11-04) used Node v22.23.4. macOS arm64. The Bare entry point ran on the Bare runtime v1.35.0 (npm package `bare@1.34.1`), see the summary row.
 - **WDK packages used by `tests/integration`:** root-lockfile versions `@tetherto/wdk-wallet` 1.0.0-beta.17
   (a single copy, also used by `@tetherto/wdk-wallet-evm`; 1.0.0-beta.19 before 2026-10-02)
   and `@tetherto/wdk-wallet-evm` 1.0.0-beta.19.
@@ -105,7 +106,7 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
 | Real purchase into an undeployed ERC-4337 account | wallet simulator in production; `cd e2e && node safe-rescue.mjs --native …` | On this branch (2026-10-29): 15 EUR of ETH bought for the Base smart account, which signed in to production DFX while it had no code; DFX paid 0.00565071 ETH to it and the module reports `completed`; the owner then deployed it without a bundler and moved the full balance out (section 14) |
 | Sending from an ERC-4337 account through a bundler | on Base a one-off script (not committed), then `cd e2e && node bundler-send.mjs …`; on a fork the same script | On 2026-10-30, on Base itself through the public Candide bundler: three UserOperations from an account that had no code; the first deployed it, and each settled with receipt status 1 and a `UserOperationEvent` with `success = true`; then the committed script sent 1 USDC (`transfer`) and the remaining ETH (`--all`) through the same bundler, each exit 0. On an `anvil` fork of Base with a local Alto bundler, the committed script: four sends (ETH that deploys, ETH, USDC `transfer`, `--all`) exit 0, five runs that sent no UserOperation (four stopped by the script, one refused by the bundler at gas estimation), and 7/7 mutations or removed checks detected (section 15) |
 | Real purchase of USDC | wallet simulator in production; `cast send` for the transfer out | On 2026-10-30: 15 EUR of USDC bought for the Base EOA account; DFX paid 12.528366 USDC and a network start fee of 0.00027499 ETH to it; the owner moved the full USDC out with one ERC-20 `transfer`, and the module then reported `completed` (section 16) |
-| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --iban-file … --send --confirm` | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected (section 17) |
+| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --iban-file … --send --confirm` | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
 See [`e2e/README.md`](e2e/README.md) for prerequisites and side effects before running anything under `e2e/`.
@@ -840,5 +841,62 @@ are unchanged since the address was taken. That check was added after the runs a
 address. Dry runs at `124a171` and `937157c`, the commits that added and reordered it, exited 0 for both assets and sent
 nothing. The run of the script at the final head of the pull request is recorded in the pull request description.
 
-This shows the sell path with real deposits up to the point where DFX recognizes them. It does not show the bank
+### Smart account (2026-11-04)
+
+The core of this pull request is an undeployed WDK smart account that signs in as the Safe with an ERC-6492 signature.
+Since `e2e/real-sell.mjs` at `6960dd0`, `--account smart` (and the default `all`, which runs the EOA cases first)
+sells the same two assets from a fresh WDK Safe on Sepolia (`@tetherto/wdk-wallet-evm-erc-4337` 1.0.0-beta.20, Safe
+modules 0.3.0, EntryPoint v0.7 `0x0000000071727De22E5E9d8BAf0edAc6f37da032`, public Candide bundler
+`https://api.candide.dev/public/v3/11155111`). Each run takes a Safe at a random account index and stops as not run if
+it already has code. Account 0 funds it with the sale amounts and 0.0005 ETH for gas; the Safe then signs in to the
+sandbox while it has no code, and the script checks that `/v2/user` of that session contains the Safe address. For
+the first Safe case the script enters an IBAN invented for that run in the widget's bank account form, so every run
+creates a new sandbox user and bank account; for the second case the widget preselects that IBAN, the only one of the
+new account, and the payment-info request must carry it. Each deposit is a UserOperation. The script checks the
+bundling transaction's receipt, exactly one `UserOperationEvent` for the operation and the Safe with `success = true`,
+for USDT exactly one `Transfer` from the Safe to the deposit address, the deposit address credited by exactly the
+amount in the receipt block, and the Safe's ETH and EntryPoint deposit in the blocks before and of the receipt:
+`ETH spent = amount + EntryPoint deposit increase + actualGasCost`.
+
+Every run of the smart account path, in order:
+
+| Code | Command | Result |
+| --- | --- | --- |
+| module of `195da36`, a hand-written probe that is not committed | the same calls as the script | Safe `0x90D3FF5540B5047f80a2D85D505DC8aF2A7754E1` (index 842193) signed in with no code; 1 USDT, [`0xe40b268163a7d06ddae33fb963113d2a6452997b70c0365de0250fe24f521caf`](https://sepolia.etherscan.io/tx/0xe40b268163a7d06ddae33fb963113d2a6452997b70c0365de0250fe24f521caf), deployed the Safe and was recognized after 45 s; 0.0001 ETH, [`0x695f0a5aeed49ca0419f1940376ae655a30166dac429b91d807a93654aa5f592`](https://sepolia.etherscan.io/tx/0x695f0a5aeed49ca0419f1940376ae655a30166dac429b91d807a93654aa5f592), recognized after 30 s; module `in_progress` for both |
+| `real-sell.mjs` before `6960dd0`, uncommitted | `--account all`, without `--send` | exit 1 at the second Safe case: the widget had preselected the invented IBAN, so "Add or select your IBAN" was not shown; the script now accepts that preselection only for later Safe cases and only when the request carries the invented IBAN |
+| `real-sell.mjs` of `6960dd0` | `--account all`, without `--send` | exit 0, nothing sent |
+| `real-sell.mjs` of `6960dd0` | `--account all --send --confirm` | exit 0, below |
+
+The passing run at `6960dd0`, a clean working tree, sandbox backend `a1e5e7c998cf4649e205bb06086dffb09ee1f119`
+([`e2e/evidence/2026-11-04-sandbox-real-sell.jsonl`](e2e/evidence/2026-11-04-sandbox-real-sell.jsonl); in its last
+line the local path of the run record was shortened to `<git dir>`, nothing else was changed). The EOA cases passed as
+in the table above (USDT [`0x142567da…`](https://sepolia.etherscan.io/tx/0x142567da7d8559489e276ee29e5b58c18999076c6a2b4d435d8a05995875b79d),
+ETH [`0xb253787f…`](https://sepolia.etherscan.io/tx/0xb253787f83cd66a385987d44c8b91cb8137f33ab8c584d3577f424deb99e876e),
+sandbox ids 9968 and 9969). The Safe was `0x6e72690cf02D4f49c855117e0607c0D372E89896` (index 917182657), funded by
+[`0x5cc58716…`](https://sepolia.etherscan.io/tx/0x5cc58716f29c91cfd1b5702738f26d94d18b537d06a95ac0057a30a995dedeed) (1 USDT) and
+[`0x5324f8d0…`](https://sepolia.etherscan.io/tx/0x5324f8d0ca057637c4b6e13847b669abb812b9007b831aa88723bafdc65e87cf) (0.0006 ETH):
+
+| Asset | Safe before sign-in | Transaction | Chain checks | Sandbox record | Module |
+| --- | --- | --- | --- | --- | --- |
+| 1 USDT | no code | [`0xd8be3564812293be8fce528771e54fbee0094443211fccc70cd21a514b74069e`](https://sepolia.etherscan.io/tx/0xd8be3564812293be8fce528771e54fbee0094443211fccc70cd21a514b74069e), block 12065329, deployed the Safe | event `success = true`; one `Transfer` of 1 USDT; deposit address 0 → 1 USDT in the block; Safe ETH 600000000000000 → 599997895862982 = EntryPoint deposit 0 → 233089868 plus `actualGasCost` 1871047150 | id 9970, uid `TD4852CB0FAB9201B`, `Sell`, `Created`, 1 USDT | `in_progress`, USDT, EUR by external ID and by uid |
+| 0.0001 ETH | deployed | [`0xe7c6f4475aff18c5fb594f7e29e38e8d52ada9a37a59aa40c9164c91a32797b0`](https://sepolia.etherscan.io/tx/0xe7c6f4475aff18c5fb594f7e29e38e8d52ada9a37a59aa40c9164c91a32797b0), block 12065332 | event `success = true`; deposit address credited exactly 0.0001 ETH in the block; Safe ETH fell by 0.0001 ETH + (EntryPoint deposit 233089868 → 83406668) + `actualGasCost` 401197864 | id 9971, uid `T6678E41D8A348F22`, `Sell`, `Created`, 0.0001 ETH | `in_progress`, ETH, EUR by external ID and by uid |
+
+The sandbox found both Safe deposits itself, an ERC-20 transfer and an internal ETH transfer from a contract, under the
+bundling transaction's hash. The deposit address differs from the EOA's, because each sandbox user has its own sell
+route. The fiat currency stayed EUR, as quoted; for the EOA the widget switched to CHF, see above.
+
+**Mutations at `6960dd0`.** Twelve checks were changed one at a time in a copy of `6960dd0` (each pattern matched
+exactly once) and run with `--asset USDT`, six with `--account eoa` and six with `--account smart`; all twelve exited 1
+at the changed check
+([`e2e/evidence/2026-11-04-sandbox-real-sell-mutations.jsonl`](e2e/evidence/2026-11-04-sandbox-real-sell-mutations.jsonl)).
+EOA, as on 2026-11-02: another IBAN than the account's own (stopped before sending), the backend's external ID, the
+USDT balance, the module status, the receipt status and the `Transfer` value. Safe: the `UserOperationEvent` success
+flag, the ETH and EntryPoint balance equation, the credit of the deposit address, the requirement that the first Safe
+case signs in without code and the Safe address in the session user (both stopped before sending), and the Safe's USDT
+decrease. A first attempt of these twelve did not test anything: every copy stopped while loading, because the
+`e2e/node_modules` it resolved had been removed from the working tree in the meantime; nothing was sent. After
+reinstalling, the twelve runs above were made.
+
+This shows the sell path with real deposits up to the point where DFX recognizes them, from an EOA and from an
+undeployed smart account that signs in as the Safe. It does not show the bank
 payout, a sale with real money in production, or a rejected transfer (section "Not covered").
