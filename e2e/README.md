@@ -547,7 +547,9 @@ It selects only that IBAN or fills the bank account form when it is absent.
 When neither `--send` nor `--confirm` is given, the script stops once a valid
 payment-info response is on screen and the deposit address is visible, then
 prints `dry run: nothing sent` and exits 0. Passing only one of the two flags
-is an error. With both, each asset is sent once, with no retry. The receipt is
+is an error. With both, each asset is signed and sent once; the script never retries a
+send. The ethers RPC client may resubmit the same signed transaction after
+HTTP 429, which has the same hash and nonce and cannot execute twice. The receipt is
 read from the RPC, not from the wallet. `GET /v1/transaction` is polled until
 that hash is present. The module is then asked for the same sale by the
 external id and by the DFX uid.

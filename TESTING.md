@@ -892,7 +892,7 @@ at the changed check
 EOA, as on 2026-11-02: another IBAN than the account's own (stopped before sending), the backend's external ID, the
 USDT balance, the module status, the receipt status and the `Transfer` value. Safe: the `UserOperationEvent` success
 flag, the ETH and EntryPoint balance equation, the credit of the deposit address, the requirement that the first Safe
-case signs in without code and the Safe address in the session user (both stopped before sending), and the Safe's USDT
+case signs in without code and the Safe address in the session user (both stopped before the sale deposit, after the Safe had been funded), and the Safe's USDT
 decrease. A first attempt of these twelve did not test anything: every copy stopped while loading, because the
 `e2e/node_modules` it resolved had been removed from the working tree in the meantime; nothing was sent. After
 reinstalling, the twelve runs above were made.
