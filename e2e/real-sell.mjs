@@ -4,7 +4,7 @@
 // WDK has no confirmation dialog, so a rejected wallet prompt is not covered.
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomInt } from 'node:crypto'
 import { chmodSync, constants, mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync, writeSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
 import WDK from '@tetherto/wdk'
 import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
-import { Contract, JsonRpcProvider, formatUnits, getAddress, id, isAddress, parseUnits } from 'ethers'
+import WalletManagerEvmErc4337 from '@tetherto/wdk-wallet-evm-erc-4337'
+import { AbiCoder, Contract, JsonRpcProvider, formatUnits, getAddress, id, isAddress, parseUnits, zeroPadValue } from 'ethers'
 import { chromium } from 'playwright'
 
 const require = createRequire(import.meta.url)
@@ -22,6 +23,10 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const API = 'https://dev.api.dfx.swiss'
 const APP = 'https://dev.app.dfx.swiss'
 const DEFAULT_RPC = 'https://ethereum-sepolia-rpc.publicnode.com'
+const DEFAULT_BUNDLER = 'https://api.candide.dev/public/v3/11155111'
+const ENTRY_POINT = '0x0000000071727De22E5E9d8BAf0edAc6f37da032'
+const USER_OP_TOPIC = id('UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)')
+const SAFE_GAS = parseUnits('0.0005', 18)
 const CHAIN_ID = 11155111n
 const USDT = getAddress('0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0')
 const ETH_RESERVE = parseUnits('0.002', 18)
@@ -69,7 +74,7 @@ function writeLine (fd, line) {
 }
 
 function emit (record) {
-  const line = redact(JSON.stringify(record, (_, value) => typeof value === 'bigint' ? value.toString() : value))
+  const line = redact(JSON.stringify({ account: state.account ?? null, ...record }, (_, value) => typeof value === 'bigint' ? value.toString() : value))
   process.stdout.write(line + '\n')
   if (state.out) writeLine(state.out.fd, line)
 }
@@ -110,14 +115,24 @@ function rememberIban (iban) {
   rememberSecret(spaced)
   rememberSecret(spaced.replace(/ /g, '\u00a0'))
   const body = [...raw].map(char => char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s\\u00a0]*')
-  state.ibanPatterns = [new RegExp(body, 'g')]
+  ;(state.ibanPatterns ||= []).push(new RegExp(body, 'g'))
+}
+
+function inventedIban (other) {
+  let iban
+  do {
+    const bban = Array.from({ length: 17 }, () => String(randomInt(10))).join('')
+    const remainder = [...`${bban}121700`].reduce((n, digit) => (n * 10 + Number(digit)) % 97, 0)
+    iban = `CH${String(98 - remainder).padStart(2, '0')}${bban}`
+  } while (iban === compact(other).toUpperCase())
+  return iban
 }
 
 function parseArgs (args) {
-  const options = { rpc: DEFAULT_RPC, asset: 'all', send: false, confirm: false }
+  const options = { rpc: DEFAULT_RPC, bundler: DEFAULT_BUNDLER, account: 'all', asset: 'all', send: false, confirm: false }
   const valued = new Map([
     ['--seed-file', 'seedFile'], ['--iban-file', 'ibanFile'], ['--asset', 'asset'],
-    ['--rpc', 'rpc'], ['--lock', 'lock'], ['--out', 'out']
+    ['--rpc', 'rpc'], ['--bundler', 'bundler'], ['--account', 'account'], ['--lock', 'lock'], ['--out', 'out']
   ])
   const seen = new Set()
   for (let i = 0; i < args.length; i++) {
@@ -139,6 +154,7 @@ function parseArgs (args) {
   if (!options.seedFile) throw new UsageError('Required argument missing: --seed-file <path>')
   if (!options.ibanFile) throw new UsageError('Required argument missing: --iban-file <path>')
   if (!['USDT', 'ETH', 'all'].includes(options.asset)) throw new UsageError('--asset must be USDT, ETH or all')
+  if (!['eoa', 'smart', 'all'].includes(options.account)) throw new UsageError('--account must be eoa, smart or all')
   if (options.send !== options.confirm) throw new UsageError('--send and --confirm are both required to send')
   let protocol
   try {
@@ -147,6 +163,8 @@ function parseArgs (args) {
     throw new UsageError('--rpc must use HTTP or HTTPS')
   }
   if (protocol !== 'http:' && protocol !== 'https:') throw new UsageError('--rpc must use HTTP or HTTPS')
+  try { protocol = new URL(options.bundler).protocol } catch { throw new UsageError('--bundler must use HTTP or HTTPS') }
+  if (protocol !== 'http:' && protocol !== 'https:') throw new UsageError('--bundler must use HTTP or HTTPS')
   return options
 }
 
@@ -211,7 +229,7 @@ function invocation () {
       i += 1
       continue
     }
-    if (name === '--rpc') {
+    if (name === '--rpc' || name === '--bundler') {
       parts.push(name, new URL(process.argv[i + 1]).origin)
       i += 1
       continue
@@ -377,7 +395,7 @@ function paymentFacts (capture) {
   }
 }
 
-async function openSell (browser, sellUrl, iban, ext, spec) {
+async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart) {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
   const page = await context.newPage()
   page.setDefaultTimeout(45_000)
@@ -423,8 +441,54 @@ async function openSell (browser, sellUrl, iban, ext, spec) {
   })
   try {
     await page.goto(sellUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-    await clickExactText(page, compact('Add or select your IBAN'), 60_000, 'Add or select your IBAN is not shown')
-    await clickExactText(page, compact(iban), 30_000, 'No IBAN option matches the IBAN file')
+    let preselected = false
+    if (smart && !firstSmart) {
+      const deadline = Date.now() + 60_000
+      let opened = false
+      while (Date.now() <= deadline) {
+        const count = await page.evaluate(wanted => {
+          const text = el => (el.innerText || '').replace(/[\s\u00a0]/g, '')
+          const matches = [...globalThis.document.querySelectorAll('body *')].filter(el => {
+            const rect = el.getBoundingClientRect()
+            const style = globalThis.getComputedStyle(el)
+            return text(el) === wanted && ![...el.children].some(child => text(child) === wanted) && rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'
+          })
+          if (matches.length === 1) matches[0].click()
+          return matches.length
+        }, compact('Add or select your IBAN'))
+        if (count === 1) {
+          opened = true
+          break
+        }
+        if (captures.some(capture => paymentCandidate(capture, ext, iban, spec))) {
+          preselected = true
+          break
+        }
+        await delay(250)
+      }
+      if (!opened && !preselected) throw new Error('Add or select your IBAN is not shown')
+    } else {
+      await clickExactText(page, compact('Add or select your IBAN'), 60_000, 'Add or select your IBAN is not shown')
+    }
+    if (firstSmart) {
+      const input = page.locator('input[name="iban"]')
+      await input.waitFor({ state: 'visible', timeout: 30_000 })
+      await input.fill(iban)
+      const button = page.getByText(/^ADD BANK ACCOUNT$/i, { exact: true })
+      if (await button.count() !== 1) throw new Error('Expected exactly one ADD BANK ACCOUNT element')
+      const matchingOption = await page.evaluate(wanted => {
+        const text = node => (node.innerText || '').replace(/[\s\u00a0]/g, '')
+        return [...document.querySelectorAll('body *')].some(el => {
+          const rect = el.getBoundingClientRect()
+          const style = globalThis.getComputedStyle(el)
+          return text(el) === wanted && ![...el.children].some(child => text(child) === wanted) && rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'
+        })
+      }, compact(iban))
+      if (matchingOption) throw new Error('IBAN option already exists in the first Safe case')
+      await button.click()
+    } else if (!preselected) {
+      await clickExactText(page, compact(iban), 30_000, 'No IBAN option matches the IBAN file')
+    }
     // The widget PUTs paymentInfos more than once and may switch fiat, so the visible address has to stay still.
     const deadline = Date.now() + PAYMENT_TIMEOUT_MS
     let stableKey = null
@@ -654,8 +718,76 @@ async function sendOnce (account, spec, depositAddress) {
   return sent.hash
 }
 
+async function bundlerRequest (url, method) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: [] }),
+    signal: AbortSignal.timeout(20_000),
+    redirect: 'error'
+  })
+  if (!response.ok) throw new Error(`Bundler ${method} HTTP ${response.status}`)
+  const body = await response.json()
+  if (body.error || body.result === undefined) throw new Error(`Bundler ${method} failed`)
+  return body.result
+}
+
+async function checkBundler (url) {
+  const chain = await bundlerRequest(url, 'eth_chainId')
+  const entries = await bundlerRequest(url, 'eth_supportedEntryPoints')
+  if (chain !== '0xaa36a7' || !Array.isArray(entries) || !entries.some(entry => String(entry).toLowerCase() === ENTRY_POINT.toLowerCase())) {
+    throw new NotRunError('not run: bundler chain or EntryPoint v0.7 mismatch')
+  }
+}
+
+async function waitForUserOperation (account, hash) {
+  const deadline = Date.now() + RECEIPT_TIMEOUT_MS
+  while (Date.now() <= deadline) {
+    let receipt
+    try { receipt = await account.getUserOperationReceipt(hash) } catch {}
+    if (receipt) return receipt
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await delay(Math.min(2_000, remaining))
+  }
+  throw new Error(`User operation ${hash} was not included within 4 minutes`)
+}
+
+function assertUserOperation (receipt, hash, safe) {
+  if (receipt.status !== 1) throw new Error('Bundling transaction receipt status is not 1')
+  const matches = receipt.logs.filter(log => log.address.toLowerCase() === ENTRY_POINT.toLowerCase() &&
+    log.topics[0]?.toLowerCase() === USER_OP_TOPIC.toLowerCase() && log.topics[1]?.toLowerCase() === hash.toLowerCase())
+  if (matches.length !== 1 || matches[0].topics[2]?.toLowerCase() !== zeroPadValue(safe, 32).toLowerCase()) {
+    throw new Error('Expected exactly one UserOperationEvent for the hash and Safe')
+  }
+  const [, success, gasCost] = AbiCoder.defaultAbiCoder().decode(['uint256', 'bool', 'uint256', 'uint256'], matches[0].data)
+  if (success !== true) throw new Error('UserOperationEvent success is false')
+  return gasCost
+}
+
+async function assetBalance (provider, usdt, spec, address, blockTag) {
+  return spec.asset === 'USDT' ? usdt.balanceOf(address, { blockTag }) : provider.getBalance(address, blockTag)
+}
+
+async function fundSafe (eoa, safe, cases, provider, usdt, evidence) {
+  const tokenAmount = cases.reduce((sum, spec) => sum + (spec.asset === 'USDT' ? spec.amount : 0n), 0n)
+  const ethAmount = cases.reduce((sum, spec) => sum + (spec.asset === 'ETH' ? spec.amount : 0n), SAFE_GAS)
+  for (const spec of [{ asset: 'USDT', amount: tokenAmount }, { asset: 'ETH', amount: ethAmount }]) {
+    if (spec.amount === 0n) continue
+    const hash = await sendOnce(eoa, spec, safe)
+    emit({ step: 'funding-send', asset: spec.asset, ok: true, hash })
+    const receipt = await waitForReceipt(provider, hash)
+    if (receipt.status !== 1) throw new Error(`Funding receipt ${hash} status is not 1`)
+    evidence.txs.push({ hash, rolle: 'funding', from: getAddress(receipt.from) })
+    emit({ step: 'funding-receipt', asset: spec.asset, ok: true, hash, status: receipt.status })
+  }
+  const [tokenBalance, ethBalance, code] = await Promise.all([usdt.balanceOf(safe), provider.getBalance(safe), provider.getCode(safe)])
+  if (tokenBalance !== tokenAmount || ethBalance !== ethAmount || code !== '0x') throw new Error('Safe funding balances or code do not match')
+  emit({ step: 'funding-balances', asset: null, ok: true, usdt: tokenBalance, eth: ethBalance, deployed: false })
+}
+
 async function runCase (spec, tools, evidence) {
-  const ext = `wdk-real-sell-${tools.runId}-${spec.asset}`
+  const ext = `wdk-real-sell-${tools.runId}-${tools.kind}-${spec.asset}`
   let step = 'quoteSell'
   try {
     state.flow = true
@@ -667,6 +799,11 @@ async function runCase (spec, tools, evidence) {
     emit({ step, asset: spec.asset, ok: true, ...quoteFields(quote) })
 
     step = 'sellUrl'
+    if (tools.kind === 'smart') {
+      const deployed = (await tools.provider.getCode(tools.accountAddress)) !== '0x'
+      emit({ step: 'safe-code', asset: spec.asset, ok: true, deployed })
+      if (tools.first && deployed) throw new Error('First Safe sell must authenticate before deployment')
+    }
     const sold = await tools.fiat.sell({
       cryptoAsset: spec.asset,
       fiatCurrency: 'EUR',
@@ -676,8 +813,16 @@ async function runCase (spec, tools, evidence) {
     const session = assertSellUrl(sold?.sellUrl, ext)
     emit({ step, asset: spec.asset, ok: true, externalTransactionId: ext, ...publicUrl(sold.sellUrl) })
 
+    if (tools.kind === 'smart') {
+      step = 'user'
+      const response = await fetch(`${API}/v2/user`, { headers: { authorization: `Bearer ${session}` }, redirect: 'error', signal: AbortSignal.timeout(20_000) })
+      const body = await response.text()
+      if (response.status !== 200 || !body.toLowerCase().includes(tools.accountAddress.toLowerCase())) throw new Error('Session user does not contain the Safe address or did not return HTTP 200')
+      emit({ step, asset: spec.asset, ok: true, status: response.status })
+    }
+
     step = 'paymentInfos'
-    const payment = await openSell(tools.browser, sold.sellUrl, tools.iban, ext, spec)
+    const payment = await openSell(tools.browser, sold.sellUrl, tools.iban, ext, spec, tools.kind === 'smart', tools.first)
     emit({
       step,
       asset: spec.asset,
@@ -690,22 +835,43 @@ async function runCase (spec, tools, evidence) {
 
     step = 'balances-before'
     const before = await readBalances(tools.provider, tools.usdt, tools.accountAddress, 'latest')
+    const depositBefore = await assetBalance(tools.provider, tools.usdt, spec, payment.depositAddress, 'latest')
     emit({
       step,
       asset: spec.asset,
       ok: true,
       usdt: before.usdtBalance.toString(),
       eth: before.ethBalance.toString(),
-      nonce: before.nonce.toString()
+      nonce: before.nonce.toString(),
+      deposit: depositBefore.toString()
     })
 
     step = 'send'
-    const hash = await sendOnce(tools.account, spec, payment.depositAddress)
-    emit({ step, asset: spec.asset, ok: true, hash })
+    const sentHash = await sendOnce(tools.account, spec, payment.depositAddress)
+    emit({ step, asset: spec.asset, ok: true, hash: sentHash })
 
     step = 'receipt'
+    let hash = sentHash
+    if (tools.kind === 'smart') {
+      const userReceipt = await waitForUserOperation(tools.account, sentHash)
+      if (userReceipt.success !== true || !/^0x[0-9a-fA-F]{64}$/.test(userReceipt.receipt?.transactionHash || '')) throw new Error('Bundler receipt failed or has no transaction hash')
+      hash = userReceipt.receipt.transactionHash
+    }
     const receipt = await waitForReceipt(tools.provider, hash)
-    const spent = await assertChain(tools.provider, hash, receipt, spec, tools.accountAddress, payment.depositAddress)
+    let gasCost
+    let depositAfter
+    if (tools.kind === 'smart') {
+      gasCost = assertUserOperation(receipt, sentHash, tools.accountAddress)
+      if (spec.asset === 'USDT') assertTransfer(receipt, tools.accountAddress, payment.depositAddress, spec.amount)
+      const previous = await assetBalance(tools.provider, tools.usdt, spec, payment.depositAddress, receipt.blockNumber - 1)
+      const current = await assetBalance(tools.provider, tools.usdt, spec, payment.depositAddress, receipt.blockNumber)
+      if (current !== previous + spec.amount) throw new Error('Deposit balance did not increase by the exact amount in the receipt block')
+      depositAfter = current
+      emit({ step: 'deposit-block-balances', asset: spec.asset, ok: true, previous, current })
+      if ((await tools.provider.getCode(tools.accountAddress, receipt.blockNumber)) === '0x') throw new Error('Safe has no code after the user operation')
+    } else {
+      gasCost = (await assertChain(tools.provider, hash, receipt, spec, tools.accountAddress, payment.depositAddress)).gasCost
+    }
     emit({
       step,
       asset: spec.asset,
@@ -719,14 +885,28 @@ async function runCase (spec, tools, evidence) {
 
     step = 'balances-after'
     const after = await readBalances(tools.provider, tools.usdt, tools.accountAddress, receipt.blockNumber)
-    assertAfter(spec, before, after, spent.gasCost)
+    if (tools.kind === 'smart') {
+      const entryPoint = new Contract(ENTRY_POINT, ['function balanceOf(address) view returns (uint256)'], tools.provider)
+      const [blockBefore, entryPointBefore, entryPointAfter] = await Promise.all([
+        readBalances(tools.provider, tools.usdt, tools.accountAddress, receipt.blockNumber - 1),
+        entryPoint.balanceOf(tools.accountAddress, { blockTag: receipt.blockNumber - 1 }),
+        entryPoint.balanceOf(tools.accountAddress, { blockTag: receipt.blockNumber })
+      ])
+      const ethAmount = spec.asset === 'ETH' ? spec.amount : 0n
+      const ethMatches = blockBefore.ethBalance - after.ethBalance === ethAmount + entryPointAfter - entryPointBefore + gasCost
+      const usdtMatches = spec.asset !== 'USDT' || blockBefore.usdtBalance - after.usdtBalance === spec.amount
+      emit({ step, asset: spec.asset, ok: ethMatches && usdtMatches, blockBefore: receipt.blockNumber - 1, blockAfter: receipt.blockNumber, safeEthBefore: blockBefore.ethBalance, safeEthAfter: after.ethBalance, entryPointBefore, entryPointAfter, actualGasCost: gasCost, ethAmount, safeUsdtBefore: blockBefore.usdtBalance, safeUsdtAfter: after.usdtBalance })
+      if (!ethMatches) throw new Error('Safe ETH and EntryPoint balances do not match the amount and actual gas cost')
+      if (!usdtMatches) throw new Error('Safe USDT balance did not decrease by the amount in the receipt block')
+    } else assertAfter(spec, before, after, gasCost)
     emit({
       step,
       asset: spec.asset,
       ok: true,
       usdt: after.usdtBalance.toString(),
       eth: after.ethBalance.toString(),
-      nonce: after.nonce.toString()
+      nonce: after.nonce.toString(),
+      ...(depositAfter === undefined ? {} : { deposit: depositAfter.toString() })
     })
 
     step = 'backend'
@@ -734,7 +914,7 @@ async function runCase (spec, tools, evidence) {
     const trimmed = assertBackend(found, spec, ext)
     emit({ step, asset: spec.asset, ok: true, transaction: trimmed })
     evidence.backend.push(trimmed)
-    evidence.txs.push({ hash, rolle: 'einzahlung', from: tools.accountAddress })
+    evidence.txs.push({ hash, rolle: 'einzahlung', from: getAddress(receipt.from), ...(tools.kind === 'smart' ? { safe: tools.accountAddress, userOperationHash: sentHash } : {}) })
 
     step = 'module'
     const byExternal = await tools.fiat.getTransactionDetail(ext, { idType: 'externalTransactionId' })
@@ -751,6 +931,7 @@ async function runCase (spec, tools, evidence) {
 async function main () {
   const options = parseArgs(process.argv.slice(2))
   rememberSecret(options.rpc)
+  rememberSecret(options.bundler)
   if (options.lock) takeLock(options.lock)
   if (options.out) await openOut(options.out)
   assertSingleWalletCopy()
@@ -760,6 +941,8 @@ async function main () {
   rememberSecret(seed)
   rememberSecret(seed.trim().split(/\s+/).join(' '))
   rememberIban(iban)
+  const smartIban = inventedIban(iban)
+  rememberIban(smartIban)
 
   state.provider = new JsonRpcProvider(options.rpc, 11155111, { staticNetwork: true, cacheTimeout: -1 })
   let chainId
@@ -785,9 +968,31 @@ async function main () {
   if (!(fiat instanceof DfxProtocol)) throw new NotRunError('not run: getFiatProtocol(\'dfx\') did not return the DFX module')
   const usdt = new Contract(USDT, ERC20_ABI, state.provider)
   const cases = CASES.filter(spec => options.asset === 'all' || spec.asset === options.asset)
+  const useEoa = options.account !== 'smart'
+  const useSmart = options.account !== 'eoa'
+  let smartAccount, smartAddress, smartFiat, smartIndex
+  if (useSmart) {
+    state.account = 'smart'
+    try { await checkBundler(options.bundler) } catch (error) {
+      if (error instanceof NotRunError) throw error
+      throw new NotRunError(`not run: bundler preflight failed (${error.message})`)
+    }
+    smartIndex = randomInt(1_000_000, 2_000_000_000)
+    const smartWdk = new WDK(seed)
+      .registerWallet('sepolia', WalletManagerEvmErc4337, { chainId: 11155111, provider: options.rpc, bundlerUrl: options.bundler, safeModulesVersion: '0.3.0', useNativeCoins: true })
+      .registerProtocol('sepolia', 'dfx', DfxProtocol, { environment: 'sandbox', network: 'sepolia' })
+    smartAccount = await smartWdk.getAccount('sepolia', smartIndex)
+    smartAddress = getAddress(await smartAccount.getAddress())
+    smartFiat = smartAccount.getFiatProtocol('dfx')
+    if (!(smartFiat instanceof DfxProtocol)) throw new NotRunError('not run: Safe DFX module is missing')
+    if ((await state.provider.getCode(smartAddress)) !== '0x') throw new NotRunError(`not run: Safe ${smartAddress} already has code`)
+    emit({ step: 'safe-preflight', asset: null, ok: true, address: smartAddress, index: smartIndex, deployed: false })
+  }
+  state.account = 'eoa'
   if (options.send) {
-    const usdtNeed = cases.reduce((sum, spec) => spec.asset === 'USDT' ? sum + spec.amount : sum, 0n)
-    const ethNeed = cases.reduce((sum, spec) => spec.asset === 'ETH' ? sum + spec.amount : sum, ETH_RESERVE)
+    const multiplier = BigInt(Number(useEoa) + Number(useSmart))
+    const usdtNeed = cases.reduce((sum, spec) => spec.asset === 'USDT' ? sum + spec.amount * multiplier : sum, 0n)
+    const ethNeed = cases.reduce((sum, spec) => spec.asset === 'ETH' ? sum + spec.amount * multiplier : sum, ETH_RESERVE + (useSmart ? SAFE_GAS : 0n))
     const usdtBalance = await usdt.balanceOf(accountAddress)
     const ethBalance = await state.provider.getBalance(accountAddress)
     if (usdtBalance < usdtNeed || ethBalance < ethNeed) {
@@ -808,8 +1013,20 @@ async function main () {
   const runId = `${Date.now()}-${randomBytes(3).toString('hex')}`
   emit({ step: 'ready', asset: null, ok: true, runId, address: accountAddress, send: options.send })
   const evidence = { txs: [], backend: [] }
-  const tools = { runId, fiat, account, accountAddress, iban, provider: state.provider, usdt, browser: state.browser, send: options.send }
-  for (const spec of cases) await runCase(spec, tools, evidence)
+  const tools = { runId, fiat, account, accountAddress, iban, provider: state.provider, usdt, browser: state.browser, send: options.send, kind: 'eoa' }
+  if (useEoa) for (const spec of cases) await runCase(spec, tools, evidence)
+  if (useSmart) {
+    state.account = 'smart'
+    if (options.send) {
+      state.flow = true
+      await fundSafe(account, smartAddress, cases, state.provider, usdt, evidence)
+    }
+    const smartTools = { ...tools, kind: 'smart', account: smartAccount, accountAddress: smartAddress, fiat: smartFiat, iban: smartIban, first: true }
+    for (const spec of cases) {
+      await runCase(spec, smartTools, evidence)
+      smartTools.first = false
+    }
+  }
 
   const finished = await readVersion(false)
   if (finished.commit !== started.commit) {

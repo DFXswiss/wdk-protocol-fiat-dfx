@@ -500,17 +500,19 @@ WDK account on Sepolia, `quoteSell` and `sell` against the DFX sandbox, then
 the widget in headless Chromium. It reads `PUT /v1/sell/paymentInfos` as the
 page receives it. Nothing is stubbed and no response is rewritten.
 
-The wallet address needs a DFX dev account with an IBAN invented for this
-test, Sepolia ETH, and Sepolia USDT
+For the EOA cases, account 0 needs a DFX dev account with an IBAN invented for this
+test. For sending, account 0 also needs Sepolia ETH and Sepolia USDT
 (`0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0`). Install Playwright's Chromium
 as in the prerequisites above. The seed file and the IBAN file have no default
 path. Each must be a non-empty regular file owned by the current user, with
 owner-only permissions (for example `0600`), and must not be a symlink. The
-seed file contains only the phrase and the IBAN file only the IBAN. The widget
-must open on "Add or select your IBAN"; an IBAN that is already selected is
-not accepted. The script clicks only the option whose text, with whitespace
+seed file contains only the phrase and the IBAN file only the IBAN. For the EOA,
+the widget must open on "Add or select your IBAN"; an already selected IBAN is
+not accepted. For later Safe cases, the preselected invented IBAN is accepted
+because it is the new account's only IBAN and the request must contain it.
+The script clicks only the option whose text, with whitespace
 removed, equals that IBAN. Any other IBAN on the same account is never clicked.
-If that option is missing, the run stops before that asset is sent; with
+For the EOA, if that option is missing, the run stops before that asset is sent; with
 `--asset all`, a USDT sale sent earlier in the same run stays sent. Once the
 address is taken, the script reads the visible page, closes the widget, and
 only then checks that every payment-info response received until the widget
@@ -519,7 +521,7 @@ are unchanged; otherwise it stops before sending.
 
 ```sh
 node real-sell.mjs --seed-file <path> --iban-file <path> [--asset USDT|ETH|all] \
-  [--rpc <url>] [--lock <dir>] [--out <path>]
+  [--account eoa|smart|all] [--rpc <url>] [--bundler <url>] [--lock <dir>] [--out <path>]
 node real-sell.mjs --seed-file <path> --iban-file <path> --send --confirm
 ```
 
@@ -532,6 +534,16 @@ exits 3 and prints `not run: wallet locked`. It removes the directory at the
 end only when this process created it. `--out` repeats the JSON lines in that
 file with mode `0600`.
 
+`--account` defaults to `all`: the EOA cases run first, followed by the smart
+account cases. Select `eoa` or `smart` to run only one. Each smart run derives
+a fresh Safe at a random account index and requires it to be undeployed. The
+bundler defaults to `https://api.candide.dev/public/v3/11155111`; override it
+with `--bundler`. Its chain and EntryPoint v0.7 are checked before the flow.
+The Safe signs in with its own address, and its deposits are UserOperations.
+The script generates a fresh checksum-valid Swiss IBAN for that Safe and creates
+a new dev user and bank account each run, including a smart-account dry run.
+It selects only that IBAN or fills the bank account form when it is absent.
+
 When neither `--send` nor `--confirm` is given, the script stops once a valid
 payment-info response is on screen and the deposit address is visible, then
 prints `dry run: nothing sent` and exits 0. Passing only one of the two flags
@@ -540,12 +552,20 @@ read from the RPC, not from the wallet. `GET /v1/transaction` is polled until
 that hash is present. The module is then asked for the same sale by the
 external id and by the DFX uid.
 
+In smart mode a dry run neither funds the Safe nor sends a UserOperation. With
+`--send --confirm`, account 0 funds the Safe once with the selected sale amounts
+and 0.0005 ETH for gas. The remaining Safe balance, approximately that gas
+allowance less actual gas, stays in the Safe. Funding and deposit sends are not
+retried. The script checks the UserOperation event and receipt on the chain RPC.
+
 Exit 0 means the run passed. Exit 1 means a check failed at or after
 `quoteSell`. Exit 2 means the command line is wrong. Exit 3 means the run did
 not start: the lock is held, the seed or IBAN file is missing or unsafe, the
 chain id is wrong, the RPC or `https://dev.api.dfx.swiss/version` is
-unreachable, or, with `--send`, the balance is too small. The ETH balance must
-cover every ETH case plus 0.002 ETH. The USDT balance must cover every USDT case.
+unreachable, the Safe is already deployed or the bundler preflight fails, or,
+with `--send`, the balance is too small. The EOA ETH balance must cover every
+selected ETH case in both modes, 0.0005 ETH for the Safe when selected, and
+0.002 ETH reserve. The USDT balance must cover every selected USDT case in both modes.
 
 A dry run still opens the widget, so it creates sell requests on dev. `--send
 --confirm` sends test ETH or USDT to the DFX dev deposit address and, when the
