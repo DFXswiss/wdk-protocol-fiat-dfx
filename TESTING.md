@@ -866,6 +866,7 @@ Every run of the smart account path, in order:
 | `real-sell.mjs` before `6960dd0`, uncommitted | `--account all`, without `--send` | exit 1 at the second Safe case: the widget had preselected the invented IBAN, so "Add or select your IBAN" was not shown; the script now accepts that preselection only for later Safe cases and only when the request carries the invented IBAN |
 | `real-sell.mjs` of `6960dd0` | `--account all`, without `--send` | exit 0, nothing sent |
 | `real-sell.mjs` of `6960dd0` | `--account all --send --confirm` | exit 0, below |
+| `real-sell.mjs` of `1942548` (after review) | `--account all --send --confirm` | exit 1 after the last deposit: the EOA cases and the first Safe case passed, the Safe's 0.0001 ETH was sent as a UserOperation, then the public RPC answered `eth_getCode` at the receipt block with `block not found` (another node behind the one that returned the receipt); [`e2e/evidence/2026-11-04-sandbox-real-sell-red.jsonl`](e2e/evidence/2026-11-04-sandbox-real-sell-red.jsonl). `e13e453` retries only reads at a fixed block on that error, for up to 60 s; the run at the final head and whether it needed that retry are in the pull request description |
 
 The passing run at `6960dd0`, a clean working tree, sandbox backend `a1e5e7c998cf4649e205bb06086dffb09ee1f119`
 ([`e2e/evidence/2026-11-04-sandbox-real-sell.jsonl`](e2e/evidence/2026-11-04-sandbox-real-sell.jsonl); in its last
