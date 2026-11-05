@@ -908,7 +908,8 @@ payout, a sale with real money in production, or a rejected transfer (section "N
 
 Every probe under `e2e/` that can run against the current module was run again at `d35b031` from a clean
 working tree; of the four full-stack probes only `fullstack.mjs` was started, and it stopped at its first module
-step (below). All ran on Node v22.23.4, macOS arm64, one after another. `native-quotes.mjs`,
+step (below). They ran one after another on macOS arm64, all on Node v22.23.4 except `bare-smoke.mjs`, which runs on the
+Bare runtime (below). `native-quotes.mjs`,
 `live-matrix.mjs`, `safe-deployed.mjs` and the wallet simulator of `wallet-journeys.mjs` load the module copy that
 `npm ci` installed into `e2e/node_modules` (`install-links=true`); `signature-diff.mjs` imports `../src/signature.js`
 and `bare-smoke.mjs` imports `../bare.js` from the working tree; `widget-check.mjs` opens the URLs the live matrix
