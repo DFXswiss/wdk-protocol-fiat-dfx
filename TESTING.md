@@ -15,7 +15,7 @@ unless it says so.
 The revisions named below are commits of the development repository
 [joshuakrueger-dfx/wdk-modul-dfx](https://github.com/joshuakrueger-dfx/wdk-modul-dfx); this repository received the
 module as one squashed commit. "This branch" is that repository's pull request #2 (`fix/issue-258`), whose last
-commit is `090e82c`. Results dated 2026-10-30 (sections 15 and 16), 2026-11-02 and 2026-11-04 (section 17 and the DFX records added to sections 9, 14
+commit is `090e82c`. Results dated 2026-10-30 (sections 15 and 16), 2026-11-02, 2026-11-04 and 2026-11-05 (sections 17 and 18 and the DFX records added to sections 9, 14
 and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e2e/bundler-send.mjs` and
 `e2e/real-sell.mjs`.
 
@@ -52,6 +52,7 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
     that says the script on this branch was not re-run is not this run.
   - **This repository, 2026-10-30:** the sends through a bundler of section 15, on Base and on a fork, and the real
     purchase of USDC of section 16.
+  - **This repository, 2026-11-05:** the re-run of every `e2e/` probe at `d35b031` (section 18).
   - **This repository, 2026-11-02 and 2026-11-04:** the real sales on Sepolia of section 17, from an EOA and from an
     undeployed smart account, and the DFX records of the three real purchases read back through the module (sections
     9, 14 and 16).
@@ -107,6 +108,7 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
 | Sending from an ERC-4337 account through a bundler | on Base a one-off script (not committed), then `cd e2e && node bundler-send.mjs …`; on a fork the same script | On 2026-10-30, on Base itself through the public Candide bundler: three UserOperations from an account that had no code; the first deployed it, and each settled with receipt status 1 and a `UserOperationEvent` with `success = true`; then the committed script sent 1 USDC (`transfer`) and the remaining ETH (`--all`) through the same bundler, each exit 0. On an `anvil` fork of Base with a local Alto bundler, the committed script: four sends (ETH that deploys, ETH, USDC `transfer`, `--all`) exit 0, five runs that sent no UserOperation (four stopped by the script, one refused by the bundler at gas estimation), and 7/7 mutations or removed checks detected (section 15) |
 | Real purchase of USDC | wallet simulator in production; `cast send` for the transfer out | On 2026-10-30: 15 EUR of USDC bought for the Base EOA account; DFX paid 12.528366 USDC and a network start fee of 0.00027499 ETH to it; the owner moved the full USDC out with one ERC-20 `transfer`, and the module then reported `completed` (section 16) |
 | Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --iban-file … --send --confirm` | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17) |
+| Every `e2e/` probe at `d35b031` | the commands above | On 2026-11-05: signature differential 0 mismatches; native quotes as expected; live matrix sandbox 178/186 and production 177/178 (DFX catalogue data only); widget check 4/4 in both environments; wallet journeys 7/7; deployed ERC-4337 account 11/11; Bare entry point 4/4; twelve mutations of the real sell script detected. The four full-stack probes cannot run against the current module, whose challenge check rejects the local API's `[loc]_` challenge (section 18) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
 See [`e2e/README.md`](e2e/README.md) for prerequisites and side effects before running anything under `e2e/`.
@@ -901,3 +903,43 @@ reinstalling, the twelve runs above were made.
 This shows the sell path with real deposits up to the point where DFX recognizes them, from an EOA and from an
 undeployed smart account that signs in as the Safe. It does not show the bank
 payout, a sale with real money in production, or a rejected transfer (section "Not covered").
+
+## 18. Re-run of every `e2e/` probe at `d35b031` (2026-11-05)
+
+Every probe under `e2e/` was run again at `d35b031` from a clean working tree, with the module installed into
+`e2e/node_modules` by `npm ci` (`install-links=true`), Node v22.23.4, macOS arm64, one after another:
+
+| Probe | Result |
+| --- | --- |
+| `signature-diff.mjs` | 0 mismatches in 20 000 Solana and 5 000 Spark signatures |
+| `native-quotes.mjs`, sandbox and production | as expected: the sandbox lists only Firo, production none of Bitcoin, Lightning, Arkade and Firo, and every unlisted asset is rejected with `Missing decimals` by both quote methods |
+| `live-matrix.mjs`, sandbox | 178/186: every chain 15/15 except Sepolia 10/14 and Spark 10/14 (the sandbox does not list Sepolia USDT and Spark BTC as buyable, as on 2026-10-29) and Bitcoin 8/8 (no listed asset; every trade rejected with `Missing decimals`) |
+| `live-matrix.mjs`, production | 177/178: every chain 15/15 except Bitcoin 8/8 as above and Sepolia 4/5; production no longer lists a Sepolia asset with API decimals (`No listed asset with decimals`), which is DFX catalogue data |
+| `widget-check.mjs`, sandbox and production | each of the four selections (Ethereum buy and sell, Tron buy, Base sell) opened signed in with amount, asset and network prefilled; the buys stopped at DFX's verification step (KYC in the sandbox, e-mail in production), the sells at "Add or select your IBAN" |
+| `wallet-journeys.mjs` | 7/7, exit 0, 0 page errors, the ERC-4337 journey included; six orders "not yet received at DFX", the Bitcoin journey without an order because BTC is not offered |
+| `safe-deployed.mjs` (`ANVIL_FORK_URL=https://polygon.drpc.org`) | 11/11 |
+| `bare-smoke.mjs` | 4/4. `npx --yes bare@1.34.1 bare-smoke.mjs` stopped with `bare: command not found` on the test machine: the installed `bare` package had no `bin/bare`, and the runtime binary of `bare-runtime-darwin-arm64` had no execute permission. The probe ran with that runtime binary made executable. `bare@1.34.1` now resolves the Bare runtime v1.36.0 (v1.35.0 on 2026-10-20) |
+| `real-sell.mjs` | section 17; the run at the final head is in the pull request description |
+| `fullstack.mjs`, `fullstack-processing.mjs`, `fullstack-lifecycle.mjs`, `kyc-widget.mjs` | cannot run against the current module, below |
+
+The production live matrix created throwaway DFX users, none with KYC or funds: EVM
+`0x4E73dfb30D2f3d4922F59D65E17B69D0B45b831F`, the ERC-4337 account on Polygon and Base
+`0x63003429FC2f6F14946809c11A505eE6eecF4978`, Tron `TPezaeGZqPM75zUUmyBoVZsFN2zgrrxZND`, Solana
+`5bKozGmZJ5nmNL5EsXbfuaD4xJgatxQepCFZUcPcmChT` and Spark
+`spark1pgssxf8wyldm6e34mqyg0h56m2g0zayv34xa9688jjze3ndj5nwyyt60us33jg`. The Bitcoin address was only derived; with no
+listed asset the module signed nothing.
+
+**Local full stack.** The four full-stack probes sign in through the module against a local DFX API, whose sign-in
+challenge starts with `[loc]_`. Since the sign-in challenge check (section 1), the module signs only the exact sandbox
+(`[dev]_`) or production text and rejects every other challenge. On 2026-11-05 a local stack was brought up (DFX API
+`develop` at `73efbef7`, `DFXswiss/app` `develop` at `cf7ed196`, an isolated Compose project on ports 3040/3041, the
+frontend rebuilt with that API origin), and `fullstack.mjs` stopped at its first module step with `Unexpected DFX
+sign-in challenge`; the other three were not started for the same reason. They can run again only with a module
+environment for a local API, which the module deliberately does not have. Their last results are those of `20ec94d`
+(section 12). In `fullstack.mjs` and `fullstack-processing.mjs` the fixed IBAN, which belongs to a real person, was
+replaced by the local test IBAN `CH3600000000000000000`.
+
+**Mutations at `d35b031`.** The twelve mutations of section 17 were repeated on the script as of `d35b031` (which
+added the fixed-block read retry after `6960dd0`), each pattern matching exactly once; all twelve exited 1 at the
+changed check, and the three that stop before the sale deposit sent nothing to DFX
+([`e2e/evidence/2026-11-05-sandbox-real-sell-mutations.jsonl`](e2e/evidence/2026-11-05-sandbox-real-sell-mutations.jsonl)).
