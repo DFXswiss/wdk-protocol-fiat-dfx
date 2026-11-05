@@ -25,7 +25,7 @@ const DB_CONTAINER = process.env.DFX_LOCAL_DB_CONTAINER ?? 'dfx-e2e-wdk2-db-1'
 const API_CONTAINER = process.env.DFX_LOCAL_API_CONTAINER ?? DB_CONTAINER.replace(/-db-1$/, '-api-1')
 const DIR = fileURLToPath(new URL('./out/fullstack/', import.meta.url))
 const runId = `wdk-${Date.now()}-${randomUUID().slice(0, 8)}`
-const IBAN = 'CH9300762011623852957'
+const IBAN = 'CH3600000000000000000'
 const secrets = new Set()
 const results = {
   runId, startedAt: new Date().toISOString(), api: API, app: APP,
