@@ -558,7 +558,8 @@ read from the RPC, not from the wallet. `GET /v1/transaction` is polled until
 that hash is present. The module is then asked for the same sale by the
 external id and by the DFX uid.
 Fixed-block reads retry `block not found` for up to 60 seconds because public
-RPCs mix nodes at different heights; the script never retries sends.
+RPCs mix nodes at different heights, and pre-send balances and the funding check
+use fixed blocks; the script never retries sends.
 
 In smart mode a dry run neither funds the Safe nor sends a UserOperation. With
 `--send --confirm`, account 0 funds the Safe once with the selected sale amounts

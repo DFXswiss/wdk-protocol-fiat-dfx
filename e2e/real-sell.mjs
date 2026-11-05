@@ -46,7 +46,7 @@ class UsageError extends Error {}
 class NotRunError extends Error {}
 
 const secrets = []
-const state = { flow: false, lockHeld: false, lockDir: '', provider: null, browser: null, out: null }
+const state = { flow: false, lockHeld: false, lockDir: '', provider: null, browser: null, out: null, receiptBlock: 0 }
 
 function redact (value) {
   let text = String(value ?? 'Unknown error')
@@ -801,16 +801,23 @@ async function assetBalance (provider, usdt, spec, address, blockTag) {
 async function fundSafe (eoa, safe, cases, provider, usdt, evidence) {
   const tokenAmount = cases.reduce((sum, spec) => sum + (spec.asset === 'USDT' ? spec.amount : 0n), 0n)
   const ethAmount = cases.reduce((sum, spec) => sum + (spec.asset === 'ETH' ? spec.amount : 0n), SAFE_GAS)
+  let fundingBlock
   for (const spec of [{ asset: 'USDT', amount: tokenAmount }, { asset: 'ETH', amount: ethAmount }]) {
     if (spec.amount === 0n) continue
     const hash = await sendOnce(eoa, spec, safe)
     emit({ step: 'funding-send', asset: spec.asset, ok: true, hash })
     const receipt = await waitForReceipt(provider, hash)
+    state.receiptBlock = Math.max(state.receiptBlock, receipt.blockNumber)
     if (receipt.status !== 1) throw new Error(`Funding receipt ${hash} status is not 1`)
+    fundingBlock = receipt.blockNumber
     evidence.txs.push({ hash, rolle: 'funding', from: getAddress(receipt.from) })
     emit({ step: 'funding-receipt', asset: spec.asset, ok: true, hash, status: receipt.status })
   }
-  const [tokenBalance, ethBalance, code] = await Promise.all([usdt.balanceOf(safe), provider.getBalance(safe), provider.getCode(safe)])
+  const [tokenBalance, ethBalance, code] = await Promise.all([
+    readAtBlock(fundingBlock, () => usdt.balanceOf(safe, { blockTag: fundingBlock })),
+    readAtBlock(fundingBlock, () => provider.getBalance(safe, fundingBlock)),
+    readAtBlock(fundingBlock, () => provider.getCode(safe, fundingBlock))
+  ])
   if (tokenBalance !== tokenAmount || ethBalance !== ethAmount || code !== '0x') throw new Error('Safe funding balances or code do not match')
   emit({ step: 'funding-balances', asset: null, ok: true, usdt: tokenBalance, eth: ethBalance, deployed: false })
 }
@@ -863,8 +870,11 @@ async function runCase (spec, tools, evidence) {
     if (!tools.send) return
 
     step = 'balances-before'
-    const before = await readBalances(tools.provider, tools.usdt, tools.accountAddress, 'latest')
-    const depositBefore = await assetBalance(tools.provider, tools.usdt, spec, payment.depositAddress, 'latest')
+    const currentBlock = await tools.provider.getBlockNumber()
+    if (!Number.isSafeInteger(currentBlock)) throw new Error('eth_blockNumber was not a safe integer')
+    const beforeBlock = Math.max(currentBlock, state.receiptBlock)
+    const before = await readBalances(tools.provider, tools.usdt, tools.accountAddress, beforeBlock)
+    const depositBefore = await assetBalance(tools.provider, tools.usdt, spec, payment.depositAddress, beforeBlock)
     emit({
       step,
       asset: spec.asset,
@@ -887,6 +897,7 @@ async function runCase (spec, tools, evidence) {
       hash = userReceipt.receipt.transactionHash
     }
     const receipt = await waitForReceipt(tools.provider, hash)
+    state.receiptBlock = Math.max(state.receiptBlock, receipt.blockNumber)
     let gasCost
     let depositAfter
     if (tools.kind === 'smart') {
