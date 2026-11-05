@@ -557,7 +557,7 @@ HTTP 429, which has the same hash and nonce and cannot execute twice. The receip
 read from the RPC, not from the wallet. `GET /v1/transaction` is polled until
 that hash is present. The module is then asked for the same sale by the
 external id and by the DFX uid.
-Fixed-block reads retry `block not found` for up to 60 seconds because public
+Fixed-block reads retry `block not found` and `header not found` for up to 60 seconds because public
 RPCs mix nodes at different heights, and pre-send balances and the funding check
 use fixed blocks; the script never retries sends.
 

@@ -612,7 +612,7 @@ async function assertChain (provider, hash, receipt, spec, account, depositAddre
   return { gasCost: receipt.gasUsed * receipt.gasPrice, value: tx.value }
 }
 
-// Public RPC nodes can lag behind the node that returned the receipt block.
+// Lagging public RPC nodes can report block not found or header not found for a receipt block.
 async function readAtBlock (blockNumber, read) {
   if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) throw new Error('A fixed block number is required')
   const deadline = Date.now() + 60_000
@@ -627,7 +627,7 @@ async function readAtBlock (blockNumber, read) {
         const item = pending.pop()
         if (!item || typeof item !== 'object' || seen.has(item)) continue
         seen.add(item)
-        if (item.code === -32001 || (typeof item.message === 'string' && /block not found/i.test(item.message))) {
+        if (item.code === -32001 || (typeof item.message === 'string' && /(?:block|header) not found/i.test(item.message))) {
           blockNotFound = true
           break
         }
