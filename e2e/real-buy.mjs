@@ -66,7 +66,7 @@ function parseArgs (args) {
   if (!['smart', 'eoa'].includes(options.account)) throw new UsageError('--account must be smart or eoa')
   if (options.asset !== 'USDC') throw new UsageError('Only USDC on Base is supported')
   if (!/^\d+$/.test(options.index) || !Number.isSafeInteger(Number(options.index)) || Number(options.index) >= 2 ** 31) throw new UsageError('Invalid --index')
-  if (!/^\d+(?:\.\d{1,2})?$/.test(options.amount) || parseUnits(options.amount, 2) <= 0n) throw new UsageError('Invalid EUR --amount')
+  try { if (!/^\d+(?:\.\d{1,2})?$/.test(options.amount) || parseUnits(options.amount, 2) <= 0n) throw new Error() } catch { throw new UsageError('Invalid EUR --amount') }
   if (!/^\d+$/.test(options.wait) || !Number.isSafeInteger(Number(options.wait)) || Number(options.wait) < 1 || Number(options.wait) > 10080) throw new UsageError('Invalid --wait-minutes')
   try { if (!['http:', 'https:'].includes(new URL(options.rpc).protocol)) throw new Error() } catch { throw new UsageError('--rpc must use HTTP or HTTPS') }
   return options

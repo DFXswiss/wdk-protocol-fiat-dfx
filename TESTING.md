@@ -941,15 +941,15 @@ The production live matrix created throwaway DFX users, none with KYC or funds: 
 listed asset the module signed nothing.
 
 **Local full stack.** The four full-stack probes sign in through the module against a local DFX API, whose sign-in
-challenge starts with `[loc]_`. Since the sign-in challenge check (section 1), the module signs only the exact sandbox
-(`[dev]_`) or production text and rejects every other challenge. On 2026-11-05 a local stack was brought up (DFX API
+challenge starts with `[loc]_`. From the sign-in challenge check (section 1) up to `d35b031`, the module signed only
+the exact sandbox (`[dev]_`) or production text and rejected every other challenge. On 2026-11-05 a local stack was brought up (DFX API
 `develop` at `73efbef7`, `DFXswiss/app` `develop` at `cf7ed196`, an isolated Compose project on ports 3040/3041, the
 frontend rebuilt with that API origin), and `fullstack.mjs` stopped at its first module step with `Unexpected DFX
 sign-in challenge`; the other three were not started for the same reason. In `fullstack.mjs` and
 `fullstack-processing.mjs` the fixed IBAN, which belongs to a real person, was replaced by the local test IBAN
 `CH3600000000000000000`.
 
-**Environment `local` (2026-11-06).** Since `f64b8d4` the module has a fourth environment, `local`, for exactly this
+**Environment `local` (2026-11-06).** Since `f64b8d4` the module has a third environment, `local`, for exactly this
 stack: `apiUrl` and `appUrl` must be HTTP(S) loopback origins (`localhost`, `127.0.0.1` or `[::1]`, no path, query,
 fragment or credentials), every request goes to `apiUrl`, widget URLs are built on `appUrl`, and only the `[loc]_`
 challenge is signed; `apiUrl` and `appUrl` are rejected in every other environment. Since `f6f6f28` the four probes
