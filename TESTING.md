@@ -108,7 +108,7 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
 | Real purchase into an undeployed ERC-4337 account | wallet simulator in production; `cd e2e && node safe-rescue.mjs --native …` | On this branch (2026-10-29): 15 EUR of ETH bought for the Base smart account, which signed in to production DFX while it had no code; DFX paid 0.00565071 ETH to it and the module reports `completed`; the owner then deployed it without a bundler and moved the full balance out (section 14) |
 | Sending from an ERC-4337 account through a bundler | on Base a one-off script (not committed), then `cd e2e && node bundler-send.mjs …`; on a fork the same script | On 2026-10-30, on Base itself through the public Candide bundler: three UserOperations from an account that had no code; the first deployed it, and each settled with receipt status 1 and a `UserOperationEvent` with `success = true`; then the committed script sent 1 USDC (`transfer`) and the remaining ETH (`--all`) through the same bundler, each exit 0. On an `anvil` fork of Base with a local Alto bundler, the committed script: four sends (ETH that deploys, ETH, USDC `transfer`, `--all`) exit 0, five runs that sent no UserOperation (four stopped by the script, one refused by the bundler at gas estimation), and 7/7 mutations or removed checks detected (section 15) |
 | Real purchase of USDC | wallet simulator in production; `cast send` for the transfer out | On 2026-10-30: 15 EUR of USDC bought for the Base EOA account; DFX paid 12.528366 USDC and a network start fee of 0.00027499 ETH to it; the owner moved the full USDC out with one ERC-20 `transfer`, and the module then reported `completed` (section 16) |
-| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --iban-file … --send --confirm` | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17) |
+| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --send --confirm` (before `92be2ce` also `--iban-file …`) | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17) |
 | `e2e/` probes at `d35b031` | the commands above | On 2026-11-05, every probe that could run against the module of `d35b031`: signature differential 0 mismatches; native quotes as expected; live matrix sandbox 178/186 and production 177/178 (DFX catalogue data only); widget check 4/4 in both environments; wallet journeys 7/7; deployed ERC-4337 account 11/11; Bare entry point 4/4; twelve mutations of the real sell script detected. The four full-stack probes could not run at `d35b031`, whose challenge check rejected the local API's `[loc]_` challenge; with the module environment `local` they ran at `efc82f3` on 2026-11-06 with the results of `20ec94d` (section 18) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
@@ -577,8 +577,8 @@ Production uses the same code; it was not tested there. The module cannot work a
 - **A rejected transfer in the wallet.** WDK sends without a confirmation dialog, so a transfer that the user
   rejects in the wallet cannot occur in these runs.
 - **A scheduled run.** `.github/workflows/live-e2e.yml` runs `e2e/real-sell.mjs` against the DFX sandbox on manual
-  start only; it has not run on GitHub. A schedule needs the repository secrets `TEST_SEED` and `TEST_IBAN`, a funded
-  Sepolia account with its own invented IBAN on the DFX sandbox, and an owner, which a maintainer has to set up.
+  start only; it has not run on GitHub. A schedule needs the repository secret `TEST_SEED`, a Sepolia account funded
+  with ETH and USDT, and an owner, which a maintainer has to set up.
 - **A token bought with real money into an ERC-4337 account.** The real purchase into a smart account was ETH
   (section 14); the real purchase of USDC paid out to an EOA (section 16). USDC into a smart account is covered by
   quotes and widget tests only. `e2e/safe-rescue.mjs` moved USDC out of a Safe only on a fork; `e2e/bundler-send.mjs` sent 1 USDC out of a
@@ -904,6 +904,25 @@ case signs in without code and the Safe address in the session user (both stoppe
 decrease. A first attempt of these twelve did not test anything: every copy stopped while loading, because the
 `e2e/node_modules` it resolved had been removed from the working tree in the meantime; nothing was sent. After
 reinstalling, the twelve runs above were made.
+
+### One invented IBAN per run (2026-11-06)
+
+Up to `39f6f5d` the EOA cases selected a fixed IBAN from `--iban-file`. An IBAN reused across runs links every test
+account that ever used it. Since `92be2ce` the script invents a checksum-valid Swiss IBAN with clearing number 00000
+for each account on each run: the first case of an account enters it in the widget's bank account form, which the
+EOA's widget shows below its existing bank accounts, and later cases select only that IBAN. Each EOA run therefore
+adds a bank account to the EOA's sandbox user. `--iban-file` and the workflow secret `TEST_IBAN` were removed.
+Screenshots now mask every IBAN-shaped text, not only the run's own IBANs, because the EOA's other bank accounts are
+listed in the same widget; no screenshot step captures that list, so this mask is not exercised by a run.
+
+A run without `--send` of the script as of `92be2ce` (`--account all --screenshots`) exited 0: all four cases reached
+a valid payment-info response with the deposit address visible, and nothing was sent. An OCR and QR scan of its
+eight screenshots found no IBAN-shaped text, token, seed word or QR code. Two mutations of the IBAN path, each run
+with `--account eoa --asset USDT` and without `--send`, exited 1 before anything was sent: the check that the
+payment-info request carries the run's IBAN inverted, and a different invented IBAN entered in the form
+([`e2e/evidence/2026-11-06-sandbox-real-sell-iban.jsonl`](e2e/evidence/2026-11-06-sandbox-real-sell-iban.jsonl)). The
+twelve mutations of the checks after the payment information (sections above and 18) were not repeated, because
+`92be2ce` does not change those checks.
 
 This shows the sell path with real deposits up to the point where DFX recognizes them, from an EOA and from an
 undeployed smart account that signs in as the Safe. It does not show the bank
