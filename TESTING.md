@@ -15,9 +15,9 @@ unless it says so.
 The revisions named below are commits of the development repository
 [joshuakrueger-dfx/wdk-modul-dfx](https://github.com/joshuakrueger-dfx/wdk-modul-dfx); this repository received the
 module as one squashed commit. "This branch" is that repository's pull request #2 (`fix/issue-258`), whose last
-commit is `090e82c`. Results dated 2026-10-30 (sections 15 and 16), 2026-11-02, 2026-11-04 and 2026-11-05 (sections 17 and 18 and the DFX records added to sections 9, 14
-and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e2e/bundler-send.mjs` and
-`e2e/real-sell.mjs`.
+commit is `090e82c`. Results dated 2026-10-30 (sections 15 and 16), 2026-11-02, 2026-11-04, 2026-11-05 and 2026-11-06 (sections 17 and 18 and the DFX records added to sections 9, 14
+and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e2e/bundler-send.mjs`,
+`e2e/real-sell.mjs`, `e2e/real-buy.mjs` and the module environment `local`.
 
 - **Which code each result belongs to.** Results belong to the explicitly named revisions:
   - **This branch:** the lint, unit, integration and coverage rows, recorded in section 1, and the ERC-4337 fork probe
@@ -82,7 +82,8 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
   exercised.
 - **DFX environments:** sandbox `dev.api.dfx.swiss` / `dev.app.dfx.swiss`, production `api.dfx.swiss` / `app.dfx.swiss`,
   and a local full stack (real DFX API and real Postgres, external providers mocked) built from the DFX API at
-  `63cb9d569` and `DFXswiss/app` `1321f956`.
+  `63cb9d569` and `DFXswiss/app` `1321f956`; for section 18 from the DFX API `develop` at `9378fdde` and
+  `DFXswiss/app` `develop` at `cf7ed196`.
 
 ## Summary
 
@@ -90,25 +91,25 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
 | --- | --- | --- |
 | Integration, local | `npm run test:integration` | 35/35 tests in 1 suite against a local DFX server replaying recorded sandbox responses; no network |
 | Unit tests | `npm run lint && npm test` | lint output empty; 711/711 tests in 2 suites |
-| Coverage (unit + integration) | `npm run test:coverage` | 746/746 tests in 3 suites on Node v26.7.0 and again on Node v22.23.4 (2026-10-29); 100 % statements, branches, functions, lines |
-| Mutation probes | ad-hoc script (see [Mutation probes](#mutation-probes)) | 59/59 mutations detected on 2026-09-30, each by 1–233 tests; not repeated on this branch. 7/7 mutations of the ERC-6492 wrapper and the challenge check detected on 2026-10-20 |
+| Coverage (unit + integration) | `npm run test:coverage` | 746/746 tests in 3 suites on Node v26.7.0 and again on Node v22.23.4 (2026-10-29); 100 % statements, branches, functions, lines. With the environment `local` on 2026-11-06 at `e753065` (Node v22.23.4): `npm test` 756/756 in 2 suites, `npm run test:integration` 35/35 in 1 suite, `npm run test:coverage` 791/791 in 3 suites, 100 % (section 18) |
+| Mutation probes | ad-hoc script (see [Mutation probes](#mutation-probes)) | 59/59 mutations detected on 2026-09-30, each by 1–233 tests; not repeated on this branch. 7/7 mutations of the ERC-6492 wrapper and the challenge check detected on 2026-10-20. 7/7 mutations of the environment `local` detected on 2026-11-06 (section 18) |
 | Signature normalisation vs. reference libraries | `cd e2e && node signature-diff.mjs` | 0 mismatches in 20 000 Solana and 5 000 Spark signatures on `20ec94d`. It was not re-run on the development branch; it was re-run at `d35b031` on 2026-11-05 (section 18). |
 | Live matrix, sandbox | `cd e2e && DFX_ENV=sandbox node live-matrix.mjs` | 178/186 steps on this branch (2026-10-29, with the Base ERC-4337 case); all 8 failures come from the two assets the sandbox does not list as buyable (section 2). Polygon and Base ERC-4337 pass every step. Re-run at `d35b031` on 2026-11-05: section 18. |
 | Live matrix, production | `cd e2e && DFX_ENV=production node live-matrix.mjs` | 182/187 steps on this branch (2026-10-29); every chain except Bitcoin signs in, including the undeployed Polygon and Base ERC-4337 account; the 5 failures are all Sepolia, a testnet asset in the production catalog (section 2). Re-run at `d35b031` on 2026-11-05: section 18. |
 | Widget as the user sees it | `cd e2e && node widget-check.mjs` | On `20ec94d`, the widget opens signed in, amount/asset/network prefilled, in sandbox and production. It was not re-run on the development branch; it was re-run at `d35b031` on 2026-11-05 (section 18). |
 | Wallet user journeys | `cd e2e && node wallet-journeys.mjs` | `eth-4337-buy-usdt` and `eth-eoa-buy-usdt` passed on this branch (2026-10-23); the other five journeys were not re-run. The script expects Bitcoin to stay unlisted and every other journey, the undeployed ERC-4337 Safe included, to reach the DFX page title (`Buy`/`Sell`), return and show an order status. The Solana journey fails when its random address starts with `1` or `3`, about 6 % (DFX backend issue, section 12). Re-run at `d35b031` on 2026-11-05: section 18. |
-| After the widget (local full stack) | `cd e2e && node fullstack.mjs` | 29/29 steps on `20ec94d` (second run; the first stopped at a transient local `fetch failed`, section 12). It was not re-run on the development branch, and it cannot run against the current module (section 18). |
+| After the widget (local full stack) | `cd e2e && node fullstack.mjs` | 29/29 steps on `20ec94d` (second run; the first stopped at a transient local `fetch failed`, section 12). It was not re-run on the development branch. At `d35b031` it stopped at its first module step; at `efc82f3` with the module environment `local`, 29/29 steps on 2026-11-06 (section 18). |
 | Chains without a WDK wallet | `cd e2e && node native-quotes.mjs` | Not re-run on this branch. The script expects sandbox to list only Firo, production to list none of Bitcoin, Lightning, Arkade and Firo, and unlisted assets to be rejected with Missing decimals. Re-run at `d35b031` on 2026-11-05: section 18. |
-| Backend processing, first look | `cd e2e && node fullstack-processing.mjs` | On `20ec94d`, the sell deposit is matched by the real `BuyFiat` job; a +10 % counter-test is not matched. It was not re-run on the development branch, and it cannot run against the current module (section 18). |
-| Transaction lifecycle, real backend jobs | `cd e2e && node fullstack-lifecycle.mjs` | On `20ec94d`: 56 steps OK, 2 red: buy and sell reach an automatic AML `Pass`, rejection and refund reach `Returned`, the module status matches all seven DFX states observed; the crypto payout and the fiat bank execution are not prepared by the local stack (no liquidity rules). It was not re-run on the development branch, and it cannot run against the current module (section 18). |
-| KYC in the widget | `cd e2e && node kyc-widget.mjs` | On `20ec94d`: e-mail code → level 10 → personal data → level 20 → nationality → stops at the Sumsub identification call. It was not re-run on the development branch, and it cannot run against the current module (section 18). |
+| Backend processing, first look | `cd e2e && node fullstack-processing.mjs` | On `20ec94d`, the sell deposit is matched by the real `BuyFiat` job; a +10 % counter-test is not matched. It was not re-run on the development branch. At `efc82f3` with the module environment `local` on 2026-11-06: 24 steps OK, the same matching and counter-test, and the same two red six-minute observation steps as on `20ec94d` (section 18). |
+| Transaction lifecycle, real backend jobs | `cd e2e && node fullstack-lifecycle.mjs` | On `20ec94d`: 56 steps OK, 2 red: buy and sell reach an automatic AML `Pass`, rejection and refund reach `Returned`, the module status matches all seven DFX states observed; the crypto payout and the fiat bank execution are not prepared by the local stack (no liquidity rules). It was not re-run on the development branch. At `efc82f3` with the module environment `local` on 2026-11-06: 56 steps OK and the same 2 red (section 18). |
+| KYC in the widget | `cd e2e && node kyc-widget.mjs` | On `20ec94d`: e-mail code → level 10 → personal data → level 20 → nationality → stops at the Sumsub identification call. It was not re-run on the development branch. At `efc82f3` with the module environment `local` on 2026-11-06: the same module steps green and the same boundary; the probe's own boundary check stays red as on `ec9b788` (section 18). |
 | Bare entry point | `cd e2e && npx --yes bare@1.34.1 bare-smoke.mjs` | 4/4 checks on this branch (2026-10-20, Bare runtime v1.35.0): `bare.js` loads `DfxProtocol`, and a sandbox sign-in on Polygon through stubbed `fetch` posts the predicted Safe address with exactly the ERC-6492 signature in `e2e/fixtures/bare-smoke-expected.json`, then the stubbed detail request answers 404. With one hex digit of that fixture changed the probe reports 3/4. No network, no DFX API. Re-run at `d35b031` on 2026-11-05: section 18. |
 | Deployed ERC-4337 account | `cd e2e && ANVIL_FORK_URL=https://polygon.drpc.org node safe-deployed.mjs` | 11/11 steps on this branch (2026-10-20): before deployment the posted signature is ERC-6492-wrapped and viem 2.38.5 verifies it on the fork while the Safe has no code; after deployment the inner signature passes ERC-1271 and the wrapped one passes viem; sandbox result `accepted` in all three sign-ins on 2026-10-23, `rejected` on 2026-10-20 (section 8). Re-run at `d35b031` on 2026-11-05: section 18. |
 | Real purchase into an undeployed ERC-4337 account | wallet simulator in production; `cd e2e && node safe-rescue.mjs --native …` | On this branch (2026-10-29): 15 EUR of ETH bought for the Base smart account, which signed in to production DFX while it had no code; DFX paid 0.00565071 ETH to it and the module reports `completed`; the owner then deployed it without a bundler and moved the full balance out (section 14) |
 | Sending from an ERC-4337 account through a bundler | on Base a one-off script (not committed), then `cd e2e && node bundler-send.mjs …`; on a fork the same script | On 2026-10-30, on Base itself through the public Candide bundler: three UserOperations from an account that had no code; the first deployed it, and each settled with receipt status 1 and a `UserOperationEvent` with `success = true`; then the committed script sent 1 USDC (`transfer`) and the remaining ETH (`--all`) through the same bundler, each exit 0. On an `anvil` fork of Base with a local Alto bundler, the committed script: four sends (ETH that deploys, ETH, USDC `transfer`, `--all`) exit 0, five runs that sent no UserOperation (four stopped by the script, one refused by the bundler at gas estimation), and 7/7 mutations or removed checks detected (section 15) |
 | Real purchase of USDC | wallet simulator in production; `cast send` for the transfer out | On 2026-10-30: 15 EUR of USDC bought for the Base EOA account; DFX paid 12.528366 USDC and a network start fee of 0.00027499 ETH to it; the owner moved the full USDC out with one ERC-20 `transfer`, and the module then reported `completed` (section 16) |
 | Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --iban-file … --send --confirm` | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17) |
-| `e2e/` probes at `d35b031` | the commands above | On 2026-11-05, every probe that can run against the current module: signature differential 0 mismatches; native quotes as expected; live matrix sandbox 178/186 and production 177/178 (DFX catalogue data only); widget check 4/4 in both environments; wallet journeys 7/7; deployed ERC-4337 account 11/11; Bare entry point 4/4; twelve mutations of the real sell script detected. The four full-stack probes cannot run against the current module, whose challenge check rejects the local API's `[loc]_` challenge: `fullstack.mjs` stopped at its first module step, the other three were not started (section 18) |
+| `e2e/` probes at `d35b031` | the commands above | On 2026-11-05, every probe that could run against the module of `d35b031`: signature differential 0 mismatches; native quotes as expected; live matrix sandbox 178/186 and production 177/178 (DFX catalogue data only); widget check 4/4 in both environments; wallet journeys 7/7; deployed ERC-4337 account 11/11; Bare entry point 4/4; twelve mutations of the real sell script detected. The four full-stack probes could not run at `d35b031`, whose challenge check rejected the local API's `[loc]_` challenge; with the module environment `local` they ran at `efc82f3` on 2026-11-06 with the results of `20ec94d` (section 18) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
 See [`e2e/README.md`](e2e/README.md) for prerequisites and side effects before running anything under `e2e/`.
@@ -361,7 +362,7 @@ and answers `PUT /v2/kyc` with 503. The same account then still quotes and opens
 level 20.
 
 Wallet-visible note: on that 503 the widget loops on its *Continue* spinner instead of showing an error. This is DFX
-app behaviour.
+app behaviour; with DFX app `cf7ed196` it shows "Something went wrong" instead (section 18).
 
 ## 8. Deployed ERC-4337 account
 
@@ -575,12 +576,14 @@ Production uses the same code; it was not tested there. The module cannot work a
   payout cannot be reached with test money, and no sale was made with real money in production.
 - **A rejected transfer in the wallet.** WDK sends without a confirmation dialog, so a transfer that the user
   rejects in the wallet cannot occur in these runs.
-- **A scheduled run.** No scheduled run of `e2e/real-sell.mjs` exists. It needs a funded Sepolia account with its own
-  invented IBAN on the DFX sandbox and a repository secret for its seed, which a maintainer has to set up.
+- **A scheduled run.** `.github/workflows/live-e2e.yml` runs `e2e/real-sell.mjs` against the DFX sandbox on manual
+  start only; it has not run on GitHub. A schedule needs the repository secrets `TEST_SEED` and `TEST_IBAN`, a funded
+  Sepolia account with its own invented IBAN on the DFX sandbox, and an owner, which a maintainer has to set up.
 - **A token bought with real money into an ERC-4337 account.** The real purchase into a smart account was ETH
   (section 14); the real purchase of USDC paid out to an EOA (section 16). USDC into a smart account is covered by
   quotes and widget tests only. `e2e/safe-rescue.mjs` moved USDC out of a Safe only on a fork; `e2e/bundler-send.mjs` sent 1 USDC out of a
   Safe through a bundler on Base (section 15), USDC that was sent to the account by hand, not bought.
+  `e2e/real-buy.mjs` scripts such a purchase; no run of it is recorded in this document.
 - **Paymasters.** WDK's UserOperation path was exercised with the account paying its own gas in ETH (section 15).
   Sponsored and token paymasters were not exercised.
 - **Deposit detection on mainnet.** The sandbox detected real deposits on Sepolia (section 17); the local tests start
@@ -908,9 +911,9 @@ payout, a sale with real money in production, or a rejected transfer (section "N
 
 ## 18. Re-run of the `e2e/` probes at `d35b031` (2026-11-05)
 
-Every probe under `e2e/` that can run against the current module was run again at `d35b031` from a clean
+Every probe under `e2e/` that could run against the module was run again at `d35b031` from a clean
 working tree; of the four full-stack probes only `fullstack.mjs` was started, and it stopped at its first module
-step (below). They ran one after another on macOS arm64, all on Node v22.23.4 except `bare-smoke.mjs`, which runs on the
+step. All four ran at `efc82f3` with the module environment `local` (below). They ran one after another on macOS arm64, all on Node v22.23.4 except `bare-smoke.mjs`, which runs on the
 Bare runtime (below). `native-quotes.mjs`,
 `live-matrix.mjs`, `safe-deployed.mjs` and the wallet simulator of `wallet-journeys.mjs` load the module copy that
 `npm ci` installed into `e2e/node_modules` (`install-links=true`); `signature-diff.mjs` imports `../src/signature.js`
@@ -928,7 +931,7 @@ wrote and does not load the module:
 | `safe-deployed.mjs` (`ANVIL_FORK_URL=https://polygon.drpc.org`) | 11/11 |
 | `bare-smoke.mjs` | 4/4. `npx --yes bare@1.34.1 bare-smoke.mjs` stopped with `bare: command not found` on the test machine: the installed `bare` package had no `bin/bare`, and the runtime binary of `bare-runtime-darwin-arm64` had no execute permission. The probe ran with that runtime binary made executable. `bare@1.34.1` now resolves the Bare runtime v1.36.0 (v1.35.0 on 2026-10-20) |
 | `real-sell.mjs` | section 17; the run at the final head is in the pull request description |
-| `fullstack.mjs`, `fullstack-processing.mjs`, `fullstack-lifecycle.mjs`, `kyc-widget.mjs` | cannot run against the current module, below |
+| `fullstack.mjs`, `fullstack-processing.mjs`, `fullstack-lifecycle.mjs`, `kyc-widget.mjs` | could not run at `d35b031`; run at `efc82f3` with the module environment `local`, below |
 
 The production live matrix created throwaway DFX users, none with KYC or funds: EVM
 `0x4E73dfb30D2f3d4922F59D65E17B69D0B45b831F`, the ERC-4337 account on Polygon and Base
@@ -942,10 +945,35 @@ challenge starts with `[loc]_`. Since the sign-in challenge check (section 1), t
 (`[dev]_`) or production text and rejects every other challenge. On 2026-11-05 a local stack was brought up (DFX API
 `develop` at `73efbef7`, `DFXswiss/app` `develop` at `cf7ed196`, an isolated Compose project on ports 3040/3041, the
 frontend rebuilt with that API origin), and `fullstack.mjs` stopped at its first module step with `Unexpected DFX
-sign-in challenge`; the other three were not started for the same reason. They can run again only with a module
-environment for a local API, which the module deliberately does not have. Their last results are those of `20ec94d`
-(section 12). In `fullstack.mjs` and `fullstack-processing.mjs` the fixed IBAN, which belongs to a real person, was
-replaced by the local test IBAN `CH3600000000000000000`.
+sign-in challenge`; the other three were not started for the same reason. In `fullstack.mjs` and
+`fullstack-processing.mjs` the fixed IBAN, which belongs to a real person, was replaced by the local test IBAN
+`CH3600000000000000000`.
+
+**Environment `local` (2026-11-06).** Since `f64b8d4` the module has a fourth environment, `local`, for exactly this
+stack: `apiUrl` and `appUrl` must be HTTP(S) loopback origins (`localhost`, `127.0.0.1` or `[::1]`, no path, query,
+fragment or credentials), every request goes to `apiUrl`, widget URLs are built on `appUrl`, and only the `[loc]_`
+challenge is signed; `apiUrl` and `appUrl` are rejected in every other environment. Since `f6f6f28` the four probes
+register the module with `environment: 'local'` instead of signing in as sandbox and rewriting the host. Seven
+mutations of these rules were applied one at a time to `src/` (any host accepted, the sandbox prefix signed in
+`local`, the client ignoring `apiUrl`, `apiUrl` accepted outside `local`, the widget ignoring `appUrl`, a path
+accepted, `appUrl` unchecked); `npm test` failed for each, with 16, 2, 3, 4, 1, 14 and 14 of 756 tests.
+
+The four probes then ran against the module of `efc82f3`, installed into `e2e/node_modules`, one after another on
+Node v22.23.4, against a fresh local stack: DFX API `develop` at `9378fdde` (`/version`), `DFXswiss/app` `develop` at
+`cf7ed196`, the isolated Compose project on ports 3040/3041 and the frontend rebuilt with that API origin.
+`fullstack.mjs` ran with the harness's own job settings; for the other three only the API was restarted with
+`DISABLED_PROCESSES` set as in [`e2e/README.md`](e2e/README.md) (126 of the backend's processes disabled, the 13
+listed there enabled):
+
+| Probe | Result at `efc82f3` | As on `20ec94d` (section 12) |
+| --- | --- | --- |
+| `fullstack.mjs` | 29/29 steps, exit 0; the sell bank account is `CH3600000000000000000` | yes |
+| `fullstack-processing.mjs` | 24 steps OK, 2 red: sell matching by the real `BuyFiat` job, the +10 % counter-test unmatched and `NoSuchElementError` from the module; the two six-minute observation steps red because this probe does not perform the operating steps the AML decision needs (section 11) | yes |
+| `fullstack-lifecycle.mjs` (`OBSERVE_MINUTES=15`) | 56 steps OK, 2 red: the crypto payout for buy A ("no positive crypto output and fee") and the fiat bank execution for the sale ("no executable fiat output") are not prepared by the local stack | yes |
+| `kyc-widget.mjs` | 41 steps OK, 2 red: sign-in, level 10, level 20 and nationality through the UI, then quote and widget for the same account; on *Continue* the API log shows 14 × `PUT /v2/kyc` 503 from `SumsubService.createApplicant` (section 7), and the probe's own boundary check stays red because no identification step is created (section 11). The widget now shows "Something went wrong" with *Continue* instead of a spinner | yes, apart from the widget's message |
+
+The widget's reaction to that 503 differs from section 7 (DFX app `1321f956` there, `cf7ed196` here); it is DFX app
+behaviour, and the module is not involved in it.
 
 **Mutations at `d35b031`.** The twelve mutations of section 17 were repeated on the script as of `d35b031` (which
 added the fixed-block read retry after `6960dd0`), each pattern matching exactly once; all twelve exited 1 at the

@@ -295,9 +295,10 @@ sandbox observations alone do not establish production embedding support.
 
 ### Local full stack
 
-Since the module checks the exact sign-in challenge, it rejects the local API's
-`[loc]_` challenge, so the four full-stack probes below stop at their first
-module step against the current module (`TESTING.md` section 18).
+The four full-stack probes below register the module with
+`environment: 'local'` and the API and app origins of the local stack. In that
+environment the module signs only the local API's `[loc]_` challenge and sends
+every request to the local API (`TESTING.md` section 18).
 
 Requires Docker on `PATH` and the disposable full-stack harness from
 `DFXswiss/app`, directory `e2e-stack/`, already running with its initialized
