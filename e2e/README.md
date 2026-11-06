@@ -86,6 +86,40 @@ or blocked steps.
 
 ## Commands
 
+### Real purchase in production (`real-buy.mjs`)
+
+This probe uses real money and production DFX. It derives a Base account from an
+existing owner-only seed file and displays a EUR quote. Without `--confirm` it
+exits after the quote, without signing in or preparing a purchase. With
+`--confirm`, it authenticates, which can create a production user, and prepares
+a purchase. A person must open the private URL file, complete the DFX widget
+steps and make the bank transfer. The script does not make the bank transfer.
+
+```sh
+node real-buy.mjs --seed-file <path>
+node real-buy.mjs --seed-file <path> --url-file <new-private-path> --confirm
+```
+
+The default is 15 EUR of USDC to account index 0 of a Base ERC-4337 Safe
+(version 0.3.0). Use `--account eoa` for an EOA, `--index <number>`,
+`--amount <EUR>`, `--rpc <url>`, or `--wait-minutes <minutes>` to change the
+corresponding setting. `--asset` currently accepts USDC. The URL file must not
+exist and is created with mode 0600; it contains a session and must be kept
+private. JSON lines go to stdout and optionally to a new 0600 file with
+`--out <path>`; the seed, session and full URL are not printed.
+
+The script polls the module and the production transaction detail endpoint
+until completion. It checks the backend record and payout hash, successful
+receipt, exactly one USDC transfer to the derived account, the rounded backend
+amount, the balance change at the payout block, and module details by both IDs.
+The original widget session is used for the backend evidence; if it expires
+before completion, verification fails. A successful run writes
+`echter-lauf.json` at the Git path. Exit 0 means the quote-only run or all
+confirmed checks passed; exit 1 means a confirmed run failed or timed out;
+exit 2 means invalid arguments or output file; exit 3 means the run could not
+start. A failed confirmed run may already have created a production user or
+purchase; do not assume that no purchase exists.
+
 ### Real purchase script (`real-purchase.mjs`)
 
 This script prepares a real EUR-to-USDC purchase on Arbitrum in production and
