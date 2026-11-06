@@ -159,8 +159,8 @@ const wallets = []
 const detailTraces = []
 async function localFetch(input, init) {
   const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
-  assert.equal(url.origin, 'https://dev.api.dfx.swiss', 'Unexpected module API origin')
-  const response = await fetch(`${API}${url.pathname}${url.search}`, { ...init, redirect: 'error', signal: AbortSignal.timeout(20000) })
+  assert.equal(url.origin, API, 'Unexpected module API origin')
+  const response = await fetch(input, { ...init, redirect: 'error', signal: AbortSignal.timeout(20000) })
   if (url.pathname === '/v1/auth' && response.ok) {
     const auth = await response.clone().json()
     if (auth.accessToken) secrets.add(auth.accessToken)
@@ -193,13 +193,11 @@ async function widget(kind, ext) {
     config: { externalTransactionId: ext } }
   const trade = await fiat[kind](options)
   const url = new URL(trade[`${kind}Url`])
-  assert.equal(url.origin, 'https://dev.app.dfx.swiss')
+  assert.equal(url.origin, APP)
   assert.equal(url.searchParams.get('external-transaction-id'), ext)
   token = url.searchParams.get('session')
   assert(token, 'Widget session missing')
   secrets.add(token)
-  url.protocol = new URL(APP).protocol
-  url.host = new URL(APP).host
   return { url: url.toString(), ext, kind }
 }
 async function openWidget(spec, context, sellIban) {
@@ -678,7 +676,7 @@ async function main() {
       wdk = new WDK(seed)
       wallets.push(wdk)
       wdk.registerWallet('ethereum', WalletManagerEvm, { provider: API })
-        .registerProtocol('ethereum', 'dfx', DfxProtocol, { environment: 'sandbox', network: 'ethereum', language: 'en', fetch: localFetch })
+        .registerProtocol('ethereum', 'dfx', DfxProtocol, { environment: 'local', apiUrl: API, appUrl: APP, network: 'ethereum', language: 'en', fetch: localFetch })
       const account = await wdk.getAccount('ethereum', 0)
       address = await account.getAddress()
       fiat = account.getFiatProtocol('dfx')

@@ -118,8 +118,8 @@ async function step(name, fn) {
 }
 async function localFetch(input, init) {
   const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
-  assert.equal(url.origin, 'https://dev.api.dfx.swiss', 'Unexpected module origin')
-  const response = await fetch(`${API}${url.pathname}${url.search}`, {
+  assert.equal(url.origin, API, 'Unexpected module origin')
+  const response = await fetch(input, {
     ...init, redirect: 'error', signal: AbortSignal.timeout(20000)
   })
   const body = await response.clone().json().catch(() => null)
@@ -134,12 +134,10 @@ async function localFetch(input, init) {
 async function widget() {
   const trade = await fiat.buy({ ...options, config: { externalTransactionId: `${runId}-${results.steps.length}` } })
   const url = new URL(trade.buyUrl)
-  assert.equal(url.origin, 'https://dev.app.dfx.swiss')
+  assert.equal(url.origin, APP)
   session = url.searchParams.get('session')
   assert(session, 'Missing module session')
   secrets.add(session)
-  url.protocol = new URL(APP).protocol
-  url.host = new URL(APP).host
   return url.href
 }
 async function open(url) {
@@ -310,7 +308,7 @@ async function main() {
     const seed = WDK.getRandomSeedPhrase()
     secrets.add(seed)
     wdk = new WDK(seed).registerWallet('ethereum', WalletManagerEvm, { provider: API })
-      .registerProtocol('ethereum', 'dfx', DfxProtocol, { environment: 'sandbox', network: 'ethereum', language: 'en', fetch: localFetch })
+      .registerProtocol('ethereum', 'dfx', DfxProtocol, { environment: 'local', apiUrl: API, appUrl: APP, network: 'ethereum', language: 'en', fetch: localFetch })
     const account = await wdk.getAccount('ethereum', 0)
     address = await account.getAddress()
     fiat = account.getFiatProtocol('dfx')
