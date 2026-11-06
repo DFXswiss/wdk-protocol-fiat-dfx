@@ -1,5 +1,5 @@
 # Manual live Sepolia sell against the DFX sandbox.
-# Enable the schedule only when TEST_SEED and TEST_IBAN repo secrets are set,
+# Enable the schedule only when the TEST_SEED repo secret is set,
 # the test account has Sepolia ETH and USDT, and an owner is named here.
 # Owner: not yet assigned.
 
@@ -50,18 +50,16 @@ jobs:
         working-directory: e2e
         env:
           TEST_SEED: ${{ secrets.TEST_SEED }}
-          TEST_IBAN: ${{ secrets.TEST_IBAN }}
           ACCOUNT: ${{ inputs.account || 'all' }}
           FOLLOW: ${{ inputs.follow || '0' }}
         run: |
-          if [ -z "$TEST_SEED" ] || [ -z "$TEST_IBAN" ]; then
-            echo 'TEST_SEED and TEST_IBAN repository secrets are required.' >&2
+          if [ -z "$TEST_SEED" ]; then
+            echo 'TEST_SEED repository secret is required.' >&2
             exit 1
           fi
           umask 077
           printf '%s\n' "$TEST_SEED" > "$RUNNER_TEMP/seed"
-          printf '%s\n' "$TEST_IBAN" > "$RUNNER_TEMP/iban"
-          node real-sell.mjs --seed-file "$RUNNER_TEMP/seed" --iban-file "$RUNNER_TEMP/iban" --account "$ACCOUNT" --follow "$FOLLOW" --out "$RUNNER_TEMP/real-sell.jsonl" --screenshots "$RUNNER_TEMP/shots" --send --confirm
+          node real-sell.mjs --seed-file "$RUNNER_TEMP/seed" --account "$ACCOUNT" --follow "$FOLLOW" --out "$RUNNER_TEMP/real-sell.jsonl" --screenshots "$RUNNER_TEMP/shots" --send --confirm
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -72,4 +70,4 @@ jobs:
           retention-days: 14
       - name: Remove secret files
         if: always()
-        run: rm -f "$RUNNER_TEMP/seed" "$RUNNER_TEMP/iban"
+        run: rm -f "$RUNNER_TEMP/seed"

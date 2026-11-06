@@ -132,7 +132,7 @@ function inventedIban (other) {
 function parseArgs (args) {
   const options = { rpc: DEFAULT_RPC, bundler: DEFAULT_BUNDLER, explorer: 'https://sepolia.etherscan.io', follow: '0', account: 'all', asset: 'all', send: false, confirm: false }
   const valued = new Map([
-    ['--seed-file', 'seedFile'], ['--iban-file', 'ibanFile'], ['--asset', 'asset'],
+    ['--seed-file', 'seedFile'], ['--asset', 'asset'],
     ['--rpc', 'rpc'], ['--bundler', 'bundler'], ['--account', 'account'], ['--lock', 'lock'], ['--out', 'out'],
     ['--screenshots', 'screenshots'], ['--explorer', 'explorer'], ['--follow', 'follow']
   ])
@@ -154,7 +154,6 @@ function parseArgs (args) {
     }
   }
   if (!options.seedFile) throw new UsageError('Required argument missing: --seed-file <path>')
-  if (!options.ibanFile) throw new UsageError('Required argument missing: --iban-file <path>')
   if (!['USDT', 'ETH', 'all'].includes(options.asset)) throw new UsageError('--asset must be USDT, ETH or all')
   if (!['eoa', 'smart', 'all'].includes(options.account)) throw new UsageError('--account must be eoa, smart or all')
   if (options.send !== options.confirm) throw new UsageError('--send and --confirm are both required to send')
@@ -196,14 +195,16 @@ async function screenshot (page, tools, asset, number, step, widget = false) {
       const style = globalThis.getComputedStyle(el)
       return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'
     }
-    const count = (text, value) => compactText(text).split(value).length - 1
-    const matches = elements.filter(el => visible(el) && values.some(value => {
-      const own = count(el.innerText, value)
-      const children = [...el.children].reduce((sum, child) => sum + count(child.innerText, value), 0)
-      return own > children
+    const findIbans = text => {
+      const raw = text || ''
+      const shaped = raw.match(/(?<![A-Z0-9])[A-Z]{2}[ \u00a0]*\d[ \u00a0]*\d(?:[ \u00a0]*[A-Z0-9]){11,30}(?![A-Z0-9])/gi) || []
+      return [...shaped.map(compactText), ...values.filter(value => compactText(raw).includes(value))]
+    }
+    const matches = elements.filter(el => visible(el) && findIbans(el.innerText).some(value => {
+      return ![...el.children].some(child => visible(child) && compactText(child.innerText).includes(value))
     }))
     for (const el of matches) el.setAttribute('data-e2e-iban-mask', 'true')
-    return { text: values.some(value => compactText(globalThis.document.body.innerText).includes(value)), count: matches.length }
+    return { text: findIbans(globalThis.document.body.innerText).length > 0, count: matches.length }
   }, ibans)
   if (widget && found.text && found.count === 0) throw new Error('IBAN is visible in widget text but no element is masked')
   await page.screenshot({
@@ -295,7 +296,7 @@ function invocation () {
   const parts = [process.argv[0], process.argv[1]]
   for (let i = 2; i < process.argv.length; i++) {
     const name = process.argv[i]
-    if (name === '--seed-file' || name === '--iban-file') {
+    if (name === '--seed-file') {
       i += 1
       continue
     }
@@ -465,7 +466,7 @@ function paymentFacts (capture) {
   }
 }
 
-async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart, tools) {
+async function openSell (browser, sellUrl, iban, ext, spec, first, tools) {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
   const page = await context.newPage()
   page.setDefaultTimeout(45_000)
@@ -519,7 +520,7 @@ async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart, t
       await screenshot(page, tools, spec.asset, '01', 'widget-loaded', true)
     }
     let preselected = false
-    if (smart && !firstSmart) {
+    if (!first) {
       const deadline = Date.now() + 60_000
       let opened = false
       while (Date.now() <= deadline) {
@@ -547,7 +548,7 @@ async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart, t
     } else {
       await clickExactText(page, compact('Add or select your IBAN'), 60_000, 'Add or select your IBAN is not shown')
     }
-    if (firstSmart) {
+    if (first) {
       const input = page.locator('input[name="iban"]')
       await input.waitFor({ state: 'visible', timeout: 30_000 })
       await input.fill(iban)
@@ -561,10 +562,10 @@ async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart, t
           return text(el) === wanted && ![...el.children].some(child => text(child) === wanted) && rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'
         })
       }, compact(iban))
-      if (matchingOption) throw new Error('IBAN option already exists in the first Safe case')
+      if (matchingOption) throw new Error('IBAN option already exists in the first case for this account')
       await button.click()
     } else if (!preselected) {
-      await clickExactText(page, compact(iban), 30_000, 'No IBAN option matches the IBAN file')
+      await clickExactText(page, compact(iban), 30_000, 'No IBAN option matches the invented IBAN')
     }
     // The widget PUTs paymentInfos more than once and may switch fiat, so the visible address has to stay still.
     const deadline = Date.now() + PAYMENT_TIMEOUT_MS
@@ -975,7 +976,7 @@ async function runCase (spec, tools, evidence) {
     }
 
     step = 'paymentInfos'
-    const payment = await openSell(tools.browser, sold.sellUrl, tools.iban, ext, spec, tools.kind === 'smart', tools.first, tools)
+    const payment = await openSell(tools.browser, sold.sellUrl, tools.iban, ext, spec, tools.first, tools)
     emit({
       step,
       asset: spec.asset,
@@ -1101,9 +1102,9 @@ async function main () {
   assertSingleWalletCopy()
   const walletVersion = packageVersion('@tetherto/wdk-wallet-evm')
   const seed = await readPrivateFile(options.seedFile, 'Seed file')
-  const iban = await readPrivateFile(options.ibanFile, 'IBAN file')
   rememberSecret(seed)
   rememberSecret(seed.trim().split(/\s+/).join(' '))
+  const iban = inventedIban()
   rememberIban(iban)
   const smartIban = inventedIban(iban)
   rememberIban(smartIban)
@@ -1177,8 +1178,11 @@ async function main () {
   const runId = `${Date.now()}-${randomBytes(3).toString('hex')}`
   emit({ step: 'ready', asset: null, ok: true, runId, address: accountAddress, send: options.send })
   const evidence = { txs: [], backend: [] }
-  const tools = { runId, fiat, account, accountAddress, iban, ibans: [iban, smartIban], provider: state.provider, usdt, browser: state.browser, send: options.send, kind: 'eoa', screenshots: options.screenshots, explorer: options.explorer, follow: options.follow }
-  if (useEoa) for (const spec of cases) await runCase(spec, tools, evidence)
+  const tools = { runId, fiat, account, accountAddress, iban, ibans: [iban, smartIban], provider: state.provider, usdt, browser: state.browser, send: options.send, kind: 'eoa', first: true, screenshots: options.screenshots, explorer: options.explorer, follow: options.follow }
+  if (useEoa) for (const spec of cases) {
+    await runCase(spec, tools, evidence)
+    tools.first = false
+  }
   if (useSmart) {
     state.account = 'smart'
     if (options.send) {

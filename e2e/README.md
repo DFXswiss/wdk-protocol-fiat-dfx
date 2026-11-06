@@ -540,19 +540,21 @@ WDK account on Sepolia, `quoteSell` and `sell` against the DFX sandbox, then
 the widget in headless Chromium. It reads `PUT /v1/sell/paymentInfos` as the
 page receives it. Nothing is stubbed and no response is rewritten.
 
-For the EOA cases, account 0 needs a DFX dev account with an IBAN invented for this
-test. For sending, account 0 also needs Sepolia ETH and Sepolia USDT
+For the EOA cases, account 0 needs a DFX dev account. For sending, account 0
+also needs Sepolia ETH and Sepolia USDT
 (`0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0`). Install Playwright's Chromium
-as in the prerequisites above. The seed file and the IBAN file have no default
-path. Each must be a non-empty regular file owned by the current user, with
+as in the prerequisites above. The seed file has no default path. It must be a
+non-empty regular file owned by the current user, with
 owner-only permissions (for example `0600`), and must not be a symlink. The
-seed file contains only the phrase and the IBAN file only the IBAN. For the EOA,
-the widget must open on "Add or select your IBAN"; an already selected IBAN is
-not accepted. For later Safe cases, the preselected invented IBAN is accepted
-because it is the new account's only IBAN and the request must contain it.
-The script clicks only the option whose text, with whitespace
-removed, equals that IBAN. Any other IBAN on the same account is never clicked.
-For the EOA, if that option is missing, the run stops before that asset is sent; with
+seed file contains only the phrase. The script invents a different checksum-valid
+Swiss IBAN for each account on each run. In the first case for an account, it
+opens "Add or select your IBAN", checks that the invented IBAN is not already
+an option, and adds it using the form. Each EOA run therefore adds another bank
+account in the sandbox, including dry runs. In later cases, it clicks only the
+option whose text, with whitespace removed, equals that account's invented IBAN,
+or accepts a preselection only when a payment-info request contains that IBAN.
+Any other IBAN on the same account is never clicked. If the required option or
+preselection is missing, the run stops before that asset is sent; with
 `--asset all`, a USDT sale sent earlier in the same run stays sent. Once the
 address is taken, the script reads the visible page, closes the widget, and
 only then checks that every payment-info response received until the widget
@@ -560,10 +562,10 @@ closed was readable and that the latest matching one and the visible address
 are unchanged; otherwise it stops before sending.
 
 ```sh
-node real-sell.mjs --seed-file <path> --iban-file <path> [--asset USDT|ETH|all] \
+node real-sell.mjs --seed-file <path> [--asset USDT|ETH|all] \
   [--account eoa|smart|all] [--rpc <url>] [--bundler <url>] [--lock <dir>] [--out <path>] \
   [--screenshots <dir>] [--explorer <origin>] [--follow <minutes>]
-node real-sell.mjs --seed-file <path> --iban-file <path> --send --confirm
+node real-sell.mjs --seed-file <path> --send --confirm
 ```
 
 `--asset` defaults to `all`, USDT first and then ETH. USDT sells 1 USDT. ETH
@@ -579,7 +581,8 @@ file with mode `0600`.
 information for each case, and, when sending, for each deposit on the explorer.
 Safe funding transactions also get explorer screenshots. The directory is
 created with mode `0700`; an existing directory must have that mode, be owned
-by the current user and not be a symlink. Both test IBANs are masked. The
+by the current user and not be a symlink. The mask covers both invented IBANs,
+the IBAN input, and any IBAN-shaped text, including existing bank accounts. The
 explorer defaults to `https://sepolia.etherscan.io`; use `--explorer <origin>`
 to override it. A missing hash or `Success` on the explorer within 90 seconds
 fails the run.
@@ -597,9 +600,8 @@ a fresh Safe at a random account index and requires it to be undeployed. The
 bundler defaults to `https://api.candide.dev/public/v3/11155111`; override it
 with `--bundler`. Its chain and EntryPoint v0.7 are checked before the flow.
 The Safe signs in with its own address, and its deposits are UserOperations.
-The script generates a fresh checksum-valid Swiss IBAN for that Safe and creates
-a new dev user and bank account each run, including a smart-account dry run.
-It selects only that IBAN or fills the bank account form when it is absent.
+The script creates a new dev user and bank account for that Safe each run,
+including a smart-account dry run.
 
 When neither `--send` nor `--confirm` is given, the script stops once a valid
 payment-info response is on screen and the deposit address is visible, then
@@ -622,7 +624,7 @@ retried. The script checks the UserOperation event and receipt on the chain RPC.
 
 Exit 0 means the run passed. Exit 1 means a check failed at or after
 `quoteSell`. Exit 2 means the command line is wrong. Exit 3 means the run did
-not start: the lock is held, the seed or IBAN file is missing or unsafe, the
+not start: the lock is held, the seed file is missing or unsafe, the
 chain id is wrong, the RPC or `https://dev.api.dfx.swiss/version` is
 unreachable, the Safe is already deployed or the bundler preflight fails, or,
 with `--send`, the balance is too small. The EOA ETH balance must cover every
@@ -639,8 +641,8 @@ Screenshots are optional; the script records no traces or video. Without
 confirmation dialog, so a rejected wallet prompt is not covered.
 
 The `Live Sepolia E2E` GitHub Actions workflow is started manually with
-`account` and `follow` inputs. Configure repository secrets `TEST_SEED` and
-`TEST_IBAN` and fund the test account with Sepolia ETH and USDT first. The
+`account` and `follow` inputs. Configure the repository secret `TEST_SEED`
+and fund the test account with Sepolia ETH and USDT first. The
 workflow uploads the JSONL and masked screenshots as an artifact retained for
 14 days. To enable its commented schedule, meet those secret and funding
 requirements and name an owner in the workflow header before uncommenting it.
