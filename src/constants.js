@@ -193,12 +193,13 @@ export const SAFE_V0_3_0_INIT_OVERRIDES = Object.freeze({
   safeModuleSetupAddress: '0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47'
 })
 
-// DFX API sign-in message: production has no prefix, sandbox prefixes `[dev]_`.
+// DFX API sign-in message: production has no prefix, sandbox uses `[dev]_` and local uses `[loc]_`.
 // The address is appended exactly as sent in ?address=. The prefix split matches
 // DfxClient's API host and the widget app host.
 export const SIGN_IN_CHALLENGE_PREFIX = Object.freeze({
   production: '',
-  sandbox: '[dev]_'
+  sandbox: '[dev]_',
+  local: '[loc]_'
 })
 
 export const SIGN_IN_CHALLENGE = 'By_signing_this_message,_you_confirm_that_you_are_the_sole_owner_of_the_provided_Blockchain_address._Your_ID:_'

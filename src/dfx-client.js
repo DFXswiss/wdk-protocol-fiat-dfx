@@ -26,7 +26,7 @@ export default class DfxClient {
     /** @private */
     this._timeout = config.timeout ?? 30000
     /** @private */
-    this._base = config.environment === 'sandbox' ? 'https://dev.api.dfx.swiss' : 'https://api.dfx.swiss'
+    this._base = config.environment === 'local' ? config.apiUrl : config.environment === 'sandbox' ? 'https://dev.api.dfx.swiss' : 'https://api.dfx.swiss'
   }
 
   /** @internal */

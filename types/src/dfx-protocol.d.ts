@@ -1,7 +1,11 @@
 /** Configuration for DFX API and widget access. */
 export interface DfxProtocolConfig {
-    /** API and app environment. Only sandbox selects sandbox; otherwise production is used. */
-    environment?: 'production' | 'sandbox';
+    /** API and app environment. Only sandbox and local select those environments; otherwise production is used. */
+    environment?: 'production' | 'sandbox' | 'local';
+    /** Required in local only: HTTP(S) loopback origin for the API. */
+    apiUrl?: string;
+    /** Required in local only: HTTP(S) loopback origin for the widget. */
+    appUrl?: string;
     /** Partner identifier supplied by the integrating wallet developer. No default. */
     wallet?: string;
     /** Non-empty DFX blockchain name binding the account to its chain, case-insensitively. No default. */
@@ -59,6 +63,10 @@ export default class DfxProtocol extends FiatProtocol {
      * @overload
      * @param {undefined} [account] - Omit to access only quotes and supported lists.
      * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+     * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
+     * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
+     * @throws {ValueError} If apiUrl is supplied outside local.
+     * @throws {ValueError} If appUrl is supplied outside local.
      * @throws {ValueError} If timeout is non-finite or non-positive.
      * @throws {ValueError} If timeout exceeds 2147483647 milliseconds.
      * @throws {ValueError} If network is supplied but is empty or whitespace-only.
@@ -73,6 +81,10 @@ export default class DfxProtocol extends FiatProtocol {
      * @overload
      * @param {IWalletAccountReadOnly} readOnlyAccount - Read-only account; buy/sell throw AccountRequiredError and getTransactionDetail throws ProviderError.
      * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+     * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
+     * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
+     * @throws {ValueError} If apiUrl is supplied outside local.
+     * @throws {ValueError} If appUrl is supplied outside local.
      * @throws {ValueError} If timeout is non-finite or non-positive.
      * @throws {ValueError} If timeout exceeds 2147483647 milliseconds.
      * @throws {ValueError} If network is supplied but is empty or whitespace-only.
@@ -87,6 +99,10 @@ export default class DfxProtocol extends FiatProtocol {
      * @overload
      * @param {IWalletAccount} signingAccount - Account used to sign DFX authentication messages.
      * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+     * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
+     * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
+     * @throws {ValueError} If apiUrl is supplied outside local.
+     * @throws {ValueError} If appUrl is supplied outside local.
      * @throws {ValueError} If timeout is non-finite or non-positive.
      * @throws {ValueError} If timeout exceeds 2147483647 milliseconds.
      * @throws {ValueError} If network is supplied but is empty or whitespace-only.

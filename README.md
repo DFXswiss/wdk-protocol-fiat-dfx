@@ -76,7 +76,9 @@ no user-supplied environment variables and run in `npm run test:coverage`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `environment` | `'production'` | Only `'sandbox'` selects sandbox; otherwise production is used |
+| `environment` | `'production'` | `'sandbox'` selects sandbox, `'local'` selects local; otherwise production is used |
+| `apiUrl` | unset | Required only in local: HTTP(S) origin with host `localhost`, `127.0.0.1` or `[::1]`, without credentials, query or fragment; an optional `/` path is allowed |
+| `appUrl` | unset | Required only in local: HTTP(S) origin with host `localhost`, `127.0.0.1` or `[::1]`, without credentials, query or fragment; an optional `/` path is allowed |
 | `wallet` | unset | Partner identifier supplied by the integrating wallet developer; forwarded to both quotes and authentication |
 | `network` | unset | Account's DFX blockchain name, compared case-insensitively; required for `buy` and `sell` |
 | `publicKey` | unset | Public key sent as `key` during authentication (e.g. Arweave, Cardano, Internet Computer) |
@@ -383,7 +385,7 @@ same fallback.
 See [SECURITY.md](SECURITY.md) for private vulnerability reporting. No logging or
 telemetry is implemented. Private keys and seeds are never read. `sign` is called
 only when the DFX challenge equals the expected text for the selected environment
-and the exact address sent in `?address=`, including the sandbox `[dev]_` prefix.
+and the exact address sent in `?address=`, including the sandbox `[dev]_` or local `[loc]_` prefix.
 When the recovered signer differs, `signTypedData` is available and the
 constructor network has a known chain id, the account also signs Safe EIP-712
 typed data whose `SafeMessage` bytes are the EIP-191 hash of that message.

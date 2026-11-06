@@ -8,6 +8,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- Support a local DFX API and widget through `environment: 'local'` and required loopback origins, with the `[loc]_` sign-in challenge prefix.
 - Reject a DFX sign-in challenge unless it is exactly the environment prefix,
   the fixed DFX ownership sentence, and the address sent in the request.
   Production uses an empty prefix; sandbox uses `[dev]_`. A mismatch is rejected

@@ -6,7 +6,7 @@ import { expect } from '@jest/globals'
 const SIGN_IN_CHALLENGE = 'By_signing_this_message,_you_confirm_that_you_are_the_sole_owner_of_the_provided_Blockchain_address._Your_ID:_'
 
 export function challengeMessage (address, environment = 'production') {
-  const prefix = environment === 'sandbox' ? '[dev]_' : ''
+  const prefix = environment === 'local' ? '[loc]_' : environment === 'sandbox' ? '[dev]_' : ''
   return prefix + SIGN_IN_CHALLENGE + address
 }
 
@@ -27,7 +27,7 @@ export function httpRequest (path, method = 'GET', body, token, environment = 'p
   const headers = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (token !== undefined) headers.Authorization = `Bearer ${token}`
-  const base = environment === 'sandbox' ? 'https://dev.api.dfx.swiss' : 'https://api.dfx.swiss'
+  const base = environment === 'local' ? 'http://localhost:3040' : environment === 'sandbox' ? 'https://dev.api.dfx.swiss' : 'https://api.dfx.swiss'
   return [`${base}${path}`, { method, headers, body }]
 }
 

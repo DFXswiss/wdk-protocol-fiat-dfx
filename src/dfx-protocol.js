@@ -28,7 +28,9 @@ import { BLOCKCHAINS, ERC6492_NETWORKS, EVM_BLOCKCHAINS, EVM_CHAIN_IDS, FAILED_S
  * Configuration for DFX API and widget access.
  *
  * @typedef {Object} DfxProtocolConfig
- * @property {'production' | 'sandbox'} [environment] - API and app environment. Only sandbox selects sandbox; otherwise production is used.
+ * @property {'production' | 'sandbox' | 'local'} [environment] - API and app environment. Only sandbox and local select those environments; otherwise production is used.
+ * @property {string} [apiUrl] - Required in local only: HTTP(S) loopback origin for the API.
+ * @property {string} [appUrl] - Required in local only: HTTP(S) loopback origin for the widget.
  * @property {string} [wallet] - Partner identifier supplied by the integrating wallet developer. No default.
  * @property {string} [network] - Non-empty DFX blockchain name binding the account to its chain, case-insensitively. No default.
  * @property {string} [publicKey] - Public key sent as key during authentication. No default.
@@ -99,6 +101,18 @@ function optionalString (value, name) {
   }
 }
 
+function localOrigin (value, name) {
+  const message = `${name} must be an HTTP(S) loopback origin (localhost, 127.0.0.1 or [::1])`
+  if (typeof value !== 'string' || !/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\/?(?![\s\S])/i.test(value)) {
+    throw new ValueError(message)
+  }
+  try {
+    return new URL(value).origin
+  } catch {
+    throw new ValueError(message)
+  }
+}
+
 function externalTransactionId (value) {
   if (value.length < 1 || value.length > 256 || /[^A-Za-z0-9._:-]/.test(value)) {
     throw new ValueError('externalTransactionId must contain 1–256 characters from A-Z, a-z, 0-9, dot (.), underscore (_), colon (:) and hyphen (-)')
@@ -111,7 +125,7 @@ function sameAddress (left, right) {
 }
 
 function signInChallenge (environment, address) {
-  const prefix = environment === 'sandbox' ? SIGN_IN_CHALLENGE_PREFIX.sandbox : SIGN_IN_CHALLENGE_PREFIX.production
+  const prefix = environment === 'local' ? SIGN_IN_CHALLENGE_PREFIX.local : environment === 'sandbox' ? SIGN_IN_CHALLENGE_PREFIX.sandbox : SIGN_IN_CHALLENGE_PREFIX.production
   return prefix + SIGN_IN_CHALLENGE + address
 }
 
@@ -190,6 +204,10 @@ export default class DfxProtocol extends FiatProtocol {
    * @overload
    * @param {undefined} [account] - Omit to access only quotes and supported lists.
    * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+   * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
+   * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
+   * @throws {ValueError} If apiUrl is supplied outside local.
+   * @throws {ValueError} If appUrl is supplied outside local.
    * @throws {ValueError} If timeout is non-finite or non-positive.
    * @throws {ValueError} If timeout exceeds 2147483647 milliseconds.
    * @throws {ValueError} If network is supplied but is empty or whitespace-only.
@@ -203,6 +221,10 @@ export default class DfxProtocol extends FiatProtocol {
    * @overload
    * @param {IWalletAccountReadOnly} readOnlyAccount - Read-only account; buy/sell throw AccountRequiredError and getTransactionDetail throws ProviderError.
    * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+   * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
+   * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
+   * @throws {ValueError} If apiUrl is supplied outside local.
+   * @throws {ValueError} If appUrl is supplied outside local.
    * @throws {ValueError} If timeout is non-finite or non-positive.
    * @throws {ValueError} If timeout exceeds 2147483647 milliseconds.
    * @throws {ValueError} If network is supplied but is empty or whitespace-only.
@@ -216,6 +238,10 @@ export default class DfxProtocol extends FiatProtocol {
    * @overload
    * @param {IWalletAccount} signingAccount - Account used to sign DFX authentication messages.
    * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+   * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
+   * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
+   * @throws {ValueError} If apiUrl is supplied outside local.
+   * @throws {ValueError} If appUrl is supplied outside local.
    * @throws {ValueError} If timeout is non-finite or non-positive.
    * @throws {ValueError} If timeout exceeds 2147483647 milliseconds.
    * @throws {ValueError} If network is supplied but is empty or whitespace-only.
@@ -232,12 +258,20 @@ export default class DfxProtocol extends FiatProtocol {
     if (timeout > MAX_TIMEOUT_MS) throw new ValueError('timeout must not exceed 2147483647 milliseconds')
     for (const field of ['network', 'wallet', 'publicKey', 'language']) optionalString(config[field], field)
     const environment = config.environment ?? 'production'
+    let apiUrl, appUrl
+    if (environment === 'local') {
+      apiUrl = localOrigin(config.apiUrl, 'apiUrl')
+      appUrl = localOrigin(config.appUrl, 'appUrl')
+    } else {
+      if (config.apiUrl !== undefined) throw new ValueError('apiUrl is only allowed in local')
+      if (config.appUrl !== undefined) throw new ValueError('appUrl is only allowed in local')
+    }
     /** @private */
-    this._config = { ...config, timeout, environment, network: config.network?.toLowerCase() }
+    this._config = { ...config, timeout, environment, apiUrl, appUrl, network: config.network?.toLowerCase() }
     /** @private */
     this._client = new DfxClient(this._config)
     /** @private */
-    this._app = environment === 'sandbox' ? 'https://dev.app.dfx.swiss' : 'https://app.dfx.swiss'
+    this._app = environment === 'local' ? appUrl : environment === 'sandbox' ? 'https://dev.app.dfx.swiss' : 'https://app.dfx.swiss'
   }
 
   /**

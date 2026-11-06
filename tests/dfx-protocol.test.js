@@ -129,7 +129,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       'GET /v1/transaction/detail/single?uid=123': response(DUMMY_DETAIL),
       ...overrides
     }
-    const base = config.environment === 'sandbox' ? 'https://dev.api.dfx.swiss' : 'https://api.dfx.swiss'
+    const base = config.environment === 'local' ? new URL(config.apiUrl).origin : config.environment === 'sandbox' ? 'https://dev.api.dfx.swiss' : 'https://api.dfx.swiss'
     const fetch = fetchMock.mockReset().mockImplementation(async (url, init) => {
       const route = Object.keys(routes).find(route => url === base + route.slice(route.indexOf(' ') + 1) && init.method === route.slice(0, route.indexOf(' ')))
       const value = routes[route]
@@ -2020,6 +2020,37 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
     })
   })
 
+  describe('local configuration', () => {
+    test.each(['apiUrl', 'appUrl'].flatMap(field => [
+      ['missing', field, undefined], ['non-string', field, 42], ['invalid URL', field, 'not a URL'],
+      ['remote host', field, 'http://example.com'], ['lookalike host', field, 'http://localhost.example.com'],
+      ['path', field, 'http://localhost/path'], ['query', field, 'http://localhost?x=1'],
+      ['empty query', field, 'http://localhost?'], ['fragment', field, 'http://localhost#x'],
+      ['empty fragment', field, 'http://localhost#'], ['credentials', field, 'http://user:pass@localhost'],
+      ['scheme', field, 'ftp://localhost'], ['invalid port', field, 'http://localhost:99999'],
+      ['trailing newline', field, 'http://localhost\n']
+    ]))('rejects %s for %s', (_label, field, value) => {
+      const config = { environment: 'local', apiUrl: 'http://localhost:3040', appUrl: 'http://localhost:3021', [field]: value }
+      failureSync(() => new DfxProtocol(undefined, config), ValueError, `${field} must be an HTTP(S) loopback origin (localhost, 127.0.0.1 or [::1])`)
+    })
+
+    test.each(['production', 'sandbox', 'unknown', undefined].flatMap(environment =>
+      ['apiUrl', 'appUrl'].map(field => [environment, field])
+    ))('rejects %s environment with %s', (environment, field) => {
+      failureSync(() => new DfxProtocol(undefined, { environment, [field]: 'http://localhost' }), ValueError, `${field} is only allowed in local`)
+    })
+
+    test.each(['http://localhost', 'https://127.0.0.1:443/', 'http://[::1]:3040'])('accepts loopback origin %s', origin => {
+      expect(() => new DfxProtocol(undefined, { environment: 'local', apiUrl: origin, appUrl: origin })).not.toThrow()
+    })
+
+    test('uses production for an unknown environment', async () => {
+      const { protocol } = setup({ environment: 'unknown' })
+      await protocol.getSupportedCountries()
+      expectInteractions([httpRequest('/v1/country')])
+    })
+  })
+
   describe('sign-in challenge', () => {
     function challengeRequests (environment = 'production') {
       return [
@@ -2047,9 +2078,23 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       ], [[challengeMessage(DUMMY_ADDRESS, 'sandbox')]], [[]])
     })
 
+    test('uses local origins and signs the local challenge exactly', async () => {
+      const { protocol } = setup({ environment: 'local', apiUrl: 'http://localhost:3040/', appUrl: 'http://127.0.0.1:3021/', network: 'ethereum' })
+      const result = await protocol.buy(OPTIONS)
+      expect(result).toEqual({ buyUrl: 'http://127.0.0.1:3021/buy?session=dummy-session&lang=en&asset-in=EUR&asset-out=ETH&blockchain=Ethereum&amount-in=100' })
+      expectInteractions([
+        ...challengeRequests('local'),
+        httpRequest('/v1/auth', 'POST', '{"address":"0x0000000000000000000000000000000000000001","signature":"dummy-signature","blockchain":"Ethereum"}', undefined, 'local')
+      ], [['[loc]_By_signing_this_message,_you_confirm_that_you_are_the_sole_owner_of_the_provided_Blockchain_address._Your_ID:_0x0000000000000000000000000000000000000001']], [[]])
+    })
+
     test.each([
       ['a dev prefix in production', { environment: 'production' }, '[dev]_' + challengeMessage(DUMMY_ADDRESS)],
       ['sandbox text without the dev prefix', { environment: 'sandbox' }, challengeMessage(DUMMY_ADDRESS)],
+      ['a dev prefix in local', { environment: 'local', apiUrl: 'http://localhost:3040', appUrl: 'http://localhost:3021' }, challengeMessage(DUMMY_ADDRESS, 'sandbox')],
+      ['production text in local', { environment: 'local', apiUrl: 'http://localhost:3040', appUrl: 'http://localhost:3021' }, challengeMessage(DUMMY_ADDRESS)],
+      ['a local prefix in sandbox', { environment: 'sandbox' }, challengeMessage(DUMMY_ADDRESS, 'local')],
+      ['a local prefix in production', { environment: 'production' }, challengeMessage(DUMMY_ADDRESS, 'local')],
       ['a foreign address', { environment: 'production' }, challengeMessage('0x0000000000000000000000000000000000000002')],
       ['appended text', { environment: 'production' }, challengeMessage(DUMMY_ADDRESS) + ' ']
     ])('rejects %s before signing', async (_label, config, message) => {
