@@ -525,7 +525,8 @@ are unchanged; otherwise it stops before sending.
 
 ```sh
 node real-sell.mjs --seed-file <path> --iban-file <path> [--asset USDT|ETH|all] \
-  [--account eoa|smart|all] [--rpc <url>] [--bundler <url>] [--lock <dir>] [--out <path>]
+  [--account eoa|smart|all] [--rpc <url>] [--bundler <url>] [--lock <dir>] [--out <path>] \
+  [--screenshots <dir>] [--explorer <origin>] [--follow <minutes>]
 node real-sell.mjs --seed-file <path> --iban-file <path> --send --confirm
 ```
 
@@ -537,6 +538,22 @@ recursively, before the first network call. If it already exists, the script
 exits 3 and prints `not run: wallet locked`. It removes the directory at the
 end only when this process created it. `--out` repeats the JSON lines in that
 file with mode `0600`.
+
+`--screenshots <dir>` saves masked PNGs for the loaded widget and payment
+information for each case, and, when sending, for each deposit on the explorer.
+Safe funding transactions also get explorer screenshots. The directory is
+created with mode `0700`; an existing directory must have that mode, be owned
+by the current user and not be a symlink. Both test IBANs are masked. The
+explorer defaults to `https://sepolia.etherscan.io`; use `--explorer <origin>`
+to override it. A missing hash or `Success` on the explorer within 90 seconds
+fails the run.
+
+`--follow <minutes>` accepts an integer from 0 to 240, default 0. When sending,
+after the existing checks it polls every 30 seconds for the same transaction
+until `PayoutInProgress` or `Completed`, checks both module detail lookups, and
+logs state changes with timestamps. A failed state or timeout fails the run;
+the next case waits until follow finishes. A dry run has no transaction to follow.
+`PayoutInProgress` does not prove a bank payout has completed.
 
 `--account` defaults to `all`: the EOA cases run first, followed by the smart
 account cases. Select `eoa` or `smart` to run only one. Each smart run derives
@@ -581,6 +598,13 @@ A dry run still opens the widget, so it creates sell requests on dev. `--send
 whole run passes, writes `echter-lauf.json` under the repository `.git`
 directory (`git rev-parse --git-path`). Stdout is one JSON object per line.
 The seed, the IBAN, the session token and the full sell URL are never printed.
-There are no screenshots, traces or video. The script does not check the bank
-payout: a sell ends when the dev API recognizes the deposit. WDK has no
+Screenshots are optional; the script records no traces or video. Without
+`--follow`, a sell ends when the dev API recognizes the deposit. WDK has no
 confirmation dialog, so a rejected wallet prompt is not covered.
+
+The `Live Sepolia E2E` GitHub Actions workflow is started manually with
+`account` and `follow` inputs. Configure repository secrets `TEST_SEED` and
+`TEST_IBAN` and fund the test account with Sepolia ETH and USDT first. The
+workflow uploads the JSONL and masked screenshots as an artifact retained for
+14 days. To enable its commented schedule, meet those secret and funding
+requirements and name an owner in the workflow header before uncommenting it.

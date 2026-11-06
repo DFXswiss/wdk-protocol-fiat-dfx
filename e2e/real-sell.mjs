@@ -1,11 +1,11 @@
 // Real Sepolia sell against the DFX sandbox, the way a wallet user sells.
 // One on-chain deposit per asset, then the DFX dev API must recognize that hash.
-// It does not check the bank payout: a sell ends when the backend recognizes the deposit.
+// Optionally follow the backend state to payout in progress or completion.
 // WDK has no confirmation dialog, so a rejected wallet prompt is not covered.
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { randomBytes, randomInt } from 'node:crypto'
-import { chmodSync, constants, mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync, writeSync } from 'node:fs'
+import { chmodSync, constants, lstatSync, mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync, writeSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, resolve } from 'node:path'
@@ -17,6 +17,7 @@ import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
 import WalletManagerEvmErc4337 from '@tetherto/wdk-wallet-evm-erc-4337'
 import { AbiCoder, Contract, JsonRpcProvider, formatUnits, getAddress, id, isAddress, parseUnits, zeroPadValue } from 'ethers'
 import { chromium } from 'playwright'
+import { FAILED_STATES } from '../src/constants.js'
 
 const require = createRequire(import.meta.url)
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
@@ -121,7 +122,7 @@ function rememberIban (iban) {
 function inventedIban (other) {
   let iban
   do {
-    const bban = Array.from({ length: 17 }, () => String(randomInt(10))).join('')
+    const bban = '00000' + Array.from({ length: 12 }, () => String(randomInt(10))).join('')
     const remainder = [...`${bban}121700`].reduce((n, digit) => (n * 10 + Number(digit)) % 97, 0)
     iban = `CH${String(98 - remainder).padStart(2, '0')}${bban}`
   } while (iban === compact(other).toUpperCase())
@@ -129,10 +130,11 @@ function inventedIban (other) {
 }
 
 function parseArgs (args) {
-  const options = { rpc: DEFAULT_RPC, bundler: DEFAULT_BUNDLER, account: 'all', asset: 'all', send: false, confirm: false }
+  const options = { rpc: DEFAULT_RPC, bundler: DEFAULT_BUNDLER, explorer: 'https://sepolia.etherscan.io', follow: '0', account: 'all', asset: 'all', send: false, confirm: false }
   const valued = new Map([
     ['--seed-file', 'seedFile'], ['--iban-file', 'ibanFile'], ['--asset', 'asset'],
-    ['--rpc', 'rpc'], ['--bundler', 'bundler'], ['--account', 'account'], ['--lock', 'lock'], ['--out', 'out']
+    ['--rpc', 'rpc'], ['--bundler', 'bundler'], ['--account', 'account'], ['--lock', 'lock'], ['--out', 'out'],
+    ['--screenshots', 'screenshots'], ['--explorer', 'explorer'], ['--follow', 'follow']
   ])
   const seen = new Set()
   for (let i = 0; i < args.length; i++) {
@@ -156,6 +158,12 @@ function parseArgs (args) {
   if (!['USDT', 'ETH', 'all'].includes(options.asset)) throw new UsageError('--asset must be USDT, ETH or all')
   if (!['eoa', 'smart', 'all'].includes(options.account)) throw new UsageError('--account must be eoa, smart or all')
   if (options.send !== options.confirm) throw new UsageError('--send and --confirm are both required to send')
+  if (!/^(?:0|[1-9]\d*)$/.test(options.follow) || Number(options.follow) > 240) throw new UsageError('--follow must be an integer from 0 to 240')
+  options.follow = Number(options.follow)
+  try {
+    const explorer = new URL(options.explorer)
+    if (!['http:', 'https:'].includes(explorer.protocol) || explorer.origin !== options.explorer || explorer.username || explorer.password) throw new Error()
+  } catch { throw new UsageError('--explorer must be an HTTP or HTTPS origin') }
   let protocol
   try {
     protocol = new URL(options.rpc).protocol
@@ -166,6 +174,68 @@ function parseArgs (args) {
   try { protocol = new URL(options.bundler).protocol } catch { throw new UsageError('--bundler must use HTTP or HTTPS') }
   if (protocol !== 'http:' && protocol !== 'https:') throw new UsageError('--bundler must use HTTP or HTTPS')
   return options
+}
+
+function prepareScreenshots (dir) {
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  const stat = lstatSync(dir)
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o777) !== 0o700) {
+    throw new UsageError('--screenshots must be a non-symlink directory owned by the current user with mode 0700')
+  }
+}
+
+async function screenshot (page, tools, asset, number, step, widget = false) {
+  if (!tools.screenshots) return
+  const ibans = tools.ibans.map(iban => compact(iban).toUpperCase())
+  const found = await page.evaluate(values => {
+    const compactText = text => (text || '').replace(/[\s\u00a0]/g, '').toUpperCase()
+    const elements = [...globalThis.document.querySelectorAll('body *')]
+    for (const el of elements) el.removeAttribute('data-e2e-iban-mask')
+    const visible = el => {
+      const rect = el.getBoundingClientRect()
+      const style = globalThis.getComputedStyle(el)
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'
+    }
+    const count = (text, value) => compactText(text).split(value).length - 1
+    const matches = elements.filter(el => visible(el) && values.some(value => {
+      const own = count(el.innerText, value)
+      const children = [...el.children].reduce((sum, child) => sum + count(child.innerText, value), 0)
+      return own > children
+    }))
+    for (const el of matches) el.setAttribute('data-e2e-iban-mask', 'true')
+    return { text: values.some(value => compactText(globalThis.document.body.innerText).includes(value)), count: matches.length }
+  }, ibans)
+  if (widget && found.text && found.count === 0) throw new Error('IBAN is visible in widget text but no element is masked')
+  await page.screenshot({
+    path: resolve(tools.screenshots, `${tools.runId}-${tools.kind}-${asset}-${number}-${step}.png`),
+    mask: [page.locator('[data-e2e-iban-mask="true"]'), page.locator('input[name="iban"]')],
+    maskColor: '#000000'
+  })
+}
+
+async function screenshotExplorer (tools, asset, number, step, hash) {
+  if (!tools.screenshots) return
+  const context = await tools.browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
+  const page = await context.newPage()
+  const deadline = Date.now() + 90_000
+  try {
+    while (Date.now() < deadline) {
+      await page.goto(`${tools.explorer}/tx/${hash}`, { waitUntil: 'domcontentloaded', timeout: Math.max(1, deadline - Date.now()) })
+      try {
+        await page.waitForFunction(value => {
+          const text = globalThis.document.body?.innerText || ''
+          return text.toLowerCase().includes(value.toLowerCase()) && text.includes('Success')
+        }, hash, { timeout: Math.min(5_000, Math.max(1, deadline - Date.now())) })
+        await screenshot(page, tools, asset, number, step, false)
+        return
+      } catch (error) {
+        if (Date.now() >= deadline) break
+      }
+    }
+    throw new Error(`Explorer did not show ${hash} and Success within 90 seconds`)
+  } finally {
+    await context.close()
+  }
 }
 
 async function readPrivateFile (path, label) {
@@ -395,7 +465,7 @@ function paymentFacts (capture) {
   }
 }
 
-async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart) {
+async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart, tools) {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
   const page = await context.newPage()
   page.setDefaultTimeout(45_000)
@@ -441,6 +511,13 @@ async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart) {
   })
   try {
     await page.goto(sellUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+    if (tools.screenshots) {
+      await page.waitForFunction(() => {
+        const text = globalThis.document.body?.innerText || ''
+        return text.includes('Add or select your IBAN') || text.includes('Payment Information')
+      }, null, { timeout: 60_000 })
+      await screenshot(page, tools, spec.asset, '01', 'widget-loaded', true)
+    }
     let preselected = false
     if (smart && !firstSmart) {
       const deadline = Date.now() + 60_000
@@ -478,7 +555,7 @@ async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart) {
       if (await button.count() !== 1) throw new Error('Expected exactly one ADD BANK ACCOUNT element')
       const matchingOption = await page.evaluate(wanted => {
         const text = node => (node.innerText || '').replace(/[\s\u00a0]/g, '')
-        return [...document.querySelectorAll('body *')].some(el => {
+        return [...globalThis.document.querySelectorAll('body *')].some(el => {
           const rect = el.getBoundingClientRect()
           const style = globalThis.getComputedStyle(el)
           return text(el) === wanted && ![...el.children].some(child => text(child) === wanted) && rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'
@@ -533,6 +610,7 @@ async function openSell (browser, sellUrl, iban, ext, spec, smart, firstSmart) {
       await delay(250)
     }
     if (!facts) throw rejected || new Error('No valid paymentInfos response with the deposit address visible')
+    await screenshot(page, tools, spec.asset, '02', 'payment-information', true)
     const text = await page.locator('body').innerText().catch(() => '')
     await context.close()
     contextClosed = true
@@ -722,6 +800,44 @@ function assertDetail (detail, spec, currency, label) {
   return { cryptoAsset: detail.cryptoAsset, fiatCurrency: detail.fiatCurrency, status: detail.status }
 }
 
+async function followTransaction (tools, session, hash, spec, ext, uid, currency, initialState) {
+  const deadline = Date.now() + tools.follow * 60_000
+  let previous = null
+  let entry = { state: initialState }
+  while (true) {
+    if (entry.state !== previous) {
+      emit({ step: 'follow', asset: spec.asset, ok: true, state: entry.state, time: new Date().toISOString() })
+      previous = entry.state
+    }
+    if (FAILED_STATES.has(entry.state) || entry.state === 'ReturnPending') throw new Error(`Backend reached failed state ${entry.state}`)
+    if (entry.state === 'PayoutInProgress' || entry.state === 'Completed') {
+      const expected = entry.state === 'Completed' ? 'completed' : 'in_progress'
+      for (const [label, detail] of [
+        ['externalTransactionId', await tools.fiat.getTransactionDetail(ext, { idType: 'externalTransactionId' })],
+        ['uid', await tools.fiat.getTransactionDetail(uid)]
+      ]) {
+        const checked = assertDetail(detail, spec, currency, label)
+        if (checked.status !== expected) throw new Error(`Module ${label} status is ${checked.status}; expected ${expected}`)
+      }
+      return
+    }
+    if (Date.now() + 30_000 > deadline) throw new Error('Follow timed out before payout')
+    await delay(30_000)
+    const response = await fetch(`${API}/v1/transaction`, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(Math.min(20_000, Math.max(1, deadline - Date.now()))),
+      headers: { authorization: `Bearer ${session}` }
+    })
+    if (!response.ok) throw new Error(`GET /v1/transaction HTTP ${response.status}`)
+    const body = await response.json()
+    if (!Array.isArray(body)) throw new Error('GET /v1/transaction did not return a list')
+    entry = body.find(item => String(item?.inputTxId ?? '').toLowerCase() === hash.toLowerCase())
+    if (!entry) throw new Error('Follow transaction disappeared')
+    const checked = assertBackend(entry, spec, ext)
+    if (checked.uid !== uid) throw new Error('Follow transaction uid changed')
+  }
+}
+
 function strip0x (sha) {
   return sha.startsWith('0x') || sha.startsWith('0X') ? sha.slice(2) : sha
 }
@@ -798,7 +914,7 @@ async function assetBalance (provider, usdt, spec, address, blockTag) {
   return typeof blockTag === 'number' ? readAtBlock(blockTag, read) : read()
 }
 
-async function fundSafe (eoa, safe, cases, provider, usdt, evidence) {
+async function fundSafe (eoa, safe, cases, provider, usdt, evidence, tools) {
   const tokenAmount = cases.reduce((sum, spec) => sum + (spec.asset === 'USDT' ? spec.amount : 0n), 0n)
   const ethAmount = cases.reduce((sum, spec) => sum + (spec.asset === 'ETH' ? spec.amount : 0n), SAFE_GAS)
   let fundingBlock
@@ -812,6 +928,7 @@ async function fundSafe (eoa, safe, cases, provider, usdt, evidence) {
     fundingBlock = receipt.blockNumber
     evidence.txs.push({ hash, rolle: 'funding', from: getAddress(receipt.from) })
     emit({ step: 'funding-receipt', asset: spec.asset, ok: true, hash, status: receipt.status })
+    await screenshotExplorer(tools, spec.asset, '00', 'funding', hash)
   }
   const [tokenBalance, ethBalance, code] = await Promise.all([
     readAtBlock(fundingBlock, () => usdt.balanceOf(safe, { blockTag: fundingBlock })),
@@ -858,7 +975,7 @@ async function runCase (spec, tools, evidence) {
     }
 
     step = 'paymentInfos'
-    const payment = await openSell(tools.browser, sold.sellUrl, tools.iban, ext, spec, tools.kind === 'smart', tools.first)
+    const payment = await openSell(tools.browser, sold.sellUrl, tools.iban, ext, spec, tools.kind === 'smart', tools.first, tools)
     emit({
       step,
       asset: spec.asset,
@@ -922,6 +1039,8 @@ async function runCase (spec, tools, evidence) {
       gasUsed: receipt.gasUsed.toString(),
       effectiveGasPrice: receipt.gasPrice.toString()
     })
+    step = 'explorer'
+    await screenshotExplorer(tools, spec.asset, '03', 'deposit', hash)
 
     step = 'balances-after'
     const after = await readBalances(tools.provider, tools.usdt, tools.accountAddress, receipt.blockNumber)
@@ -962,6 +1081,10 @@ async function runCase (spec, tools, evidence) {
     const byUid = await tools.fiat.getTransactionDetail(trimmed.uid)
     const uidDetail = assertDetail(byUid, spec, payment.currency, 'uid')
     emit({ step, asset: spec.asset, ok: true, externalTransactionId: externalDetail, uid: uidDetail })
+    if (tools.follow) {
+      step = 'follow'
+      await followTransaction(tools, session, hash, spec, ext, trimmed.uid, payment.currency, trimmed.state)
+    }
   } catch (error) {
     emit({ step, asset: spec.asset, ok: false, error: redact(error?.message ?? error) })
     throw error
@@ -974,6 +1097,7 @@ async function main () {
   rememberSecret(options.bundler)
   if (options.lock) takeLock(options.lock)
   if (options.out) await openOut(options.out)
+  if (options.screenshots) prepareScreenshots(options.screenshots)
   assertSingleWalletCopy()
   const walletVersion = packageVersion('@tetherto/wdk-wallet-evm')
   const seed = await readPrivateFile(options.seedFile, 'Seed file')
@@ -1053,13 +1177,13 @@ async function main () {
   const runId = `${Date.now()}-${randomBytes(3).toString('hex')}`
   emit({ step: 'ready', asset: null, ok: true, runId, address: accountAddress, send: options.send })
   const evidence = { txs: [], backend: [] }
-  const tools = { runId, fiat, account, accountAddress, iban, provider: state.provider, usdt, browser: state.browser, send: options.send, kind: 'eoa' }
+  const tools = { runId, fiat, account, accountAddress, iban, ibans: [iban, smartIban], provider: state.provider, usdt, browser: state.browser, send: options.send, kind: 'eoa', screenshots: options.screenshots, explorer: options.explorer, follow: options.follow }
   if (useEoa) for (const spec of cases) await runCase(spec, tools, evidence)
   if (useSmart) {
     state.account = 'smart'
     if (options.send) {
       state.flow = true
-      await fundSafe(account, smartAddress, cases, state.provider, usdt, evidence)
+      await fundSafe(account, smartAddress, cases, state.provider, usdt, evidence, { ...tools, kind: 'smart' })
     }
     const smartTools = { ...tools, kind: 'smart', account: smartAccount, accountAddress: smartAddress, fiat: smartFiat, iban: smartIban, first: true }
     for (const spec of cases) {
