@@ -197,7 +197,7 @@ async function screenshot (page, tools, asset, number, step, widget = false) {
     }
     const findIbans = text => {
       const raw = text || ''
-      const shaped = raw.match(/(?<![A-Z0-9])[A-Z]{2}[ \u00a0]*\d[ \u00a0]*\d(?:[ \u00a0]*[A-Z0-9]){11,30}(?![A-Z0-9])/gi) || []
+      const shaped = raw.match(/(?<![A-Z0-9])[A-Z]{2}[\s\u00a0]*\d[\s\u00a0]*\d(?:[\s\u00a0]*[A-Z0-9]){11,30}(?![A-Z0-9])/gi) || []
       return [...shaped.map(compactText), ...values.filter(value => compactText(raw).includes(value))]
     }
     const matches = elements.filter(el => visible(el) && findIbans(el.innerText).some(value => {

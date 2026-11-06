@@ -868,7 +868,7 @@ Every run of the smart account path, in order:
 | Code | Command | Result |
 | --- | --- | --- |
 | module of `195da36`, a hand-written probe that is not committed | the same calls as the script | Safe `0x90D3FF5540B5047f80a2D85D505DC8aF2A7754E1` (index 842193) signed in with no code; 1 USDT, [`0xe40b268163a7d06ddae33fb963113d2a6452997b70c0365de0250fe24f521caf`](https://sepolia.etherscan.io/tx/0xe40b268163a7d06ddae33fb963113d2a6452997b70c0365de0250fe24f521caf), deployed the Safe and was recognized after 45 s; 0.0001 ETH, [`0x695f0a5aeed49ca0419f1940376ae655a30166dac429b91d807a93654aa5f592`](https://sepolia.etherscan.io/tx/0x695f0a5aeed49ca0419f1940376ae655a30166dac429b91d807a93654aa5f592), recognized after 30 s; module `in_progress` for both |
-| `real-sell.mjs` before `6960dd0`, uncommitted | `--account all`, without `--send` | exit 1 at the second Safe case: the widget had preselected the invented IBAN, so "Add or select your IBAN" was not shown; the script now accepts that preselection only for later Safe cases and only when the request carries the invented IBAN |
+| `real-sell.mjs` before `6960dd0`, uncommitted | `--account all`, without `--send` | exit 1 at the second Safe case: the widget had preselected the invented IBAN, so "Add or select your IBAN" was not shown; from `6960dd0` the script accepted that preselection only for later Safe cases and only when the request carried the invented IBAN (since `92be2ce` for later cases of either account, below) |
 | `real-sell.mjs` of `6960dd0` | `--account all`, without `--send` | exit 0, nothing sent |
 | `real-sell.mjs` of `6960dd0` | `--account all --send --confirm` | exit 0, below |
 | `real-sell.mjs` of `1942548` (after review) | `--account all --send --confirm` | exit 1 after the last deposit: the EOA cases and the first Safe case passed, the Safe's 0.0001 ETH was sent as a UserOperation, then the public RPC answered `eth_getCode` at the receipt block with `block not found` (another node behind the one that returned the receipt); [`e2e/evidence/2026-11-04-sandbox-real-sell-red.jsonl`](e2e/evidence/2026-11-04-sandbox-real-sell-red.jsonl). `e13e453` retries only reads at a fixed block on that error, for up to 60 s; the run at the final head and whether it needed that retry are in the pull request description |
@@ -913,7 +913,11 @@ for each account on each run: the first case of an account enters it in the widg
 EOA's widget shows below its existing bank accounts, and later cases select only that IBAN. Each EOA run therefore
 adds a bank account to the EOA's sandbox user. `--iban-file` and the workflow secret `TEST_IBAN` were removed.
 Screenshots now mask every IBAN-shaped text, not only the run's own IBANs, because the EOA's other bank accounts are
-listed in the same widget; no screenshot step captures that list, so this mask is not exercised by a run.
+listed in the same widget, one of them broken across two lines; no screenshot step captures that list, so this mask
+is not exercised by a run. After `c5d1243` the pattern was changed to also accept line breaks between the
+groups: a hand-written page probe that is not in this repository applied the pattern of each version to an invented
+IBAN rendered on one line, with non-breaking spaces, broken by `<br>` and split over two blocks; the pattern of
+`92be2ce` missed the two broken renderings, the new one found all four.
 
 A run without `--send` of the script as of `92be2ce` (`--account all --screenshots`) exited 0: all four cases reached
 a valid payment-info response with the deposit address visible, and nothing was sent. An OCR and QR scan of its
