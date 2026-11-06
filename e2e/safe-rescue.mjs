@@ -76,7 +76,7 @@ function parseArgs (args) {
       options[valued.get(name)] = value
       if (name === '--token') options.tokenProvided = true
     } else {
-      throw new Error(`Unknown argument: ${name}`)
+      throw new Error('Unknown argument')
     }
   }
   if (!options.to) throw new Error('Required argument missing: --to <address>')

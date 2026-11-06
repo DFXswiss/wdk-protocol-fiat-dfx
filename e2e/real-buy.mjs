@@ -52,17 +52,17 @@ function parseArgs (args) {
   const seen = new Set()
   for (let i = 0; i < args.length; i++) {
     const flag = args[i]
-    if (seen.has(flag)) throw new UsageError(`Duplicate argument: ${flag}`)
+    if (seen.has(flag)) throw new UsageError('Duplicate argument')
     seen.add(flag)
     if (flag === '--confirm') options.confirm = true
     else if (fields.has(flag)) {
       const value = args[++i]
       if (!value || value.startsWith('--')) throw new UsageError(`Missing value for ${flag}`)
       options[fields.get(flag)] = value
-    } else throw new UsageError(`Unknown argument: ${flag}`)
+    } else throw new UsageError('Unknown argument')
   }
   if (!options.seedFile) throw new UsageError('--seed-file is required')
-  if (options.confirm && !options.urlFile) throw new NotRunError('--url-file is required with --confirm')
+  if (options.confirm && !options.urlFile) throw new UsageError('--url-file is required with --confirm')
   if (!['smart', 'eoa'].includes(options.account)) throw new UsageError('--account must be smart or eoa')
   if (options.asset !== 'USDC') throw new UsageError('Only USDC on Base is supported')
   if (!/^\d+$/.test(options.index) || !Number.isSafeInteger(Number(options.index)) || Number(options.index) >= 2 ** 31) throw new UsageError('Invalid --index')

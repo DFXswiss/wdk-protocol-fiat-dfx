@@ -116,8 +116,9 @@ The original widget session is used for the backend evidence; if it expires
 before completion, verification fails. A successful run writes
 `echter-lauf.json` at the Git path. Exit 0 means the quote-only run or all
 confirmed checks passed; exit 1 means a confirmed run failed or timed out;
-exit 2 means invalid arguments or output file; exit 3 means the run could not
-start. A failed confirmed run may already have created a production user or
+exit 2 means invalid arguments or an invalid `--out` file; exit 3 means the run
+could not start, including when the `--url-file` already exists or cannot be
+created. A failed confirmed run may already have created a production user or
 purchase; do not assume that no purchase exists.
 
 ### Real purchase script (`real-purchase.mjs`)

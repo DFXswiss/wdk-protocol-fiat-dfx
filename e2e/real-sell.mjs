@@ -150,7 +150,7 @@ function parseArgs (args) {
       if (!value || value.startsWith('--')) throw new UsageError(`Missing value for ${name}`)
       options[valued.get(name)] = value
     } else {
-      throw new UsageError(`Unknown argument: ${name}`)
+      throw new UsageError('Unknown argument')
     }
   }
   if (!options.seedFile) throw new UsageError('Required argument missing: --seed-file <path>')
