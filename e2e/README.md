@@ -97,7 +97,7 @@ steps and make the bank transfer. The script does not make the bank transfer.
 
 ```sh
 node real-buy.mjs --seed-file <path>
-node real-buy.mjs --seed-file <path> --url-file <new-private-path> --confirm
+node real-buy.mjs --seed-file <path> --url-file <new-private-path> --screenshots <dir> --confirm
 ```
 
 The default is 15 EUR of USDC to account index 0 of a Base ERC-4337 Safe
@@ -108,14 +108,24 @@ exist and is created with mode 0600; it contains a session and must be kept
 private. JSON lines go to stdout and optionally to a new 0600 file with
 `--out <path>`; the seed, session and full URL are not printed.
 
+`--confirm` requires `--screenshots <dir>` and a clean working tree; HEAD and
+the working tree are checked again at the end. The screenshot directory is
+created with mode 0700; an existing directory must have that mode, be owned by
+the current user and not be a symlink. The payout transaction is captured on
+the explorer after its hash and `Success` appear, with a SHA-256 hash recorded.
+The default explorer is `https://base.blockscout.com`; use `--explorer <origin>`
+to override it. No app or widget page is captured.
+
 The script polls the module and the production transaction detail endpoint
 until completion. It checks the backend record and payout hash, successful
 receipt, exactly one USDC transfer to the derived account, the rounded backend
 amount, the balance change at the payout block, and module details by both IDs.
 The original widget session is used for the backend evidence; if it expires
-before completion, verification fails. A successful run writes
-`echter-lauf.json` at the Git path. Exit 0 means the quote-only run or all
-confirmed checks passed; exit 1 means a confirmed run failed or timed out;
+before completion, verification fails. Fixed-block read retries are logged and
+make the confirmed run fail without a protocol. A successful run writes
+version 2 `hybrid` evidence to `echter-lauf-kauf.json` at the Git path, separate
+from the sell protocol so that a purchase cannot overwrite it. Exit 0 means the
+quote-only run or all confirmed checks passed; exit 1 means a confirmed run failed or timed out;
 exit 2 means invalid arguments or an invalid `--out` file; exit 3 means the run
 could not start, including when the `--url-file` already exists or cannot be
 created. A failed confirmed run may already have created a production user or

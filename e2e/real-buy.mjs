@@ -1,10 +1,10 @@
 // Production purchase handoff and payout verification. The bank transfer is manual.
 import { execFileSync } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
-import { chmodSync, constants, readFileSync, renameSync, writeFileSync, writeSync } from 'node:fs'
+import { createHash, randomBytes } from 'node:crypto'
+import { chmodSync, constants, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync, writeSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
@@ -12,6 +12,7 @@ import WDK from '@tetherto/wdk'
 import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
 import WalletManagerEvmErc4337 from '@tetherto/wdk-wallet-evm-erc-4337'
 import { Contract, JsonRpcProvider, getAddress, id, parseUnits, zeroPadValue } from 'ethers'
+import { chromium } from 'playwright'
 
 const require = createRequire(import.meta.url)
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -19,7 +20,7 @@ const API = 'https://api.dfx.swiss'
 const USDC = getAddress('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913')
 const TRANSFER = id('Transfer(address,address,uint256)')
 const secrets = []
-const state = { flow: false, out: null, provider: null, wdk: null }
+const state = { flow: false, out: null, provider: null, wdk: null, retries: 0 }
 class UsageError extends Error {}
 class NotRunError extends Error {}
 
@@ -47,8 +48,8 @@ function emit (record) {
 }
 
 function parseArgs (args) {
-  const options = { account: 'smart', index: '0', asset: 'USDC', amount: '15', rpc: 'https://mainnet.base.org', wait: '240', confirm: false }
-  const fields = new Map([['--seed-file', 'seedFile'], ['--account', 'account'], ['--index', 'index'], ['--asset', 'asset'], ['--amount', 'amount'], ['--rpc', 'rpc'], ['--url-file', 'urlFile'], ['--out', 'out'], ['--wait-minutes', 'wait']])
+  const options = { account: 'smart', index: '0', asset: 'USDC', amount: '15', rpc: 'https://mainnet.base.org', explorer: 'https://base.blockscout.com', wait: '240', confirm: false }
+  const fields = new Map([['--seed-file', 'seedFile'], ['--account', 'account'], ['--index', 'index'], ['--asset', 'asset'], ['--amount', 'amount'], ['--rpc', 'rpc'], ['--url-file', 'urlFile'], ['--out', 'out'], ['--wait-minutes', 'wait'], ['--screenshots', 'screenshots'], ['--explorer', 'explorer']])
   const seen = new Set()
   for (let i = 0; i < args.length; i++) {
     const flag = args[i]
@@ -62,6 +63,7 @@ function parseArgs (args) {
     } else throw new UsageError('Unknown argument')
   }
   if (!options.seedFile) throw new UsageError('--seed-file is required')
+  if (options.confirm && !options.screenshots) throw new UsageError('--confirm requires --screenshots')
   if (options.confirm && !options.urlFile) throw new UsageError('--url-file is required with --confirm')
   if (!['smart', 'eoa'].includes(options.account)) throw new UsageError('--account must be smart or eoa')
   if (options.asset !== 'USDC') throw new UsageError('Only USDC on Base is supported')
@@ -69,7 +71,66 @@ function parseArgs (args) {
   try { if (!/^\d+(?:\.\d{1,2})?$/.test(options.amount) || parseUnits(options.amount, 2) <= 0n) throw new Error() } catch { throw new UsageError('Invalid EUR --amount') }
   if (!/^\d+$/.test(options.wait) || !Number.isSafeInteger(Number(options.wait)) || Number(options.wait) < 1 || Number(options.wait) > 10080) throw new UsageError('Invalid --wait-minutes')
   try { if (!['http:', 'https:'].includes(new URL(options.rpc).protocol)) throw new Error() } catch { throw new UsageError('--rpc must use HTTP or HTTPS') }
+  try {
+    const explorer = new URL(options.explorer)
+    if (!['http:', 'https:'].includes(explorer.protocol) || explorer.origin !== options.explorer || explorer.username || explorer.password) throw new Error()
+  } catch { throw new UsageError('--explorer must be an HTTP or HTTPS origin') }
   return options
+}
+
+function prepareScreenshots (dir) {
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  const stat = lstatSync(dir)
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o777) !== 0o700) {
+    throw new UsageError('--screenshots must be a non-symlink directory owned by the current user with mode 0700')
+  }
+}
+
+function invocation () {
+  const parts = [process.argv[0], process.argv[1]]
+  for (let i = 2; i < process.argv.length; i++) {
+    const name = process.argv[i]
+    if (name === '--seed-file' || name === '--url-file') { i++; continue }
+    if (name === '--rpc') { parts.push(name, new URL(process.argv[++i]).origin); continue }
+    parts.push(name)
+  }
+  return parts.join(' ')
+}
+
+async function screenshotExplorer (options, runId, hash) {
+  const browser = await chromium.launch({ headless: true })
+  try {
+    const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
+    const page = await context.newPage()
+    const deadline = Date.now() + 90_000
+    let reloads = 0
+    while (Date.now() < deadline) {
+      if (reloads > 0) emit({ step: 'explorer-reload', hash, attempt: reloads })
+      try {
+        await page.goto(`${options.explorer}/tx/${hash}`, { waitUntil: 'domcontentloaded', timeout: Math.max(1, deadline - Date.now()) })
+      } catch (error) {
+        if (error.name === 'TimeoutError' && Date.now() >= deadline) break
+        throw error
+      }
+      try {
+        await page.waitForFunction(value => {
+          const text = globalThis.document.body?.innerText || ''
+          return text.toLowerCase().includes(value.toLowerCase()) && /\bSuccess\b/.test(text)
+        }, hash, { timeout: Math.min(5_000, Math.max(1, deadline - Date.now())) })
+      } catch (error) {
+        if (error.name !== 'TimeoutError') throw error
+        if (Date.now() >= deadline) break
+        reloads++
+        continue
+      }
+      const datei = resolve(options.screenshots, `${runId}-buy-${options.asset}-explorer.png`)
+      await page.screenshot({ path: datei })
+      const sha256 = createHash('sha256').update(readFileSync(datei)).digest('hex')
+      emit({ step: 'screenshot', schritt: 'explorer', file: basename(datei), sha256, tx: hash })
+      return { schritt: 'explorer', datei, sha256, tx: hash }
+    }
+    throw new Error(`Explorer ${options.explorer} did not show ${hash} and Success within 90 seconds`)
+  } finally { await browser.close() }
 }
 
 async function privateSeed (path) {
@@ -137,6 +198,8 @@ async function readAtBlock (blockNumber, read) {
         pending.push(item.error, item.info)
       }
       if (!missing || Date.now() + 2_000 >= deadline) throw error
+      state.retries++
+      emit({ step: 'retry', what: 'readAtBlock', error: redact(error?.message ?? error) })
       await delay(2_000)
     }
   }
@@ -172,6 +235,7 @@ function matchesRoundedAmount (amount, output) {
 async function main () {
   const options = parseArgs(process.argv.slice(2))
   secrets.push(options.rpc)
+  if (options.screenshots) prepareScreenshots(options.screenshots)
   if (options.out) {
     try { state.out = await createPrivate(options.out) } catch { throw new UsageError('--out must be a new private file') }
   }
@@ -196,6 +260,9 @@ async function main () {
   const quote = await fiat.quoteBuy({ cryptoAsset: options.asset, fiatCurrency: 'EUR', fiatAmount })
   emit({ step: 'quote', address, account: options.account, index: Number(options.index), cryptoAmount: quote.cryptoAmount, fiatAmount: quote.fiatAmount, fee: quote.fee, rate: quote.rate })
   if (!options.confirm) return
+  const head = git(['rev-parse', 'HEAD'])
+  if (git(['status', '--porcelain']) !== '') throw new NotRunError('the working tree is not clean, so the run would not belong to a commit')
+  const runId = `${Date.now()}-${randomBytes(3).toString('hex')}`
   const token = new Contract(USDC, ['function balanceOf(address) view returns (uint256)'], state.provider)
   const block = await state.provider.getBlockNumber()
   const [assetBefore, ethBefore] = await Promise.all([
@@ -260,28 +327,37 @@ async function main () {
     readAtBlock(receipt.blockNumber, () => token.balanceOf(address, { blockTag: receipt.blockNumber }))
   ])
   if (after - prior !== amount) throw new Error('Payout block balance change does not match Transfer')
+  const screenshot = await screenshotExplorer(options, runId, backend.outputTxId)
   assertDetail(await fiat.getTransactionDetail(externalId, { idType: 'externalTransactionId' }))
   assertDetail(await fiat.getTransactionDetail(backend.uid))
   const finished = await version()
   if (started !== finished) throw new Error('Backend commit changed during the run')
-  const head = git(['rev-parse', 'HEAD'])
+  if (git(['rev-parse', 'HEAD']) !== head) throw new Error('HEAD changed during the run')
+  if (state.retries > 0) throw new Error(`Run is not evidence: ${state.retries} read retries`)
+  if (git(['status', '--porcelain']) !== '') throw new Error('Run is not evidence: the working tree changed during the run')
   const record = {
-    version: 1,
-    art: 'echt',
+    version: 2,
+    art: 'hybrid',
     head,
     frontend_sha: head.replace(/^0x/i, ''),
-    backend_sha: finished.replace(/^0x/i, ''),
+    backend_sha: started.replace(/^0x/i, ''),
+    backend_sha_ende: finished.replace(/^0x/i, ''),
+    befehl: invocation(),
     chain_id: 8453,
     lokal: false,
     vertraege: { USDC },
-    wallet: { name: walletName, version: walletVersion },
+    wallet: { name: walletName, version: walletVersion, oberflaeche: false },
+    flags: `api.dfx.swiss /version commit ${finished}, production`,
     erkennung: 'selbst',
-    gemockt: [],
-    dirty: git(['status', '--porcelain']) !== '',
-    txs: [{ hash: backend.outputTxId, rolle: 'auszahlung', from: receipt.from }],
+    gemockt: ['wallet UI: WDK derives the receiving account in this script; the purchase is completed by hand in the DFX web app and by bank transfer'],
+    dirty: false,
+    wiederholungen: 0,
+    schalter: [],
+    txs: [{ hash: backend.outputTxId, rolle: 'kauf', from: receipt.from, saldo: { vorher: prior.toString(), nachher: after.toString() } }],
+    screenshots: [screenshot],
     backend_beleg: { endpoint: 'GET /v1/transaction/detail/single', antwort: { uid: backend.uid, type: backend.type, state: backend.state, outputTxId: backend.outputTxId, outputAmount: backend.outputAmount, outputAsset: backend.outputAsset, externalTransactionId: backend.externalTransactionId } }
   }
-  const gitPath = git(['rev-parse', '--git-path', 'echter-lauf.json'])
+  const gitPath = git(['rev-parse', '--git-path', 'echter-lauf-kauf.json'])
   const target = isAbsolute(gitPath) ? gitPath : resolve(root, gitPath)
   const temporary = `${target}.tmp`
   writeFileSync(temporary, JSON.stringify(record, null, 2) + '\n', { mode: 0o600 })
