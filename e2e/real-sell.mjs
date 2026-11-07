@@ -206,6 +206,9 @@ async function screenshot (page, tools, asset, number, step, widget = false, tx,
       const shaped = raw.match(/(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?:[\s\u00a0]{0,2}[A-Z0-9]){11,30}(?![A-Za-z0-9])/g) || []
       return [...shaped.map(compactText), ...values.filter(value => compactText(raw).includes(value))]
     }
+    for (const el of globalThis.document.querySelectorAll('input, textarea')) {
+      if (visible(el) && findIbans(el.value.toUpperCase()).length > 0) el.setAttribute('data-e2e-iban-mask', 'true')
+    }
     const hits = findIbans(globalThis.document.body.innerText)
     const holders = hits.map(value => ({
       value,

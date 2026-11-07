@@ -592,9 +592,15 @@ information for each case, and, when sending, for each deposit on the explorer
 and the booked sale in the app.
 Safe funding transactions also get explorer screenshots. The directory is
 created with mode `0700`; an existing directory must have that mode, be owned
-by the current user and not be a symlink. The mask covers both invented IBANs,
-the IBAN input, and uppercase IBAN-shaped text, including existing bank accounts,
-using small elements or a separate span for an IBAN in longer text. The run fails if the mask would cover evidence values. The
+by the current user and not be a symlink. The mask covers the two IBANs invented
+for the run regardless of casing or whitespace, including in field values,
+as well as the IBAN input. It also covers other IBAN-shaped text in uppercase
+with a contiguous country code and check digits and at most two whitespace
+characters between subsequent characters; field values are converted to uppercase
+for this check. Text is masked as a small element or a separate span within longer
+text; otherwise the run fails. The run also fails if a masked element contains a
+whole evidence value (hash, deposit address or booking value) as text. The script
+does not check whether the mask spatially covers evidence. The
 explorer defaults to `https://eth-sepolia.blockscout.com` because Etherscan
 returns HTTP 403 to headless Chromium; use `--explorer <origin>` to override it.
 A missing hash or whole word `Success` on the explorer within 5 minutes
