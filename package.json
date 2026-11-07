@@ -1,0 +1,93 @@
+{
+  "name": "@dfx.swiss/wdk-protocol-fiat-dfx",
+  "version": "1.0.0-beta.1",
+  "description": "WDK module to interact with the dfx fiat provider.",
+  "keywords": [
+    "wdk",
+    "protocol",
+    "fiat",
+    "dfx"
+  ],
+  "author": "DFX AG",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "types": "./types",
+  "scripts": {
+    "build:types": "tsc",
+    "lint": "standard",
+    "lint:fix": "standard --fix",
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config jest.coverage.config.js --coverage --runInBand",
+    "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config tests/integration/jest.config.js --runInBand"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@tetherto/wdk-wallet": "^1.0.0-beta.17",
+    "abstractionkit": "0.4.0",
+    "bare-node-runtime": "^1.1.4",
+    "big.js": "^7.0.1"
+  },
+  "devDependencies": {
+    "@tetherto/wdk-wallet-evm": "1.0.0-beta.19",
+    "cross-env": "^7.0.3",
+    "ethers": "6.17.0",
+    "jest": "^29.7.0",
+    "standard": "^17.1.2",
+    "typescript": "^5.8.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "bare": "./bare.js",
+      "default": "./index.js"
+    },
+    "./package": {
+      "default": "./package.json"
+    }
+  },
+  "standard": {
+    "ignore": [
+      "bare.js",
+      "tests/**/*.js",
+      "e2e/**"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DFXswiss/wdk-protocol-fiat-dfx"
+  },
+  "homepage": "https://github.com/DFXswiss/wdk-protocol-fiat-dfx",
+  "files": [
+    "index.js",
+    "bare.js",
+    "src/",
+    "types/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "TESTING.md"
+  ],
+  "jest": {
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/tests/integration/"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 100,
+        "branches": 100,
+        "functions": 100,
+        "lines": 100
+      }
+    }
+  }
+}
