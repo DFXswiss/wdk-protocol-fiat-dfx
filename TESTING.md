@@ -913,7 +913,8 @@ account that ever used it. Since `92be2ce` the script invents a checksum-valid S
 for each account on each run: the first case of an account enters it in the widget's bank account form, which the
 EOA's widget shows below its existing bank accounts, and later cases select only that IBAN. Each EOA run therefore
 adds a bank account to the EOA's sandbox user. `--iban-file` and the workflow secret `TEST_IBAN` were removed.
-Screenshots now mask every IBAN-shaped text, not only the run's own IBANs, because the EOA's other bank accounts are
+Screenshots now also mask other IBAN-shaped text, not only the run's own IBANs (which renderings count since
+`d09a64a` is stated in `e2e/README.md`), because the EOA's other bank accounts are
 listed in the same widget, one of them broken across two lines; no screenshot step captures that list, so this mask
 is not exercised by a run. After `c5d1243` the pattern was changed to also accept line breaks between the
 groups: a hand-written page probe that is not in this repository applied the pattern of each version to an invented
@@ -973,7 +974,7 @@ The run at `aa06f6c` (`--account all --send --confirm --screenshots … --follow
 [`0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790`](https://eth-sepolia.blockscout.com/tx/0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790),
 passed every check up to its booking (id 10019, `Created` to `PayoutInProgress` in 3.5 minutes). The EOA's 0.0001 ETH,
 [`0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67`](https://eth-sepolia.blockscout.com/tx/0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67),
-had receipt status 1 in block 12082872, but Blockscout did not show it within 90 seconds and 18 reloads; a few minutes
+had receipt status 1 in block 12082872, but Blockscout did not show it within 90 seconds, after the first load and 17 reloads; a few minutes
 later the same page showed it after one second. Since `0ef6cef` both scripts wait up to five minutes for the explorer.
 
 The screenshots of that run showed a second defect. The booking image and the payment information image were black
@@ -987,7 +988,8 @@ other characters, masked only elements at most 24 characters longer than the mat
 would cover the hash, the deposit address or the booking values. A dry run of `5b942a9` then left the run's invented
 IBAN readable in the instruction sentence, because the coverage check accepted the masked IBAN selector as cover for
 both occurrences; `b1253cb` handles every innermost element holding a match and wraps a match inside longer text in
-its own masked span. A run of the code of `b1253cb`, before it was committed, without `--send` (`--account all --screenshots`) exited 0, and its eight
+its own masked span, and `d09a64a` also masks visible input fields whose value holds an IBAN (no screenshot step of a
+run shows such a field, so this is not exercised). A run of the code of `b1253cb`, before it was committed, without `--send` (`--account all --screenshots`) exited 0, and its eight
 images passed the OCR and QR scan with 735 to 739 characters read from each payment information image and the
 deposit address readable. The page probe of the pattern above, run on the patterns of `a29148b` and `b1253cb`, found
 the invented IBAN in all five renderings with both (one line, non-breaking spaces, `<br>`, two blocks, two paragraphs)
