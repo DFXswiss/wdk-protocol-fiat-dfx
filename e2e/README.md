@@ -565,7 +565,7 @@ are unchanged; otherwise it stops before sending.
 node real-sell.mjs --seed-file <path> [--asset USDT|ETH|all] \
   [--account eoa|smart|all] [--rpc <url>] [--bundler <url>] [--lock <dir>] [--out <path>] \
   [--screenshots <dir>] [--explorer <origin>] [--follow <minutes>]
-node real-sell.mjs --seed-file <path> --send --confirm
+node real-sell.mjs --seed-file <path> --send --confirm --screenshots <dir> --follow 60
 ```
 
 `--asset` defaults to `all`, USDT first and then ETH. USDT sells 1 USDT. ETH
@@ -578,20 +578,23 @@ end only when this process created it. `--out` repeats the JSON lines in that
 file with mode `0600`.
 
 `--screenshots <dir>` saves masked PNGs for the loaded widget and payment
-information for each case, and, when sending, for each deposit on the explorer.
+information for each case, and, when sending, for each deposit on the explorer
+and the booked sale in the app.
 Safe funding transactions also get explorer screenshots. The directory is
 created with mode `0700`; an existing directory must have that mode, be owned
 by the current user and not be a symlink. The mask covers both invented IBANs,
 the IBAN input, and any IBAN-shaped text, including existing bank accounts. The
-explorer defaults to `https://sepolia.etherscan.io`; use `--explorer <origin>`
-to override it. A missing hash or `Success` on the explorer within 90 seconds
-fails the run.
+explorer defaults to `https://eth-sepolia.blockscout.com` because Etherscan
+returns HTTP 403 to headless Chromium; use `--explorer <origin>` to override it.
+A missing hash or whole word `Success` on the explorer within 90 seconds
+fails the run. Explorer reloads are logged and counted in the screenshot line.
 
 `--follow <minutes>` accepts an integer from 0 to 240, default 0. When sending,
 after the existing checks it polls every 30 seconds for the same transaction
 until `PayoutInProgress` or `Completed`, checks both module detail lookups, and
 logs state changes with timestamps. A failed state or timeout fails the run;
-the next case waits until follow finishes. A dry run has no transaction to follow.
+the next case waits until follow and the booking screenshot finish. The booking
+page must show the backend id, hash prefix and reached state. A dry run has no transaction to follow.
 `PayoutInProgress` does not prove a bank payout has completed.
 
 `--account` defaults to `all`: the EOA cases run first, followed by the smart
@@ -606,7 +609,9 @@ including a smart-account dry run.
 When neither `--send` nor `--confirm` is given, the script stops once a valid
 payment-info response is on screen and the deposit address is visible, then
 prints `dry run: nothing sent` and exits 0. Passing only one of the two flags
-is an error. With both, each asset is signed and sent once; the script never retries a
+is an error. Sending also requires `--follow` of at least 1 minute,
+`--screenshots`, and a clean working tree. The script checks that HEAD has not
+changed at the end. With both flags, each asset is signed and sent once; the script never retries a
 send. The ethers RPC client may resubmit the same signed transaction after
 HTTP 429, which has the same hash and nonce and cannot execute twice. The receipt is
 read from the RPC, not from the wallet. `GET /v1/transaction` is polled until
@@ -614,7 +619,9 @@ that hash is present. The module is then asked for the same sale by the
 external id and by the DFX uid.
 Fixed-block reads retry `block not found` and `header not found` for up to 60 seconds because public
 RPCs mix nodes at different heights, and pre-send balances and the funding check
-use fixed blocks; the script never retries sends.
+use fixed blocks. Retries after read errors in those fixed-block reads, transaction
+lookup and UserOperation receipt lookup are logged and counted. Polling for an
+absent result and reloading the explorer are not counted as retries.
 
 In smart mode a dry run neither funds the Safe nor sends a UserOperation. With
 `--send --confirm`, account 0 funds the Safe once with the selected sale amounts
@@ -627,15 +634,17 @@ Exit 0 means the run passed. Exit 1 means a check failed at or after
 not start: the lock is held, the seed file is missing or unsafe, the
 chain id is wrong, the RPC or `https://dev.api.dfx.swiss/version` is
 unreachable, the Safe is already deployed or the bundler preflight fails, or,
-with `--send`, the balance is too small. The EOA ETH balance must cover every
+with `--send`, the balance is too small or the working tree is dirty. The EOA ETH balance must cover every
 selected ETH case in both modes, 0.0005 ETH for the Safe when selected, and
 0.002 ETH reserve. The USDT balance must cover every selected USDT case in both modes.
 
 A dry run still opens the widget, so it creates sell requests on dev. `--send
 --confirm` sends test ETH or USDT to the DFX dev deposit address and, when the
-whole run passes, writes `echter-lauf.json` under the repository `.git`
-directory (`git rev-parse --git-path`). Stdout is one JSON object per line.
+whole run passes, writes protocol version 2 to `echter-lauf.json` under the repository `.git`
+directory (`git rev-parse --git-path`). It records transaction balances and booking
+states, backend commits, read retries, and screenshot paths and SHA-256 hashes.
+Its `art` is `hybrid` because WDK signs and sends without a wallet interface or
+confirmation dialog. Stdout is one JSON object per line.
 The seed, the IBAN, the session token and the full sell URL are never printed.
-Screenshots are optional; the script records no traces or video. Without
-`--follow`, a sell ends when the dev API recognizes the deposit. WDK has no
-confirmation dialog, so a rejected wallet prompt is not covered.
+Screenshots are optional for dry runs; the script records no traces or video.
+A rejected wallet prompt is not covered.

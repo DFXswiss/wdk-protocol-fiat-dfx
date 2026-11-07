@@ -1,14 +1,14 @@
 // Real Sepolia sell against the DFX sandbox, the way a wallet user sells.
 // One on-chain deposit per asset, then the DFX dev API must recognize that hash.
-// Optionally follow the backend state to payout in progress or completion.
+// With --send, follow the backend state to payout in progress or completion and capture the booking page.
 // WDK has no confirmation dialog, so a rejected wallet prompt is not covered.
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
-import { randomBytes, randomInt } from 'node:crypto'
+import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { chmodSync, constants, lstatSync, mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync, writeSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
@@ -47,7 +47,7 @@ class UsageError extends Error {}
 class NotRunError extends Error {}
 
 const secrets = []
-const state = { flow: false, lockHeld: false, lockDir: '', provider: null, browser: null, out: null, receiptBlock: 0 }
+const state = { flow: false, lockHeld: false, lockDir: '', provider: null, browser: null, out: null, receiptBlock: 0, retries: 0, asset: null }
 
 function redact (value) {
   let text = String(value ?? 'Unknown error')
@@ -78,6 +78,11 @@ function emit (record) {
   const line = redact(JSON.stringify({ account: state.account ?? null, ...record }, (_, value) => typeof value === 'bigint' ? value.toString() : value))
   process.stdout.write(line + '\n')
   if (state.out) writeLine(state.out.fd, line)
+}
+
+function recordRetry (what, error) {
+  state.retries++
+  emit({ step: 'retry', asset: state.asset, ok: true, what, error: redact(error?.message ?? error) })
 }
 
 function compact (value) {
@@ -130,7 +135,7 @@ function inventedIban (other) {
 }
 
 function parseArgs (args) {
-  const options = { rpc: DEFAULT_RPC, bundler: DEFAULT_BUNDLER, explorer: 'https://sepolia.etherscan.io', follow: '0', account: 'all', asset: 'all', send: false, confirm: false }
+  const options = { rpc: DEFAULT_RPC, bundler: DEFAULT_BUNDLER, explorer: 'https://eth-sepolia.blockscout.com', follow: '0', account: 'all', asset: 'all', send: false, confirm: false }
   const valued = new Map([
     ['--seed-file', 'seedFile'], ['--asset', 'asset'],
     ['--rpc', 'rpc'], ['--bundler', 'bundler'], ['--account', 'account'], ['--lock', 'lock'], ['--out', 'out'],
@@ -159,6 +164,7 @@ function parseArgs (args) {
   if (options.send !== options.confirm) throw new UsageError('--send and --confirm are both required to send')
   if (!/^(?:0|[1-9]\d*)$/.test(options.follow) || Number(options.follow) > 240) throw new UsageError('--follow must be an integer from 0 to 240')
   options.follow = Number(options.follow)
+  if (options.send && (options.follow < 1 || !options.screenshots)) throw new UsageError('--send requires --follow and --screenshots so every sell reaches its booking with images')
   try {
     const explorer = new URL(options.explorer)
     if (!['http:', 'https:'].includes(explorer.protocol) || explorer.origin !== options.explorer || explorer.username || explorer.password) throw new Error()
@@ -183,7 +189,7 @@ function prepareScreenshots (dir) {
   }
 }
 
-async function screenshot (page, tools, asset, number, step, widget = false) {
+async function screenshot (page, tools, asset, number, step, widget = false, tx, reloads) {
   if (!tools.screenshots) return
   const ibans = tools.ibans.map(iban => compact(iban).toUpperCase())
   const found = await page.evaluate(values => {
@@ -207,33 +213,48 @@ async function screenshot (page, tools, asset, number, step, widget = false) {
     return { text: findIbans(globalThis.document.body.innerText).length > 0, count: matches.length }
   }, ibans)
   if (widget && found.text && found.count === 0) throw new Error('IBAN is visible in widget text but no element is masked')
+  const datei = resolve(tools.screenshots, `${tools.runId}-${tools.kind}-${asset}-${number}-${step}.png`)
   await page.screenshot({
-    path: resolve(tools.screenshots, `${tools.runId}-${tools.kind}-${asset}-${number}-${step}.png`),
+    path: datei,
     mask: [page.locator('[data-e2e-iban-mask="true"]'), page.locator('input[name="iban"]')],
     maskColor: '#000000'
   })
+  const sha256 = createHash('sha256').update(readFileSync(datei)).digest('hex')
+  const schritt = step === 'booking' ? 'buchung' : tx ? 'explorer' : step
+  emit({ step: 'screenshot', asset, ok: true, schritt, file: basename(datei), sha256, ...(tx ? { tx } : {}), ...(reloads === undefined ? {} : { reloads }) })
+  return { schritt, datei, sha256 }
 }
 
-async function screenshotExplorer (tools, asset, number, step, hash) {
+async function screenshotExplorer (tools, asset, number, step, hash, evidence) {
   if (!tools.screenshots) return
   const context = await tools.browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
   const page = await context.newPage()
   const deadline = Date.now() + 90_000
+  let reloads = 0
   try {
     while (Date.now() < deadline) {
-      await page.goto(`${tools.explorer}/tx/${hash}`, { waitUntil: 'domcontentloaded', timeout: Math.max(1, deadline - Date.now()) })
+      if (reloads > 0) emit({ step: 'explorer-reload', asset, ok: true, hash, attempt: reloads })
+      try {
+        await page.goto(`${tools.explorer}/tx/${hash}`, { waitUntil: 'domcontentloaded', timeout: Math.max(1, deadline - Date.now()) })
+      } catch (error) {
+        if (error.name === 'TimeoutError' && Date.now() >= deadline) break
+        throw error
+      }
       try {
         await page.waitForFunction(value => {
           const text = globalThis.document.body?.innerText || ''
-          return text.toLowerCase().includes(value.toLowerCase()) && text.includes('Success')
+          return text.toLowerCase().includes(value.toLowerCase()) && /\bSuccess\b/.test(text)
         }, hash, { timeout: Math.min(5_000, Math.max(1, deadline - Date.now())) })
-        await screenshot(page, tools, asset, number, step, false)
-        return
       } catch (error) {
+        if (error.name !== 'TimeoutError') throw error
         if (Date.now() >= deadline) break
+        reloads++
+        continue
       }
+      evidence.screenshots.push({ ...await screenshot(page, tools, asset, number, step, false, hash, reloads), tx: hash })
+      return
     }
-    throw new Error(`Explorer did not show ${hash} and Success within 90 seconds`)
+    throw new Error(`Explorer ${tools.explorer} did not show ${hash} and Success within 90 seconds`)
   } finally {
     await context.close()
   }
@@ -517,7 +538,7 @@ async function openSell (browser, sellUrl, iban, ext, spec, first, tools) {
         const text = globalThis.document.body?.innerText || ''
         return text.includes('Add or select your IBAN') || text.includes('Payment Information')
       }, null, { timeout: 60_000 })
-      await screenshot(page, tools, spec.asset, '01', 'widget-loaded', true)
+      tools.evidence.screenshots.push(await screenshot(page, tools, spec.asset, '01', 'widget-loaded', true))
     }
     let preselected = false
     if (!first) {
@@ -611,7 +632,7 @@ async function openSell (browser, sellUrl, iban, ext, spec, first, tools) {
       await delay(250)
     }
     if (!facts) throw rejected || new Error('No valid paymentInfos response with the deposit address visible')
-    await screenshot(page, tools, spec.asset, '02', 'payment-information', true)
+    if (tools.screenshots) tools.evidence.screenshots.push(await screenshot(page, tools, spec.asset, '02', 'payment-information', true))
     const text = await page.locator('body').innerText().catch(() => '')
     await context.close()
     contextClosed = true
@@ -714,6 +735,7 @@ async function readAtBlock (blockNumber, read) {
       }
       if (!blockNotFound || Date.now() + 2_000 >= deadline) throw error
       await delay(2_000)
+      recordRetry('readAtBlock', error)
     }
   }
 }
@@ -766,6 +788,7 @@ async function findTransaction (session, hash) {
     }
     if (Date.now() + BACKEND_POLL_MS > deadline) break
     await delay(BACKEND_POLL_MS)
+    if (lastError) recordRetry('findTransaction', lastError)
   }
   if (lastError) throw new Error(`GET /v1/transaction failed: ${lastError.message}`)
   throw new Error('No transaction with this inputTxId within 10 minutes')
@@ -779,6 +802,7 @@ function assertBackend (entry, spec, ext) {
   }
   if (entry.externalTransactionId !== ext) throw new Error('Backend externalTransactionId does not match')
   if (typeof entry.uid !== 'string' || entry.uid === '') throw new Error('Backend uid is missing')
+  if (entry.id == null || String(entry.id).trim() === '') throw new Error('Backend id is missing')
   if (typeof entry.state !== 'string') throw new Error('Backend state is not a string')
   return {
     id: entry.id,
@@ -820,7 +844,7 @@ async function followTransaction (tools, session, hash, spec, ext, uid, currency
         const checked = assertDetail(detail, spec, currency, label)
         if (checked.status !== expected) throw new Error(`Module ${label} status is ${checked.status}; expected ${expected}`)
       }
-      return
+      return entry.state
     }
     if (Date.now() + 30_000 > deadline) throw new Error('Follow timed out before payout')
     await delay(30_000)
@@ -889,11 +913,13 @@ async function waitForUserOperation (account, hash) {
   const deadline = Date.now() + RECEIPT_TIMEOUT_MS
   while (Date.now() <= deadline) {
     let receipt
-    try { receipt = await account.getUserOperationReceipt(hash) } catch {}
+    let readError
+    try { receipt = await account.getUserOperationReceipt(hash) } catch (error) { readError = error }
     if (receipt) return receipt
     const remaining = deadline - Date.now()
     if (remaining <= 0) break
     await delay(Math.min(2_000, remaining))
+    if (readError && Date.now() <= deadline) recordRetry('waitForUserOperation', readError)
   }
   throw new Error(`User operation ${hash} was not included within 4 minutes`)
 }
@@ -921,6 +947,7 @@ async function fundSafe (eoa, safe, cases, provider, usdt, evidence, tools) {
   let fundingBlock
   for (const spec of [{ asset: 'USDT', amount: tokenAmount }, { asset: 'ETH', amount: ethAmount }]) {
     if (spec.amount === 0n) continue
+    state.asset = spec.asset
     const hash = await sendOnce(eoa, spec, safe)
     emit({ step: 'funding-send', asset: spec.asset, ok: true, hash })
     const receipt = await waitForReceipt(provider, hash)
@@ -929,7 +956,7 @@ async function fundSafe (eoa, safe, cases, provider, usdt, evidence, tools) {
     fundingBlock = receipt.blockNumber
     evidence.txs.push({ hash, rolle: 'funding', from: getAddress(receipt.from) })
     emit({ step: 'funding-receipt', asset: spec.asset, ok: true, hash, status: receipt.status })
-    await screenshotExplorer(tools, spec.asset, '00', 'funding', hash)
+    await screenshotExplorer(tools, spec.asset, '00', 'funding', hash, evidence)
   }
   const [tokenBalance, ethBalance, code] = await Promise.all([
     readAtBlock(fundingBlock, () => usdt.balanceOf(safe, { blockTag: fundingBlock })),
@@ -941,6 +968,7 @@ async function fundSafe (eoa, safe, cases, provider, usdt, evidence, tools) {
 }
 
 async function runCase (spec, tools, evidence) {
+  state.asset = spec.asset
   const ext = `wdk-real-sell-${tools.runId}-${tools.kind}-${spec.asset}`
   let step = 'quoteSell'
   try {
@@ -1041,10 +1069,11 @@ async function runCase (spec, tools, evidence) {
       effectiveGasPrice: receipt.gasPrice.toString()
     })
     step = 'explorer'
-    await screenshotExplorer(tools, spec.asset, '03', 'deposit', hash)
+    await screenshotExplorer(tools, spec.asset, '03', 'deposit', hash, evidence)
 
     step = 'balances-after'
     const after = await readBalances(tools.provider, tools.usdt, tools.accountAddress, receipt.blockNumber)
+    let balanceBefore = before
     if (tools.kind === 'smart') {
       const entryPoint = new Contract(ENTRY_POINT, ['function balanceOf(address) view returns (uint256)'], tools.provider)
       const [blockBefore, entryPointBefore, entryPointAfter] = await Promise.all([
@@ -1052,6 +1081,7 @@ async function runCase (spec, tools, evidence) {
         readAtBlock(receipt.blockNumber - 1, () => entryPoint.balanceOf(tools.accountAddress, { blockTag: receipt.blockNumber - 1 })),
         readAtBlock(receipt.blockNumber, () => entryPoint.balanceOf(tools.accountAddress, { blockTag: receipt.blockNumber }))
       ])
+      balanceBefore = blockBefore
       const ethAmount = spec.asset === 'ETH' ? spec.amount : 0n
       const ethMatches = blockBefore.ethBalance - after.ethBalance === ethAmount + entryPointAfter - entryPointBefore + gasCost
       const usdtMatches = spec.asset !== 'USDT' || blockBefore.usdtBalance - after.usdtBalance === spec.amount
@@ -1074,7 +1104,6 @@ async function runCase (spec, tools, evidence) {
     const trimmed = assertBackend(found, spec, ext)
     emit({ step, asset: spec.asset, ok: true, transaction: trimmed })
     evidence.backend.push(trimmed)
-    evidence.txs.push({ hash, rolle: 'einzahlung', from: getAddress(receipt.from), ...(tools.kind === 'smart' ? { safe: tools.accountAddress, userOperationHash: sentHash } : {}) })
 
     step = 'module'
     const byExternal = await tools.fiat.getTransactionDetail(ext, { idType: 'externalTransactionId' })
@@ -1082,10 +1111,28 @@ async function runCase (spec, tools, evidence) {
     const byUid = await tools.fiat.getTransactionDetail(trimmed.uid)
     const uidDetail = assertDetail(byUid, spec, payment.currency, 'uid')
     emit({ step, asset: spec.asset, ok: true, externalTransactionId: externalDetail, uid: uidDetail })
-    if (tools.follow) {
-      step = 'follow'
-      await followTransaction(tools, session, hash, spec, ext, trimmed.uid, payment.currency, trimmed.state)
+    step = 'follow'
+    const status = await followTransaction(tools, session, hash, spec, ext, trimmed.uid, payment.currency, trimmed.state)
+    step = 'booking'
+    const context = await tools.browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
+    try {
+      const page = await context.newPage()
+      await page.goto(`${APP}/tx/${encodeURIComponent(trimmed.uid)}?session=${encodeURIComponent(session)}&lang=en`)
+      try {
+        await page.waitForFunction(({ id, prefix, stateText }) => {
+          const text = globalThis.document.body?.innerText || ''
+          return text.includes(id) && text.toLowerCase().includes(prefix) && text.includes(stateText)
+        }, { id: String(trimmed.id), prefix: hash.slice(0, 24).toLowerCase(), stateText: status === 'Completed' ? 'Completed' : 'Payout in progress' }, { timeout: 60_000 })
+      } catch (error) {
+        if (error.name !== 'TimeoutError') throw error
+        throw new Error('Booking page did not show id, hash and state within 60 seconds')
+      }
+      evidence.screenshots.push({ ...await screenshot(page, tools, spec.asset, '04', 'booking', true, hash), tx: hash })
+    } finally {
+      await context.close()
     }
+    const balanceKey = spec.asset === 'USDT' ? 'usdtBalance' : 'ethBalance'
+    evidence.txs.push({ hash, rolle: 'verkauf', from: getAddress(receipt.from), saldo: { vorher: balanceBefore[balanceKey].toString(), nachher: after[balanceKey].toString() }, buchung: { status, uid: trimmed.uid }, ...(tools.kind === 'smart' ? { safe: tools.accountAddress, userOperationHash: sentHash } : {}) })
   } catch (error) {
     emit({ step, asset: spec.asset, ok: false, error: redact(error?.message ?? error) })
     throw error
@@ -1121,6 +1168,8 @@ async function main () {
   emit({ step: 'chain', asset: null, ok: true, chainId: 11155111 })
 
   const started = await readVersion(true)
+  const head = git(['rev-parse', 'HEAD'])
+  if (options.send && git(['status', '--porcelain']) !== '') throw new NotRunError('not run: the working tree is not clean, so the run would not belong to a commit')
   const runIso = new Date().toISOString()
   emit({ step: 'version', asset: null, ok: true, commit: started.commit, startedAt: started.startedAt })
 
@@ -1177,8 +1226,8 @@ async function main () {
   state.browser = await chromium.launch({ headless: true })
   const runId = `${Date.now()}-${randomBytes(3).toString('hex')}`
   emit({ step: 'ready', asset: null, ok: true, runId, address: accountAddress, send: options.send })
-  const evidence = { txs: [], backend: [] }
-  const tools = { runId, fiat, account, accountAddress, iban, ibans: [iban, smartIban], provider: state.provider, usdt, browser: state.browser, send: options.send, kind: 'eoa', first: true, screenshots: options.screenshots, explorer: options.explorer, follow: options.follow }
+  const evidence = { txs: [], backend: [], screenshots: [] }
+  const tools = { runId, fiat, account, accountAddress, iban, ibans: [iban, smartIban], provider: state.provider, usdt, browser: state.browser, send: options.send, kind: 'eoa', first: true, screenshots: options.screenshots, explorer: options.explorer, follow: options.follow, evidence }
   if (useEoa) for (const spec of cases) {
     await runCase(spec, tools, evidence)
     tools.first = false
@@ -1200,27 +1249,31 @@ async function main () {
   if (finished.commit !== started.commit) {
     throw new Error(`Backend commit changed during the run (${started.commit} -> ${finished.commit})`)
   }
+  if (git(['rev-parse', 'HEAD']) !== head) throw new Error('HEAD changed during the run')
   if (!options.send) {
     emit({ step: 'send', asset: null, ok: true, result: 'dry run: nothing sent' })
     return
   }
-  const head = git(['rev-parse', 'HEAD'])
   const protocol = {
-    version: 1,
-    art: 'echt',
+    version: 2,
+    art: 'hybrid',
     head,
     frontend_sha: strip0x(head),
-    backend_sha: strip0x(finished.commit),
+    backend_sha: strip0x(started.commit),
+    backend_sha_ende: strip0x(finished.commit),
     befehl: invocation(),
     chain_id: 11155111,
     lokal: false,
     vertraege: { USDT: '0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0' },
-    wallet: { name: '@tetherto/wdk-wallet-evm', version: walletVersion },
+    wallet: { name: '@tetherto/wdk-wallet-evm', version: walletVersion, oberflaeche: false, ...(useSmart ? { erc4337: { name: '@tetherto/wdk-wallet-evm-erc-4337', version: packageVersion('@tetherto/wdk-wallet-evm-erc-4337') } } : {}) },
     flags: `dev.api.dfx.swiss /version commit ${finished.commit} startedAt ${finished.startedAt} run ${runIso}`,
     erkennung: 'selbst',
-    gemockt: [],
+    gemockt: ['wallet UI: WDK signs and sends from this script; no wallet confirmation dialog'],
     dirty: git(['status', '--porcelain']) !== '',
+    wiederholungen: state.retries,
+    schalter: ['dev.api.dfx.swiss sandbox: backend switches such as an AML skip cannot be read without admin rights and are not recorded'],
     txs: evidence.txs,
+    screenshots: evidence.screenshots,
     backend_beleg: { endpoint: 'GET /v1/transaction', antwort: evidence.backend }
   }
   const written = writeProtocol(protocol)
