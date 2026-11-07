@@ -102,7 +102,7 @@ async function screenshotExplorer (options, runId, hash) {
   try {
     const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
     const page = await context.newPage()
-    const deadline = Date.now() + 90_000
+    const deadline = Date.now() + 300_000
     let reloads = 0
     while (Date.now() < deadline) {
       if (reloads > 0) emit({ step: 'explorer-reload', hash, attempt: reloads })
@@ -129,7 +129,7 @@ async function screenshotExplorer (options, runId, hash) {
       emit({ step: 'screenshot', schritt: 'explorer', file: basename(datei), sha256, tx: hash })
       return { schritt: 'explorer', datei, sha256, tx: hash }
     }
-    throw new Error(`Explorer ${options.explorer} did not show ${hash} and Success within 90 seconds`)
+    throw new Error(`Explorer ${options.explorer} did not show ${hash} and Success within 5 minutes`)
   } finally { await browser.close() }
 }
 

@@ -229,7 +229,7 @@ async function screenshotExplorer (tools, asset, number, step, hash, evidence) {
   if (!tools.screenshots) return
   const context = await tools.browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
   const page = await context.newPage()
-  const deadline = Date.now() + 90_000
+  const deadline = Date.now() + 300_000
   let reloads = 0
   try {
     while (Date.now() < deadline) {
@@ -254,7 +254,7 @@ async function screenshotExplorer (tools, asset, number, step, hash, evidence) {
       evidence.screenshots.push({ ...await screenshot(page, tools, asset, number, step, false, hash, reloads), tx: hash })
       return
     }
-    throw new Error(`Explorer ${tools.explorer} did not show ${hash} and Success within 90 seconds`)
+    throw new Error(`Explorer ${tools.explorer} did not show ${hash} and Success within 5 minutes`)
   } finally {
     await context.close()
   }

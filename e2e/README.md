@@ -596,8 +596,9 @@ by the current user and not be a symlink. The mask covers both invented IBANs,
 the IBAN input, and any IBAN-shaped text, including existing bank accounts. The
 explorer defaults to `https://eth-sepolia.blockscout.com` because Etherscan
 returns HTTP 403 to headless Chromium; use `--explorer <origin>` to override it.
-A missing hash or whole word `Success` on the explorer within 90 seconds
-fails the run. Explorer reloads are logged and counted in the screenshot line.
+A missing hash or whole word `Success` on the explorer within 5 minutes
+fails the run; the explorer indexer can lag the chain by more than 90 seconds.
+Explorer reloads are logged and counted in the screenshot line.
 
 `--follow <minutes>` accepts an integer from 0 to 240, default 0. When sending,
 after the existing checks it polls every 30 seconds for the same transaction
