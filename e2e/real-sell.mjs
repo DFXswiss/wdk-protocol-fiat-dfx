@@ -254,6 +254,11 @@ async function screenshot (page, tools, asset, number, step, widget = false, tx,
       }
     }
     const matches = [...globalThis.document.querySelectorAll('[data-e2e-iban-mask="true"]')]
+    const outermost = matches.filter(el => !el.parentElement?.closest('[data-e2e-iban-mask="true"]'))
+    for (const value of hits) {
+      const expected = occurrences(compactText(globalThis.document.body.innerText), value)
+      if (outermost.reduce((count, el) => count + occurrences(compactText(el.innerText), value), 0) < expected) missing = true
+    }
     return {
       text: hits.length > 0,
       count: matches.length,
@@ -1186,7 +1191,7 @@ async function runCase (spec, tools, evidence) {
         if (error.name !== 'TimeoutError') throw error
         throw new Error('Booking page did not show id, hash and state within 60 seconds')
       }
-      evidence.screenshots.push({ ...await screenshot(page, tools, spec.asset, '04', 'booking', true, hash, undefined, [String(trimmed.id), status === 'Completed' ? 'Completed' : 'Payout in progress', (hash.slice(0, 24) + '...' + hash.slice(-22)).toLowerCase()]), tx: hash })
+      evidence.screenshots.push({ ...await screenshot(page, tools, spec.asset, '04', 'booking', true, hash, undefined, [String(trimmed.id), 'Sell', status === 'Completed' ? 'Completed' : 'Payout in progress', (hash.slice(0, 24) + '...' + hash.slice(-22)).toLowerCase()]), tx: hash })
     } finally {
       await context.close()
     }
