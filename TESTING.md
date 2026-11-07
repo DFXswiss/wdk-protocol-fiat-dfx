@@ -108,7 +108,7 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
 | Real purchase into an undeployed ERC-4337 account | wallet simulator in production; `cd e2e && node safe-rescue.mjs --native …` | On this branch (2026-10-29): 15 EUR of ETH bought for the Base smart account, which signed in to production DFX while it had no code; DFX paid 0.00565071 ETH to it and the module reports `completed`; the owner then deployed it without a bundler and moved the full balance out (section 14) |
 | Sending from an ERC-4337 account through a bundler | on Base a one-off script (not committed), then `cd e2e && node bundler-send.mjs …`; on a fork the same script | On 2026-10-30, on Base itself through the public Candide bundler: three UserOperations from an account that had no code; the first deployed it, and each settled with receipt status 1 and a `UserOperationEvent` with `success = true`; then the committed script sent 1 USDC (`transfer`) and the remaining ETH (`--all`) through the same bundler, each exit 0. On an `anvil` fork of Base with a local Alto bundler, the committed script: four sends (ETH that deploys, ETH, USDC `transfer`, `--all`) exit 0, five runs that sent no UserOperation (four stopped by the script, one refused by the bundler at gas estimation), and 7/7 mutations or removed checks detected (section 15) |
 | Real purchase of USDC | wallet simulator in production; `cast send` for the transfer out | On 2026-10-30: 15 EUR of USDC bought for the Base EOA account; DFX paid 12.528366 USDC and a network start fee of 0.00027499 ETH to it; the owner moved the full USDC out with one ERC-20 `transfer`, and the module then reported `completed` (section 16) |
-| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --send --confirm --screenshots … --follow …` (`--screenshots` and `--follow` required since `88c9e5b`; before `92be2ce` also `--iban-file …`) | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17). On 2026-11-06 at `a29148b`: exit 1 after the EOA's 1 USDT deposit, at the Etherscan screenshot, which answers headless Chromium with HTTP 403; the sandbox booked that sale to `PayoutInProgress` anyway. Since `88c9e5b` every sell is followed to its booking with Blockscout and app screenshots and recorded as protocol version 2 (`hybrid`); 8/8 mutations of the new checks detected (section 17) |
+| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --send --confirm --screenshots … --follow …` (`--screenshots` and `--follow` required since `88c9e5b`; before `92be2ce` also `--iban-file …`) | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17). On 2026-11-06 at `a29148b`: exit 1 after the EOA's 1 USDT deposit, at the Etherscan screenshot, which answers headless Chromium with HTTP 403; the sandbox booked that sale to `PayoutInProgress` anyway. Since `88c9e5b` every sell is followed to its booking with Blockscout and app screenshots and recorded as protocol version 2 (`hybrid`); 10/10 mutations of the new checks detected. A run at `aa06f6c` stopped red at the explorer of its second deposit, and its screenshots showed that the IBAN mask had blacked out the whole payment and booking cards since `a29148b`; fixed in `0ef6cef` to `b1253cb` (section 17) |
 | `e2e/` probes at `d35b031` | the commands above | On 2026-11-05, every probe that could run against the module of `d35b031`: signature differential 0 mismatches; native quotes as expected; live matrix sandbox 178/186 and production 177/178 (DFX catalogue data only); widget check 4/4 in both environments; wallet journeys 7/7; deployed ERC-4337 account 11/11; Bare entry point 4/4; twelve mutations of the real sell script detected. The four full-stack probes could not run at `d35b031`, whose challenge check rejected the local API's `[loc]_` challenge; with the module environment `local` they ran at `efc82f3` on 2026-11-06 with the results of `20ec94d` (section 18) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
@@ -918,7 +918,8 @@ listed in the same widget, one of them broken across two lines; no screenshot st
 is not exercised by a run. After `c5d1243` the pattern was changed to also accept line breaks between the
 groups: a hand-written page probe that is not in this repository applied the pattern of each version to an invented
 IBAN rendered on one line, with non-breaking spaces, broken by `<br>` and split over two blocks; the pattern of
-`92be2ce` missed the two broken renderings, the new one found all four.
+`92be2ce` missed the two broken renderings, the new one found all four. It also read lowercase hex as an IBAN and
+blacked out whole cards, which the next subsection records.
 
 A run without `--send` of the script as of `92be2ce` (`--account all --screenshots`) exited 0: all four cases reached
 a valid payment-info response with the deposit address visible, and nothing was sent. An OCR and QR scan of its
@@ -965,9 +966,37 @@ of a new check was detected
 | M3, `88c9e5b`: expected state text of the booking page swapped | `--account eoa --asset USDT --send --confirm --screenshots … --follow 30` | exit 1 at the booking page after 1 USDT, [`0x38c5551475ef9476cbd6f6ae35189e0c51e4817984670a4fad3518d50328a9d2`](https://eth-sepolia.blockscout.com/tx/0x38c5551475ef9476cbd6f6ae35189e0c51e4817984670a4fad3518d50328a9d2), went from `Created` through `Processing` to `PayoutInProgress`; the Blockscout screenshot passed without a reload |
 | M4 to M7, `93291e5`: value read two lines below its label; `===` inverted; the four line checks joined with `\|\|`; substring instead of equality | a page probe, not in this repository, that runs the check as written in the script on the real booking page of id 10017, with the right values and with a wrong id, state and hash | the original accepts only the right values; M4 and M5 reject the right values, M6 accepts all three wrong ones, M7 accepts the wrong id |
 | M8, `d9464d6`: clean-tree check of `real-buy.mjs` inverted, committed | `--url-file … --screenshots … --confirm` with the Sepolia test seed | exit 3 after the quote; no purchase URL was created |
+| M9, `b1253cb`: the IBAN inside a sentence not wrapped in a masked span | `--account eoa --asset USDT --screenshots …`, without `--send` | exit 1, `IBAN-shaped text has no small element to mask`; nothing sent |
+| M10, `b1253cb`: the check that the mask leaves the evidence visible inverted | as M9 | exit 1, `The mask would cover the evidence on payment-information`; nothing sent |
 
-Not mutated: the counting of read retries, because a retry cannot be caused on purpose against a public RPC. Before
-the fix, the explorer check was red at `a29148b` (above). The run at the head of this pull request is in the pull
+The run at `aa06f6c` (`--account all --send --confirm --screenshots … --follow 60`) exited 1. The EOA's 1 USDT,
+[`0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790`](https://eth-sepolia.blockscout.com/tx/0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790),
+passed every check up to its booking (id 10019, `Created` to `PayoutInProgress` in 3.5 minutes). The EOA's 0.0001 ETH,
+[`0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67`](https://eth-sepolia.blockscout.com/tx/0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67),
+had receipt status 1 in block 12082872, but Blockscout did not show it within 90 seconds and 18 reloads; a few minutes
+later the same page showed it after one second. Since `0ef6cef` both scripts wait up to five minutes for the explorer.
+
+The screenshots of that run showed a second defect. The booking image and the payment information image were black
+except for the page title: the IBAN pattern of `a29148b` ignored case and allowed line breaks between any two
+characters, so an abbreviated lowercase hash read as an IBAN and the match ran on into the next rows, and the only
+element holding the whole match was the card. Tesseract read 6 characters from each payment information image of the
+runs at `a29148b`, `88c9e5b` and `aa06f6c`, against 445 at `92be2ce`, where only the instruction sentence was masked;
+the OCR and QR scan passed them all because it looks for secrets, not for content. `5b942a9` made the pattern
+case-sensitive with the country code and check digits together and at most two whitespace characters between the
+other characters, masked only elements at most 24 characters longer than the match, and failed the run when the mask
+would cover the hash, the deposit address or the booking values. A dry run of `5b942a9` then left the run's invented
+IBAN readable in the instruction sentence, because the coverage check accepted the masked IBAN selector as cover for
+both occurrences; `b1253cb` handles every innermost element holding a match and wraps a match inside longer text in
+its own masked span. A run of the code of `b1253cb`, before it was committed, without `--send` (`--account all --screenshots`) exited 0, and its eight
+images passed the OCR and QR scan with 735 to 739 characters read from each payment information image and the
+deposit address readable. The page probe of the pattern above, run on the patterns of `a29148b` and `b1253cb`, found
+the invented IBAN in all five renderings with both (one line, non-breaking spaces, `<br>`, two blocks, two paragraphs)
+and read two of four non-IBAN texts as IBANs with the old pattern (an abbreviated hash followed by the next row, and
+lowercase hex) and none with the new one.
+
+Not mutated: the counting of read retries, because a retry cannot be caused on purpose against a public RPC, and the
+24-character limit for masked elements, which only decides how much around an IBAN is blacked out. Before the fix,
+the explorer check was red at `a29148b` (above). The run at the head of this pull request is in the pull
 request description. No purchase with `real-buy.mjs` is recorded in this document.
 
 ## 18. Re-run of the `e2e/` probes at `d35b031` (2026-11-05)

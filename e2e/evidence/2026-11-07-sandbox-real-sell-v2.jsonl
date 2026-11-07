@@ -70,3 +70,118 @@
 {"probe": "booking-line-checks-m4-m7", "text": "m7-includes.mjs {\"good\":true,\"wrongId\":true,\"wrongState\":false,\"wrongTx\":false}"}
 {"mutation": "m8-real-buy-clean-tree-check-inverted", "time": "2026-11-07T09:37:44.769Z", "step": "quote", "address": "0x86b1BdC4aAf523c652865c4361F15641AA04A627", "account": "smart", "index": 0, "cryptoAmount": "13119000", "fiatAmount": "1500", "fee": "323", "rate": "1.14337983077978504"}
 {"mutation": "m8-real-buy-clean-tree-check-inverted", "time": "2026-11-07T09:37:44.802Z", "step": "error", "error": "the working tree is not clean, so the run would not belong to a commit", "exitCode": 3}
+{"run": "red-aa06f6c", "account": null, "step": "chain", "asset": null, "ok": true, "chainId": 11155111}
+{"run": "red-aa06f6c", "account": null, "step": "version", "asset": null, "ok": true, "commit": "9ea03ac26426877bd1c05ebd3991618ff4a2489e", "startedAt": "2026-11-06T17:36:39.622Z"}
+{"run": "red-aa06f6c", "account": "smart", "step": "safe-preflight", "asset": null, "ok": true, "address": "0x3B002E14b3C895d2a2FC0beDcaa8Eb4846416646", "index": 1704930031, "deployed": false}
+{"run": "red-aa06f6c", "account": "eoa", "step": "balance", "asset": null, "ok": true, "usdt": "1920000000", "eth": "8013730208628718", "usdtNeed": "2000000", "ethNeed": "2700000000000000"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "ready", "asset": null, "ok": true, "runId": "1794044618835-8356ee", "address": "0x4B33B90cFC38341Db2b9EC5cF3B737508801c617", "send": true}
+{"run": "red-aa06f6c", "account": "eoa", "step": "quoteSell", "asset": "USDT", "ok": true, "cryptoAmount": "1000000", "fiatAmount": "88", "fee": "2", "rate": "0.88"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "sellUrl", "asset": "USDT", "ok": true, "externalTransactionId": "wdk-real-sell-1794044618835-8356ee-eoa-USDT", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "red-aa06f6c", "account": "eoa", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "widget-loaded", "file": "1794044618835-8356ee-eoa-USDT-01-widget-loaded.png", "sha256": "a517c2116bf212840a0353d0377ee50980f51be47b98ca80955755cf17fd73a6"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "payment-information", "file": "1794044618835-8356ee-eoa-USDT-02-payment-information.png", "sha256": "fbb750a0c406d893b6afd4ff1efda7e67ba3c7a663136b47523654fb8964c451"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "paymentInfos", "asset": "USDT", "ok": true, "id": 34323, "depositAddress": "0xd84CfD7B1860d48D7ddcc8fE9eCf0Cb712f69231", "currency": "EUR"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "balances-before", "asset": "USDT", "ok": true, "usdt": "1920000000", "eth": "8013730208628718", "nonce": "273", "deposit": "0"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "send", "asset": "USDT", "ok": true, "hash": "0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "receipt", "asset": "USDT", "ok": true, "hash": "0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790", "status": 1, "block": "12082851", "gasUsed": "140866", "effectiveGasPrice": "20"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "USDT", "ok": true, "hash": "0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790", "attempt": 1}
+{"run": "red-aa06f6c", "account": "eoa", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "explorer", "file": "1794044618835-8356ee-eoa-USDT-03-deposit.png", "sha256": "706d21e5c4cc2eb28b4dbdcc4201e5491036c9a083f82c8af9327bf53f3e80b7", "tx": "0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790", "reloads": 1}
+{"run": "red-aa06f6c", "account": "eoa", "step": "balances-after", "asset": "USDT", "ok": true, "usdt": "1919000000", "eth": "8013730205811398", "nonce": "274"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "backend", "asset": "USDT", "ok": true, "transaction": {"id": 10019, "uid": "TE865431F6A4B239C", "type": "Sell", "state": "Created", "inputTxId": "0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790", "inputAmount": 1, "inputAsset": "USDT", "externalTransactionId": "wdk-real-sell-1794044618835-8356ee-eoa-USDT"}}
+{"run": "red-aa06f6c", "account": "eoa", "step": "module", "asset": "USDT", "ok": true, "externalTransactionId": {"cryptoAsset": "USDT", "fiatCurrency": "EUR", "status": "in_progress"}, "uid": {"cryptoAsset": "USDT", "fiatCurrency": "EUR", "status": "in_progress"}}
+{"run": "red-aa06f6c", "account": "eoa", "step": "follow", "asset": "USDT", "ok": true, "state": "Created", "time": "2026-11-07T09:44:12.841Z"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "follow", "asset": "USDT", "ok": true, "state": "Processing", "time": "2026-11-07T09:45:13.275Z"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "follow", "asset": "USDT", "ok": true, "state": "PayoutInProgress", "time": "2026-11-07T09:47:44.261Z"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "buchung", "file": "1794044618835-8356ee-eoa-USDT-04-booking.png", "sha256": "ea03e55346cea35a957d05225e902643539d8868a99ea70c71e7ccca8f26d80b", "tx": "0x5810d8b487288136110568e66fefb5fc1b4649b3e6ea10b60227a79cadd16790"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "quoteSell", "asset": "ETH", "ok": true, "cryptoAmount": "100000000000000", "fiatAmount": "20", "fee": "0", "rate": "2000"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "sellUrl", "asset": "ETH", "ok": true, "externalTransactionId": "wdk-real-sell-1794044618835-8356ee-eoa-ETH", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "red-aa06f6c", "account": "eoa", "step": "screenshot", "asset": "ETH", "ok": true, "schritt": "widget-loaded", "file": "1794044618835-8356ee-eoa-ETH-01-widget-loaded.png", "sha256": "983755bbffe871eda44e3b4506ba6976e547dff30be6e713a98c4b30375accd1"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "screenshot", "asset": "ETH", "ok": true, "schritt": "payment-information", "file": "1794044618835-8356ee-eoa-ETH-02-payment-information.png", "sha256": "fbb750a0c406d893b6afd4ff1efda7e67ba3c7a663136b47523654fb8964c451"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "paymentInfos", "asset": "ETH", "ok": true, "id": 34325, "depositAddress": "0xd84CfD7B1860d48D7ddcc8fE9eCf0Cb712f69231", "currency": "EUR"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "balances-before", "asset": "ETH", "ok": true, "usdt": "1919000000", "eth": "8013730205811398", "nonce": "274", "deposit": "9999175432"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "send", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "receipt", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "status": 1, "block": "12082872", "gasUsed": "21000", "effectiveGasPrice": "22"}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 1}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 2}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 3}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 4}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 5}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 6}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 7}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 8}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 9}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 10}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 11}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 12}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 13}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 14}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 15}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 16}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer-reload", "asset": "ETH", "ok": true, "hash": "0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67", "attempt": 17}
+{"run": "red-aa06f6c", "account": "eoa", "step": "explorer", "asset": "ETH", "ok": false, "error": "Explorer https://eth-sepolia.blockscout.com did not show 0x5b826b7858c8eaa2f3b4cd4e79be1f57df568b57ef47d4f5d453b5ffa95c0b67 and Success within 90 seconds"}
+{"run": "dry-b1253cb-before-commit", "account": null, "step": "chain", "asset": null, "ok": true, "chainId": 11155111}
+{"run": "dry-b1253cb-before-commit", "account": null, "step": "version", "asset": null, "ok": true, "commit": "9ea03ac26426877bd1c05ebd3991618ff4a2489e", "startedAt": "2026-11-06T17:36:39.622Z"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "safe-preflight", "asset": null, "ok": true, "address": "0x42f0D886f42d3fa6888915C3E52D76d4e5382dC5", "index": 1954866856, "deployed": false}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "ready", "asset": null, "ok": true, "runId": "1794045561448-f9cbd1", "address": "0x4B33B90cFC38341Db2b9EC5cF3B737508801c617", "send": false}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "quoteSell", "asset": "USDT", "ok": true, "cryptoAmount": "1000000", "fiatAmount": "88", "fee": "2", "rate": "0.88"}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "sellUrl", "asset": "USDT", "ok": true, "externalTransactionId": "wdk-real-sell-1794045561448-f9cbd1-eoa-USDT", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "widget-loaded", "file": "1794045561448-f9cbd1-eoa-USDT-01-widget-loaded.png", "sha256": "0332f4c5d33b586a39237bdbf6e0588811821d87f99ae36ab41a13e472cd773d"}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "payment-information", "file": "1794045561448-f9cbd1-eoa-USDT-02-payment-information.png", "sha256": "d977f662a6a1840a8cc13a8681df5775928c2322c5c9c3d6a175048533e68dbc"}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "paymentInfos", "asset": "USDT", "ok": true, "id": 34337, "depositAddress": "0x2eA3CB29893342B30d86845cb75044e1553C4AC2", "currency": "EUR"}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "quoteSell", "asset": "ETH", "ok": true, "cryptoAmount": "100000000000000", "fiatAmount": "20", "fee": "0", "rate": "2000"}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "sellUrl", "asset": "ETH", "ok": true, "externalTransactionId": "wdk-real-sell-1794045561448-f9cbd1-eoa-ETH", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "screenshot", "asset": "ETH", "ok": true, "schritt": "widget-loaded", "file": "1794045561448-f9cbd1-eoa-ETH-01-widget-loaded.png", "sha256": "983755bbffe871eda44e3b4506ba6976e547dff30be6e713a98c4b30375accd1"}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "screenshot", "asset": "ETH", "ok": true, "schritt": "payment-information", "file": "1794045561448-f9cbd1-eoa-ETH-02-payment-information.png", "sha256": "14b24530c4f9298ae932705e469d96cf01afaa35cd8fe19f25174a1a26b54d1d"}
+{"run": "dry-b1253cb-before-commit", "account": "eoa", "step": "paymentInfos", "asset": "ETH", "ok": true, "id": 34339, "depositAddress": "0x2eA3CB29893342B30d86845cb75044e1553C4AC2", "currency": "EUR"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "quoteSell", "asset": "USDT", "ok": true, "cryptoAmount": "1000000", "fiatAmount": "88", "fee": "2", "rate": "0.88"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "safe-code", "asset": "USDT", "ok": true, "deployed": false}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "sellUrl", "asset": "USDT", "ok": true, "externalTransactionId": "wdk-real-sell-1794045561448-f9cbd1-smart-USDT", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "user", "asset": "USDT", "ok": true, "status": 200}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "widget-loaded", "file": "1794045561448-f9cbd1-smart-USDT-01-widget-loaded.png", "sha256": "5ddf0acb1b4ad4c5ce3b5980109584cfbd27d718474fabe2c2f0fe1de82a84aa"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "payment-information", "file": "1794045561448-f9cbd1-smart-USDT-02-payment-information.png", "sha256": "a474316636fca7a4721c3fa06535b32bb4235d0807d9b144165b1beb4419617c"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "paymentInfos", "asset": "USDT", "ok": true, "id": 34341, "depositAddress": "0x5BCB16ce6b7646d06BE3f7cd1bbEE02fbCd94083", "currency": "EUR"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "quoteSell", "asset": "ETH", "ok": true, "cryptoAmount": "100000000000000", "fiatAmount": "20", "fee": "0", "rate": "2000"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "safe-code", "asset": "ETH", "ok": true, "deployed": false}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "sellUrl", "asset": "ETH", "ok": true, "externalTransactionId": "wdk-real-sell-1794045561448-f9cbd1-smart-ETH", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "user", "asset": "ETH", "ok": true, "status": 200}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "screenshot", "asset": "ETH", "ok": true, "schritt": "widget-loaded", "file": "1794045561448-f9cbd1-smart-ETH-01-widget-loaded.png", "sha256": "5a078128740c74e68e8d1d068077ff8599d40b02df96690ea9a04792ae92db68"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "screenshot", "asset": "ETH", "ok": true, "schritt": "payment-information", "file": "1794045561448-f9cbd1-smart-ETH-02-payment-information.png", "sha256": "b31c1e2b7059e9c694dd6a08464f7aae53252e311d405868a2dcda2743a38ac3"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "paymentInfos", "asset": "ETH", "ok": true, "id": 34343, "depositAddress": "0x5BCB16ce6b7646d06BE3f7cd1bbEE02fbCd94083", "currency": "EUR"}
+{"run": "dry-b1253cb-before-commit", "account": "smart", "step": "send", "asset": null, "ok": true, "result": "dry run: nothing sent"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "== a29148b"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  one line, spaces"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  non-breaking spaces"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  <br> after two groups"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  two block spans"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  two paragraphs"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "FALSE HIT abbreviated hash then next row"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "no hit   checksummed address"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "FALSE HIT lowercase hex alone"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "no hit   booking card"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "missed 0 of 5 ; false hits 2 of 4"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "== b1253cb"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  one line, spaces"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  non-breaking spaces"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  <br> after two groups"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  two block spans"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "HIT  two paragraphs"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "no hit   abbreviated hash then next row"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "no hit   checksummed address"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "no hit   lowercase hex alone"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "no hit   booking card"}
+{"probe": "iban-pattern-a29148b-vs-b1253cb", "text": "missed 0 of 5 ; false hits 0 of 4"}
+{"mutation": "m9-no-span-wrap", "account": null, "step": "chain", "asset": null, "ok": true, "chainId": 11155111}
+{"mutation": "m9-no-span-wrap", "account": null, "step": "version", "asset": null, "ok": true, "commit": "9ea03ac26426877bd1c05ebd3991618ff4a2489e", "startedAt": "2026-11-06T17:36:39.622Z"}
+{"mutation": "m9-no-span-wrap", "account": "eoa", "step": "ready", "asset": null, "ok": true, "runId": "1794045615746-3d14c2", "address": "0x4B33B90cFC38341Db2b9EC5cF3B737508801c617", "send": false}
+{"mutation": "m9-no-span-wrap", "account": "eoa", "step": "quoteSell", "asset": "USDT", "ok": true, "cryptoAmount": "1000000", "fiatAmount": "88", "fee": "2", "rate": "0.88"}
+{"mutation": "m9-no-span-wrap", "account": "eoa", "step": "sellUrl", "asset": "USDT", "ok": true, "externalTransactionId": "wdk-real-sell-1794045615746-3d14c2-eoa-USDT", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"mutation": "m9-no-span-wrap", "account": "eoa", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "widget-loaded", "file": "1794045615746-3d14c2-eoa-USDT-01-widget-loaded.png", "sha256": "0332f4c5d33b586a39237bdbf6e0588811821d87f99ae36ab41a13e472cd773d"}
+{"mutation": "m9-no-span-wrap", "account": "eoa", "step": "paymentInfos", "asset": "USDT", "ok": false, "error": "IBAN-shaped text has no small element to mask"}
+{"mutation": "m9-no-span-wrap", "text": "real-sell failed: IBAN-shaped text has no small element to mask"}
+{"mutation": "m10-keep-check-inverted", "account": null, "step": "chain", "asset": null, "ok": true, "chainId": 11155111}
+{"mutation": "m10-keep-check-inverted", "account": null, "step": "version", "asset": null, "ok": true, "commit": "9ea03ac26426877bd1c05ebd3991618ff4a2489e", "startedAt": "2026-11-06T17:36:39.622Z"}
+{"mutation": "m10-keep-check-inverted", "account": "eoa", "step": "ready", "asset": null, "ok": true, "runId": "1794045621272-4c6abb", "address": "0x4B33B90cFC38341Db2b9EC5cF3B737508801c617", "send": false}
+{"mutation": "m10-keep-check-inverted", "account": "eoa", "step": "quoteSell", "asset": "USDT", "ok": true, "cryptoAmount": "1000000", "fiatAmount": "88", "fee": "2", "rate": "0.88"}
+{"mutation": "m10-keep-check-inverted", "account": "eoa", "step": "sellUrl", "asset": "USDT", "ok": true, "externalTransactionId": "wdk-real-sell-1794045621272-4c6abb-eoa-USDT", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"mutation": "m10-keep-check-inverted", "account": "eoa", "step": "screenshot", "asset": "USDT", "ok": true, "schritt": "widget-loaded", "file": "1794045621272-4c6abb-eoa-USDT-01-widget-loaded.png", "sha256": "0332f4c5d33b586a39237bdbf6e0588811821d87f99ae36ab41a13e472cd773d"}
+{"mutation": "m10-keep-check-inverted", "account": "eoa", "step": "paymentInfos", "asset": "USDT", "ok": false, "error": "The mask would cover the evidence on payment-information"}
+{"mutation": "m10-keep-check-inverted", "text": "real-sell failed: The mask would cover the evidence on payment-information"}
