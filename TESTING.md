@@ -576,9 +576,9 @@ Production uses the same code; it was not tested there. The module cannot work a
   payout cannot be reached with test money, and no sale was made with real money in production.
 - **A rejected transfer in the wallet.** WDK sends without a confirmation dialog, so a transfer that the user
   rejects in the wallet cannot occur in these runs.
-- **A scheduled run.** `.github/workflows/live-e2e.yml` runs `e2e/real-sell.mjs` against the DFX sandbox on manual
-  start only; it has not run on GitHub. A schedule needs the repository secret `TEST_SEED`, a Sepolia account funded
-  with ETH and USDT, and an owner, which a maintainer has to set up.
+- **A scheduled run.** No workflow in this pull request runs `e2e/real-sell.mjs`. A manual or scheduled GitHub run
+  needs a workflow approved by a maintainer, the repository secret `TEST_SEED`, a Sepolia account funded with ETH and
+  USDT, and an owner; it is left to a separate pull request.
 - **A token bought with real money into an ERC-4337 account.** The real purchase into a smart account was ETH
   (section 14); the real purchase of USDC paid out to an EOA (section 16). USDC into a smart account is covered by
   quotes and widget tests only. `e2e/safe-rescue.mjs` moved USDC out of a Safe only on a fork; `e2e/bundler-send.mjs` sent 1 USDC out of a

@@ -79,11 +79,6 @@
   ],
   "exclusions": [
     {
-      "workflow": ".github/workflows/live-e2e.yml",
-      "job": "live-e2e",
-      "reason": "Manual live run against the DFX sandbox with test money; not part of the measured local suite."
-    },
-    {
       "workflow": ".github/workflows/a38-guard.yml",
       "job": "guard",
       "reason": "A38 report guard bot itself (trusted base audit of the author report). Not part of the measured local suite."

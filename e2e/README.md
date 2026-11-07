@@ -639,10 +639,3 @@ The seed, the IBAN, the session token and the full sell URL are never printed.
 Screenshots are optional; the script records no traces or video. Without
 `--follow`, a sell ends when the dev API recognizes the deposit. WDK has no
 confirmation dialog, so a rejected wallet prompt is not covered.
-
-The `Live Sepolia E2E` GitHub Actions workflow is started manually with
-`account` and `follow` inputs. Configure the repository secret `TEST_SEED`
-and fund the test account with Sepolia ETH and USDT first. The
-workflow uploads the JSONL and masked screenshots as an artifact retained for
-14 days. To enable its commented schedule, meet those secret and funding
-requirements and name an owner in the workflow header before uncommenting it.
