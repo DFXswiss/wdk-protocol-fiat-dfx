@@ -207,16 +207,54 @@ async function screenshot (page, tools, asset, number, step, widget = false, tx,
       return [...shaped.map(compactText), ...values.filter(value => compactText(raw).includes(value))]
     }
     const hits = findIbans(globalThis.document.body.innerText)
-    const matches = elements.filter(el => visible(el) && hits.some(value => {
-      const text = compactText(el.innerText)
-      return text.includes(value) && text.length <= value.length + 24 &&
-        ![...el.children].some(child => visible(child) && compactText(child.innerText).includes(value))
+    const holders = hits.map(value => ({
+      value,
+      elements: elements.filter(el => visible(el) && compactText(el.innerText).includes(value) &&
+        ![...el.children].some(child => visible(child) && compactText(child.innerText).includes(value)))
     }))
-    for (const el of matches) el.setAttribute('data-e2e-iban-mask', 'true')
+    let missing = false
+    const occurrences = (text, value) => {
+      let count = 0
+      for (let index = text.indexOf(value); index !== -1; index = text.indexOf(value, index + 1)) count++
+      return count
+    }
+    for (const { value, elements: found } of holders) {
+      if (found.length === 0) missing = true
+      for (const el of found) {
+        const expected = occurrences(compactText(el.innerText), value)
+        if (compactText(el.innerText).length <= value.length + 24) {
+          el.setAttribute('data-e2e-iban-mask', 'true')
+        } else {
+          const walker = globalThis.document.createTreeWalker(el, globalThis.NodeFilter.SHOW_TEXT)
+          const nodes = []
+          while (walker.nextNode()) nodes.push(walker.currentNode)
+          const pattern = new RegExp([...value].join('[\\s\\u00a0]*'), 'g')
+          for (const node of nodes) {
+            if (node.parentElement.closest('[data-e2e-iban-mask="true"]')) continue
+            const text = node.data.toUpperCase()
+            if (text.length !== node.data.length) continue
+            const foundText = [...text.matchAll(pattern)]
+            for (const match of foundText.reverse()) {
+              const range = globalThis.document.createRange()
+              range.setStart(node, match.index)
+              range.setEnd(node, match.index + match[0].length)
+              const span = globalThis.document.createElement('span')
+              span.setAttribute('data-e2e-iban-mask', 'true')
+              range.surroundContents(span)
+            }
+          }
+        }
+        const marked = el.matches('[data-e2e-iban-mask="true"]')
+          ? [el]
+          : [...el.querySelectorAll('[data-e2e-iban-mask="true"]')].filter(visible)
+        if (marked.reduce((count, item) => count + occurrences(compactText(item.innerText), value), 0) < expected) missing = true
+      }
+    }
+    const matches = [...globalThis.document.querySelectorAll('[data-e2e-iban-mask="true"]')]
     return {
       text: hits.length > 0,
       count: matches.length,
-      missing: hits.some(value => !matches.some(el => compactText(el.innerText).includes(value))),
+      missing,
       coversEvidence: matches.some(el => keep.some(value => compactText(el.innerText).includes(compactText(value))))
     }
   }, { values: ibans, keep })
