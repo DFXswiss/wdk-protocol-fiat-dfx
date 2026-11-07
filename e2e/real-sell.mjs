@@ -911,7 +911,9 @@ async function checkBundler (url) {
 
 async function waitForUserOperation (account, hash) {
   const deadline = Date.now() + RECEIPT_TIMEOUT_MS
+  let previousReadError
   while (Date.now() <= deadline) {
+    if (previousReadError) recordRetry('waitForUserOperation', previousReadError)
     let receipt
     let readError
     try { receipt = await account.getUserOperationReceipt(hash) } catch (error) { readError = error }
@@ -919,7 +921,7 @@ async function waitForUserOperation (account, hash) {
     const remaining = deadline - Date.now()
     if (remaining <= 0) break
     await delay(Math.min(2_000, remaining))
-    if (readError && Date.now() <= deadline) recordRetry('waitForUserOperation', readError)
+    previousReadError = readError
   }
   throw new Error(`User operation ${hash} was not included within 4 minutes`)
 }
@@ -1119,10 +1121,16 @@ async function runCase (spec, tools, evidence) {
       const page = await context.newPage()
       await page.goto(`${APP}/tx/${encodeURIComponent(trimmed.uid)}?session=${encodeURIComponent(session)}&lang=en`)
       try {
-        await page.waitForFunction(({ id, prefix, stateText }) => {
-          const text = globalThis.document.body?.innerText || ''
-          return text.includes(id) && text.toLowerCase().includes(prefix) && text.includes(stateText)
-        }, { id: String(trimmed.id), prefix: hash.slice(0, 24).toLowerCase(), stateText: status === 'Completed' ? 'Completed' : 'Payout in progress' }, { timeout: 60_000 })
+        await page.waitForFunction(({ id, inputTx, stateText }) => {
+          const lines = (globalThis.document.body?.innerText || '').split('\n').map(line => line.trim()).filter(Boolean)
+          const matches = (label, value, lowercase = false) => {
+            const indexes = lines.flatMap((line, index) => line === label ? [index] : [])
+            if (indexes.length !== 1) return false
+            const next = lines[indexes[0] + 1]
+            return lowercase ? next?.toLowerCase() === value : next === value
+          }
+          return matches('ID', id) && matches('Type', 'Sell') && matches('State', stateText) && matches('Input TX', inputTx, true)
+        }, { id: String(trimmed.id), inputTx: (hash.slice(0, 24) + '...' + hash.slice(-22)).toLowerCase(), stateText: status === 'Completed' ? 'Completed' : 'Payout in progress' }, { timeout: 60_000 })
       } catch (error) {
         if (error.name !== 'TimeoutError') throw error
         throw new Error('Booking page did not show id, hash and state within 60 seconds')
@@ -1276,6 +1284,8 @@ async function main () {
     screenshots: evidence.screenshots,
     backend_beleg: { endpoint: 'GET /v1/transaction', antwort: evidence.backend }
   }
+  if (state.retries > 0) throw new Error(`Run is not evidence: ${state.retries} read retries`)
+  if (protocol.dirty) throw new Error('Run is not evidence: the working tree changed during the run')
   const written = writeProtocol(protocol)
   emit({ step: 'protocol', asset: null, ok: true, path: written, head, backend: finished.commit })
 }

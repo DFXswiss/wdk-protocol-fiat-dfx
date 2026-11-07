@@ -594,7 +594,9 @@ after the existing checks it polls every 30 seconds for the same transaction
 until `PayoutInProgress` or `Completed`, checks both module detail lookups, and
 logs state changes with timestamps. A failed state or timeout fails the run;
 the next case waits until follow and the booking screenshot finish. The booking
-page must show the backend id, hash prefix and reached state. A dry run has no transaction to follow.
+page must show exactly one each of the labels ID, Type, State and Input TX, each
+followed by the matching backend id, Sell, reached state and abbreviated hash,
+respectively. A dry run has no transaction to follow.
 `PayoutInProgress` does not prove a bank payout has completed.
 
 `--account` defaults to `all`: the EOA cases run first, followed by the smart
@@ -621,7 +623,9 @@ Fixed-block reads retry `block not found` and `header not found` for up to 60 se
 RPCs mix nodes at different heights, and pre-send balances and the funding check
 use fixed blocks. Retries after read errors in those fixed-block reads, transaction
 lookup and UserOperation receipt lookup are logged and counted. Polling for an
-absent result and reloading the explorer are not counted as retries.
+absent result and reloading the explorer are not counted as retries. A confirmed
+send run with any counted read retry or a dirty working tree at the end fails and
+writes no protocol.
 
 In smart mode a dry run neither funds the Safe nor sends a UserOperation. With
 `--send --confirm`, account 0 funds the Safe once with the selected sale amounts
