@@ -108,7 +108,7 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
 | Real purchase into an undeployed ERC-4337 account | wallet simulator in production; `cd e2e && node safe-rescue.mjs --native …` | On this branch (2026-10-29): 15 EUR of ETH bought for the Base smart account, which signed in to production DFX while it had no code; DFX paid 0.00565071 ETH to it and the module reports `completed`; the owner then deployed it without a bundler and moved the full balance out (section 14) |
 | Sending from an ERC-4337 account through a bundler | on Base a one-off script (not committed), then `cd e2e && node bundler-send.mjs …`; on a fork the same script | On 2026-10-30, on Base itself through the public Candide bundler: three UserOperations from an account that had no code; the first deployed it, and each settled with receipt status 1 and a `UserOperationEvent` with `success = true`; then the committed script sent 1 USDC (`transfer`) and the remaining ETH (`--all`) through the same bundler, each exit 0. On an `anvil` fork of Base with a local Alto bundler, the committed script: four sends (ETH that deploys, ETH, USDC `transfer`, `--all`) exit 0, five runs that sent no UserOperation (four stopped by the script, one refused by the bundler at gas estimation), and 7/7 mutations or removed checks detected (section 15) |
 | Real purchase of USDC | wallet simulator in production; `cast send` for the transfer out | On 2026-10-30: 15 EUR of USDC bought for the Base EOA account; DFX paid 12.528366 USDC and a network start fee of 0.00027499 ETH to it; the owner moved the full USDC out with one ERC-20 `transfer`, and the module then reported `completed` (section 16) |
-| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --send --confirm` (before `92be2ce` also `--iban-file …`) | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17) |
+| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --send --confirm` (before `92be2ce` also `--iban-file …`) | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17). On 2026-11-06 at `a29148b`: exit 1 after the EOA's 1 USDT deposit, at the Etherscan screenshot, which answers headless Chromium with HTTP 403; the sandbox booked that sale to `PayoutInProgress` anyway. Since `88c9e5b` every sell is followed to its booking with Blockscout and app screenshots and recorded as protocol version 2 (`hybrid`); 8/8 mutations of the new checks detected (section 17) |
 | `e2e/` probes at `d35b031` | the commands above | On 2026-11-05, every probe that could run against the module of `d35b031`: signature differential 0 mismatches; native quotes as expected; live matrix sandbox 178/186 and production 177/178 (DFX catalogue data only); widget check 4/4 in both environments; wallet journeys 7/7; deployed ERC-4337 account 11/11; Bare entry point 4/4; twelve mutations of the real sell script detected. The four full-stack probes could not run at `d35b031`, whose challenge check rejected the local API's `[loc]_` challenge; with the module environment `local` they ran at `efc82f3` on 2026-11-06 with the results of `20ec94d` (section 18) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
@@ -572,8 +572,9 @@ Production uses the same code; it was not tested there. The module cannot work a
 - **Identification itself (Sumsub) and the external name check.** Both are external providers. The UI flow stops at
   the identification call, and the lifecycle test simulates a completed identification. In the real purchase
   (section 9) the account was already verified.
-- **The bank payout of a sale.** The real sales of section 17 end when the DFX sandbox recognizes the deposit; a fiat
-  payout cannot be reached with test money, and no sale was made with real money in production.
+- **The bank payout of a sale.** The real sales of section 17 end at `PayoutInProgress` (before `88c9e5b`, when the
+  DFX sandbox recognized the deposit); a fiat payout cannot be reached with test money, and no sale was made with real
+  money in production.
 - **A rejected transfer in the wallet.** WDK sends without a confirmation dialog, so a transfer that the user
   rejects in the wallet cannot occur in these runs.
 - **A scheduled run.** No workflow in this pull request runs `e2e/real-sell.mjs`. A manual or scheduled GitHub run
@@ -931,6 +932,43 @@ twelve mutations of the checks after the payment information (sections above and
 This shows the sell path with real deposits up to the point where DFX recognizes them, from an EOA and from an
 undeployed smart account that signs in as the Safe. It does not show the bank
 payout, a sale with real money in production, or a rejected transfer (section "Not covered").
+
+### Up to the booking, protocol version 2 (2026-11-07)
+
+The final run at `a29148b` (`--account all --send --confirm --screenshots … --follow 60`) exited 1 after its first
+deposit: 1 USDT from the EOA,
+[`0xfd99f596f4480105831332393039fcbbf304227021f15c370d6141a22e695af1`](https://eth-sepolia.blockscout.com/tx/0xfd99f596f4480105831332393039fcbbf304227021f15c370d6141a22e695af1),
+receipt status 1 in block 12076766, then `Explorer did not show … and Success within 90 seconds`. Measured afterwards on
+the same machine with headless Chromium: `sepolia.etherscan.io` answers HTTP 403 and never shows the hash,
+`eth-sepolia.blockscout.com` shows the hash and `Success` after about one second. The sandbox booked that sale anyway:
+`GET /v1/transaction` lists it as id 10017 in `PayoutInProgress`, and the app page `/tx/<uid>` shows it without an IBAN.
+
+Since `88c9e5b` the explorer defaults to Blockscout, and a run with `--send` needs `--follow`, `--screenshots` and a
+clean working tree. Each sell is followed to `PayoutInProgress` or `Completed`; the script then opens the app's
+transaction page and, since `93291e5`, requires the labels ID, Type, State and Input TX exactly once, each followed by
+the backend id, `Sell`, the reached state and the abbreviated hash, before it takes a masked screenshot. The run
+protocol is version 2 with `art` `hybrid`, because WDK signs and sends without a wallet interface: each sale is
+recorded with role `verkauf`, the account balance before and after, and its booking, and each screenshot with its
+SHA-256. A run with a read retry after an error, or with a working tree that changed, fails and writes no protocol.
+Since `d9464d6`, `real-buy.mjs` writes the same version to its own file, `echter-lauf-kauf.json`, captures the payout
+on Base Blockscout (Basescan also answers 403), and needs `--screenshots` and a clean tree with `--confirm`.
+
+A run of `88c9e5b` without `--send` (`--account all --screenshots`) exited 0 with eight screenshots and wrote no
+protocol; with `--send --confirm` but without `--follow` or without `--screenshots` the script exits 2. Each mutation
+of a new check was detected
+([`e2e/evidence/2026-11-07-sandbox-real-sell-v2.jsonl`](e2e/evidence/2026-11-07-sandbox-real-sell-v2.jsonl)):
+
+| Mutation | Run | Result |
+| --- | --- | --- |
+| M1, `88c9e5b`: clean-tree check inverted, committed so that the tree is clean | `--account eoa --asset USDT --send --confirm` | exit 3 before anything was sent |
+| M2, `88c9e5b`: `--follow` requirement weakened to `< 0`, uncommitted | `--send --confirm` without `--follow` | exit 3 (dirty tree) instead of exit 2 |
+| M3, `88c9e5b`: expected state text of the booking page swapped | `--account eoa --asset USDT --send --confirm --follow 30` | exit 1 at the booking page after 1 USDT, [`0x38c5551475ef9476cbd6f6ae35189e0c51e4817984670a4fad3518d50328a9d2`](https://eth-sepolia.blockscout.com/tx/0x38c5551475ef9476cbd6f6ae35189e0c51e4817984670a4fad3518d50328a9d2), went from `Created` through `Processing` to `PayoutInProgress`; the Blockscout screenshot passed without a reload |
+| M4 to M7, `93291e5`: value read two lines below its label; `===` inverted; the four line checks joined with `\|\|`; substring instead of equality | a page probe, not in this repository, that runs the check as written in the script on the real booking page of id 10017, with the right values and with a wrong id, state and hash | the original accepts only the right values; M4 and M5 reject the right values, M6 accepts all three wrong ones, M7 accepts the wrong id |
+| M8, `d9464d6`: clean-tree check of `real-buy.mjs` inverted, committed | `--confirm` with the Sepolia test seed | exit 3 after the quote; no purchase URL was created |
+
+Not mutated: the counting of read retries, because a retry cannot be caused on purpose against a public RPC. Before
+the fix, the explorer check was red at `a29148b` (above). The run at the head of this pull request is in the pull
+request description. No purchase with `real-buy.mjs` is recorded in this document.
 
 ## 18. Re-run of the `e2e/` probes at `d35b031` (2026-11-05)
 
