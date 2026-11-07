@@ -189,10 +189,10 @@ function prepareScreenshots (dir) {
   }
 }
 
-async function screenshot (page, tools, asset, number, step, widget = false, tx, reloads) {
+async function screenshot (page, tools, asset, number, step, widget = false, tx, reloads, keep = []) {
   if (!tools.screenshots) return
   const ibans = tools.ibans.map(iban => compact(iban).toUpperCase())
-  const found = await page.evaluate(values => {
+  const found = await page.evaluate(({ values, keep }) => {
     const compactText = text => (text || '').replace(/[\s\u00a0]/g, '').toUpperCase()
     const elements = [...globalThis.document.querySelectorAll('body *')]
     for (const el of elements) el.removeAttribute('data-e2e-iban-mask')
@@ -203,16 +203,26 @@ async function screenshot (page, tools, asset, number, step, widget = false, tx,
     }
     const findIbans = text => {
       const raw = text || ''
-      const shaped = raw.match(/(?<![A-Z0-9])[A-Z]{2}[\s\u00a0]*\d[\s\u00a0]*\d(?:[\s\u00a0]*[A-Z0-9]){11,30}(?![A-Z0-9])/gi) || []
+      const shaped = raw.match(/(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?:[\s\u00a0]{0,2}[A-Z0-9]){11,30}(?![A-Za-z0-9])/g) || []
       return [...shaped.map(compactText), ...values.filter(value => compactText(raw).includes(value))]
     }
-    const matches = elements.filter(el => visible(el) && findIbans(el.innerText).some(value => {
-      return ![...el.children].some(child => visible(child) && compactText(child.innerText).includes(value))
+    const hits = findIbans(globalThis.document.body.innerText)
+    const matches = elements.filter(el => visible(el) && hits.some(value => {
+      const text = compactText(el.innerText)
+      return text.includes(value) && text.length <= value.length + 24 &&
+        ![...el.children].some(child => visible(child) && compactText(child.innerText).includes(value))
     }))
     for (const el of matches) el.setAttribute('data-e2e-iban-mask', 'true')
-    return { text: findIbans(globalThis.document.body.innerText).length > 0, count: matches.length }
-  }, ibans)
+    return {
+      text: hits.length > 0,
+      count: matches.length,
+      missing: hits.some(value => !matches.some(el => compactText(el.innerText).includes(value))),
+      coversEvidence: matches.some(el => keep.some(value => compactText(el.innerText).includes(compactText(value))))
+    }
+  }, { values: ibans, keep })
+  if (found.missing) throw new Error('IBAN-shaped text has no small element to mask')
   if (widget && found.text && found.count === 0) throw new Error('IBAN is visible in widget text but no element is masked')
+  if (found.coversEvidence) throw new Error(`The mask would cover the evidence on ${step}`)
   const datei = resolve(tools.screenshots, `${tools.runId}-${tools.kind}-${asset}-${number}-${step}.png`)
   await page.screenshot({
     path: datei,
@@ -251,7 +261,7 @@ async function screenshotExplorer (tools, asset, number, step, hash, evidence) {
         reloads++
         continue
       }
-      evidence.screenshots.push({ ...await screenshot(page, tools, asset, number, step, false, hash, reloads), tx: hash })
+      evidence.screenshots.push({ ...await screenshot(page, tools, asset, number, step, false, hash, reloads, [hash]), tx: hash })
       return
     }
     throw new Error(`Explorer ${tools.explorer} did not show ${hash} and Success within 5 minutes`)
@@ -538,7 +548,7 @@ async function openSell (browser, sellUrl, iban, ext, spec, first, tools) {
         const text = globalThis.document.body?.innerText || ''
         return text.includes('Add or select your IBAN') || text.includes('Payment Information')
       }, null, { timeout: 60_000 })
-      tools.evidence.screenshots.push(await screenshot(page, tools, spec.asset, '01', 'widget-loaded', true))
+      tools.evidence.screenshots.push(await screenshot(page, tools, spec.asset, '01', 'widget-loaded', true, undefined, undefined, []))
     }
     let preselected = false
     if (!first) {
@@ -632,7 +642,7 @@ async function openSell (browser, sellUrl, iban, ext, spec, first, tools) {
       await delay(250)
     }
     if (!facts) throw rejected || new Error('No valid paymentInfos response with the deposit address visible')
-    if (tools.screenshots) tools.evidence.screenshots.push(await screenshot(page, tools, spec.asset, '02', 'payment-information', true))
+    if (tools.screenshots) tools.evidence.screenshots.push(await screenshot(page, tools, spec.asset, '02', 'payment-information', true, undefined, undefined, [facts.depositAddress]))
     const text = await page.locator('body').innerText().catch(() => '')
     await context.close()
     contextClosed = true
@@ -1135,7 +1145,7 @@ async function runCase (spec, tools, evidence) {
         if (error.name !== 'TimeoutError') throw error
         throw new Error('Booking page did not show id, hash and state within 60 seconds')
       }
-      evidence.screenshots.push({ ...await screenshot(page, tools, spec.asset, '04', 'booking', true, hash), tx: hash })
+      evidence.screenshots.push({ ...await screenshot(page, tools, spec.asset, '04', 'booking', true, hash, undefined, [String(trimmed.id), status === 'Completed' ? 'Completed' : 'Payout in progress', (hash.slice(0, 24) + '...' + hash.slice(-22)).toLowerCase()]), tx: hash })
     } finally {
       await context.close()
     }
