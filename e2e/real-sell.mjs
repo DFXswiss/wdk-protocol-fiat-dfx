@@ -1223,7 +1223,7 @@ async function runCase (spec, tools, evidence) {
       } catch {}
       const texts = [context, error?.cause?.message ?? '']
       const matches = texts.flatMap(text => [
-        ...(String(text).match(/\bAA\d{2}\b[ A-Za-z']{0,60}/g) ?? []).map(match => match.trimEnd()),
+        ...(String(text).match(/\bAA\d{2}\b/g) ?? []),
         ...(String(text).match(/-32\d{3}\b/g) ?? [])
       ])
       const detail = [...new Set(matches)].slice(0, 5).map(redact)

@@ -650,16 +650,17 @@ In smart mode a dry run neither funds the Safe nor sends a UserOperation. With
 and 0.004 ETH for gas. After funding, `safe-prefund` quotes each selected Safe
 case and checks that the largest quoted fee fits this reserve before sending. The
 quotes use account 0 as the recipient because the deposit addresses are not yet
-known. Both quotes are made before the Safe is deployed, and the second operation
-is sent after the first has consumed gas. This is a preliminary check, not a
+known. The quotes are made before the Safe is deployed; with both assets selected,
+the second operation is sent after the first has consumed gas. This is a preliminary check, not a
 guarantee; actual fees can differ. A higher-priced bundler, for example one requiring
 an API key, can require a larger prefund than the public default bundler. On a
-failed Safe send, `detail` contains only ERC-4337 error codes with their wording and JSON-RPC error codes.
+failed Safe send, `detail` contains only ERC-4337 error codes (such as `AA21`) and JSON-RPC error codes, without their wording.
 The remaining Safe balance, approximately that gas
 allowance less actual gas, stays in the Safe. Funding and deposit sends are not
 retried. The script checks the UserOperation event and receipt on the chain RPC.
 
 Exit 0 means the run passed. Exit 1 means a check failed at or after
+`quoteSell`, or Safe funding or `safe-prefund` failed before the Safe's first
 `quoteSell`. Exit 2 means the command line is wrong. Exit 3 means the run did
 not start: the lock is held, the seed file is missing or unsafe, the
 chain id is wrong, the RPC or `https://dev.api.dfx.swiss/version` is
