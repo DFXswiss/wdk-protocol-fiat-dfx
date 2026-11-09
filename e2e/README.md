@@ -650,8 +650,11 @@ In smart mode a dry run neither funds the Safe nor sends a UserOperation. With
 and 0.004 ETH for gas. After funding, `safe-prefund` quotes each selected Safe
 case and checks that the largest quoted fee fits this reserve before sending. The
 quotes use account 0 as the recipient because the deposit addresses are not yet
-known; actual fees can differ. A higher-priced bundler, for example one requiring
-an API key, can require a larger prefund than the public default bundler.
+known. Both quotes are made before the Safe is deployed, and the second operation
+is sent after the first has consumed gas. This is a preliminary check, not a
+guarantee; actual fees can differ. A higher-priced bundler, for example one requiring
+an API key, can require a larger prefund than the public default bundler. On a
+failed Safe send, `detail` contains only ERC-4337 error codes with their wording and JSON-RPC error codes.
 The remaining Safe balance, approximately that gas
 allowance less actual gas, stays in the Safe. Funding and deposit sends are not
 retried. The script checks the UserOperation event and receipt on the chain RPC.

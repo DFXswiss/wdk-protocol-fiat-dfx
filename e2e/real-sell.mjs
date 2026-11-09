@@ -11,7 +11,6 @@ import { createRequire } from 'node:module'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { inspect } from 'node:util'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
 import WDK from '@tetherto/wdk'
 import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
@@ -1217,8 +1216,21 @@ async function runCase (spec, tools, evidence) {
     const balanceKey = spec.asset === 'USDT' ? 'usdtBalance' : 'ethBalance'
     evidence.txs.push({ hash, rolle: 'verkauf', from: getAddress(receipt.from), saldo: { vorher: balanceBefore[balanceKey].toString(), nachher: after[balanceKey].toString() }, buchung: { status, uid: trimmed.uid }, ...(tools.kind === 'smart' ? { safe: tools.accountAddress, userOperationHash: sentHash } : {}) })
   } catch (error) {
-    const detail = tools.kind === 'smart' && step === 'send' ? (error?.context ?? error?.cause?.message) : undefined
-    emit({ step, asset: spec.asset, ok: false, error: redact(error?.message ?? error), ...(detail == null ? {} : { detail: redact(typeof detail === 'string' ? detail : inspect(detail, { depth: null })).slice(0, 500) }) })
+    if (tools.kind === 'smart' && step === 'send') {
+      let context = ''
+      try {
+        context = typeof error?.context === 'string' ? error.context : JSON.stringify(error?.context) ?? ''
+      } catch {}
+      const texts = [context, error?.cause?.message ?? '']
+      const matches = texts.flatMap(text => [
+        ...(String(text).match(/\bAA\d{2}\b[ A-Za-z']{0,60}/g) ?? []).map(match => match.trimEnd()),
+        ...(String(text).match(/-32\d{3}\b/g) ?? [])
+      ])
+      const detail = [...new Set(matches)].slice(0, 5).map(redact)
+      emit({ step, asset: spec.asset, ok: false, error: 'Safe send failed', ...(detail.length ? { detail } : {}) })
+      throw new Error('Safe send failed')
+    }
+    emit({ step, asset: spec.asset, ok: false, error: redact(error?.message ?? error) })
     throw error
   }
 }
