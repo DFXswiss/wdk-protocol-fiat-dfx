@@ -647,7 +647,12 @@ writes no protocol.
 
 In smart mode a dry run neither funds the Safe nor sends a UserOperation. With
 `--send --confirm`, account 0 funds the Safe once with the selected sale amounts
-and 0.0005 ETH for gas. The remaining Safe balance, approximately that gas
+and 0.004 ETH for gas. After funding, `safe-prefund` quotes each selected Safe
+case and checks that the largest quoted fee fits this reserve before sending. The
+quotes use account 0 as the recipient because the deposit addresses are not yet
+known; actual fees can differ. A higher-priced bundler, for example one requiring
+an API key, can require a larger prefund than the public default bundler.
+The remaining Safe balance, approximately that gas
 allowance less actual gas, stays in the Safe. Funding and deposit sends are not
 retried. The script checks the UserOperation event and receipt on the chain RPC.
 
@@ -657,7 +662,7 @@ not start: the lock is held, the seed file is missing or unsafe, the
 chain id is wrong, the RPC or `https://dev.api.dfx.swiss/version` is
 unreachable, the Safe is already deployed or the bundler preflight fails, or,
 with `--send`, the balance is too small or the working tree is dirty. The EOA ETH balance must cover every
-selected ETH case in both modes, 0.0005 ETH for the Safe when selected, and
+selected ETH case in both modes, 0.004 ETH for the Safe when selected, and
 0.002 ETH reserve. The USDT balance must cover every selected USDT case in both modes.
 
 A dry run still opens the widget, so it creates sell requests on dev. `--send

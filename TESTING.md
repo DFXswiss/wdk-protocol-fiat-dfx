@@ -854,8 +854,8 @@ Since `e2e/real-sell.mjs` at `6960dd0`, `--account smart` (and the default `all`
 sells the same two assets from a fresh WDK Safe on Sepolia (`@tetherto/wdk-wallet-evm-erc-4337` 1.0.0-beta.20, Safe
 modules 0.3.0, EntryPoint v0.7 `0x0000000071727De22E5E9d8BAf0edAc6f37da032`, public Candide bundler
 `https://api.candide.dev/public/v3/11155111`). Each run takes a Safe at a random account index and stops as not run if
-it already has code. Account 0 funds it with the sale amounts and 0.0005 ETH for gas; the Safe then signs in to the
-sandbox while it has no code, and the script checks that `/v2/user` of that session contains the Safe address. For
+it already has code. At `6960dd0`, account 0 funded it with the sale amounts and 0.0005 ETH for gas; the Safe then signed in to the
+sandbox while it had no code, and the script checks that `/v2/user` of that session contains the Safe address. For
 the first Safe case the script enters an IBAN invented for that run in the widget's bank account form, so every run
 creates a new sandbox user and bank account; for the second case the widget preselects that IBAN, the only one of the
 new account, and the payment-info request must carry it. Each deposit is a UserOperation. The script checks the
@@ -936,6 +936,8 @@ undeployed smart account that signs in as the Safe. It does not show the bank
 payout, a sale with real money in production, or a rejected transfer (section "Not covered").
 
 ### Up to the booking, protocol version 2 (2026-11-07)
+
+On 2026-11-09 at `6c7f5ab`, both EOA sales reached `PayoutInProgress`, but the Safe send was rejected by the Pimlico Sepolia bundler with 0.0005 ETH reserved for gas; a subsequent read-only quote for that Safe required 0.0032 ETH prefund. The Safe gas reserve is raised from 0.0005 to 0.004 ETH, and the script now checks the largest quoted prefund against the reserve before sending from the Safe.
 
 The final run at `a29148b` (`--account all --send --confirm --screenshots … --follow 60`) exited 1 after its first
 deposit: 1 USDT from the EOA,

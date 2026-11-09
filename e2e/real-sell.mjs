@@ -11,6 +11,7 @@ import { createRequire } from 'node:module'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { inspect } from 'node:util'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
 import WDK from '@tetherto/wdk'
 import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
@@ -27,7 +28,7 @@ const DEFAULT_RPC = 'https://ethereum-sepolia-rpc.publicnode.com'
 const DEFAULT_BUNDLER = 'https://api.candide.dev/public/v3/11155111'
 const ENTRY_POINT = '0x0000000071727De22E5E9d8BAf0edAc6f37da032'
 const USER_OP_TOPIC = id('UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)')
-const SAFE_GAS = parseUnits('0.0005', 18)
+const SAFE_GAS = parseUnits('0.004', 18)
 const CHAIN_ID = 11155111n
 const USDT = getAddress('0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0')
 const ETH_RESERVE = parseUnits('0.002', 18)
@@ -1025,6 +1026,24 @@ async function fundSafe (eoa, safe, cases, provider, usdt, evidence, tools) {
   emit({ step: 'funding-balances', asset: null, ok: true, usdt: tokenBalance, eth: ethBalance, deployed: false })
 }
 
+async function checkSafePrefund (account, recipient, cases) {
+  let prefund = 0n
+  try {
+    for (const spec of cases) {
+      const quote = spec.asset === 'USDT'
+        ? await account.quoteTransfer({ token: USDT, recipient, amount: spec.amount })
+        : await account.quoteSendTransaction({ to: recipient, value: spec.amount })
+      if (typeof quote?.fee !== 'bigint' || quote.fee < 0n) throw new Error('WDK quote fee was not a non-negative bigint')
+      if (quote.fee > prefund) prefund = quote.fee
+    }
+    if (prefund > SAFE_GAS) throw new Error(`Safe gas reserve ${SAFE_GAS} wei is below the largest bundler prefund ${prefund} wei`)
+    emit({ step: 'safe-prefund', asset: null, ok: true, reserve: SAFE_GAS, prefund })
+  } catch (error) {
+    emit({ step: 'safe-prefund', asset: null, ok: false, reserve: SAFE_GAS, prefund })
+    throw error
+  }
+}
+
 async function runCase (spec, tools, evidence) {
   state.asset = spec.asset
   const ext = `wdk-real-sell-${tools.runId}-${tools.kind}-${spec.asset}`
@@ -1198,7 +1217,8 @@ async function runCase (spec, tools, evidence) {
     const balanceKey = spec.asset === 'USDT' ? 'usdtBalance' : 'ethBalance'
     evidence.txs.push({ hash, rolle: 'verkauf', from: getAddress(receipt.from), saldo: { vorher: balanceBefore[balanceKey].toString(), nachher: after[balanceKey].toString() }, buchung: { status, uid: trimmed.uid }, ...(tools.kind === 'smart' ? { safe: tools.accountAddress, userOperationHash: sentHash } : {}) })
   } catch (error) {
-    emit({ step, asset: spec.asset, ok: false, error: redact(error?.message ?? error) })
+    const detail = tools.kind === 'smart' && step === 'send' ? (error?.context ?? error?.cause?.message) : undefined
+    emit({ step, asset: spec.asset, ok: false, error: redact(error?.message ?? error), ...(detail == null ? {} : { detail: redact(typeof detail === 'string' ? detail : inspect(detail, { depth: null })).slice(0, 500) }) })
     throw error
   }
 }
@@ -1207,6 +1227,13 @@ async function main () {
   const options = parseArgs(process.argv.slice(2))
   rememberSecret(options.rpc)
   rememberSecret(options.bundler)
+  const bundlerUrl = new URL(options.bundler)
+  if (options.bundler !== DEFAULT_BUNDLER) {
+    const path = bundlerUrl.pathname.split('/').filter(Boolean)
+    for (const part of [path.at(-1), ...bundlerUrl.searchParams.values(), bundlerUrl.username, bundlerUrl.password]) {
+      if (part?.length >= 16) rememberSecret(part)
+    }
+  }
   if (options.lock) takeLock(options.lock)
   if (options.out) await openOut(options.out)
   if (options.screenshots) prepareScreenshots(options.screenshots)
@@ -1301,6 +1328,7 @@ async function main () {
     if (options.send) {
       state.flow = true
       await fundSafe(account, smartAddress, cases, state.provider, usdt, evidence, { ...tools, kind: 'smart' })
+      await checkSafePrefund(smartAccount, accountAddress, cases)
     }
     const smartTools = { ...tools, kind: 'smart', account: smartAccount, accountAddress: smartAddress, fiat: smartFiat, iban: smartIban, first: true }
     for (const spec of cases) {
