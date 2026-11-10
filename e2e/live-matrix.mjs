@@ -136,7 +136,10 @@ for (const c of CASES.filter(c => !only || c.chain === only)) {
   await step(c.chain, `quoteSell ${code}->${cur} cryptoAmount 50`, () => fiat.quoteSell({ cryptoAsset: code, fiatCurrency: cur, cryptoAmount }))
 
   const tx = await step(c.chain, 'getTransactionDetail(unknown uid) -> expects NoSuchElementError after auth', async () => {
-    try { return await fiat.getTransactionDetail('E2E-NONEXISTENT-UID') } catch (e) {
+    try {
+      await fiat.getTransactionDetail('E2E-NONEXISTENT-UID')
+      throw new Error('NOT REJECTED')
+    } catch (e) {
       if (e?.constructor?.name === 'NoSuchElementError') return 'NoSuchElementError (auth succeeded, 404 mapped)'
       throw e
     }
@@ -194,12 +197,15 @@ for (const c of CASES.filter(c => !only || c.chain === only)) {
     return 'external-transaction-id present'
   })
   await step(c.chain, 'getTransactionDetail(externalId) before any payment -> NoSuchElementError', async () => {
-    try { return j(await fiat.getTransactionDetail(ext, { idType: 'externalTransactionId' })) } catch (e) {
+    try {
+      await fiat.getTransactionDetail(ext, { idType: 'externalTransactionId' })
+      throw new Error('NOT REJECTED')
+    } catch (e) {
       if (e?.constructor?.name === 'NoSuchElementError') return 'NoSuchElementError (no transaction registered yet)'
       throw e
     }
   })
-  if (tx === undefined) log('  (auth did not succeed for this chain)')
+  if (tx === undefined) log('  (auth did not succeed, or an unknown uid returned a transaction)')
 }
 
 // Private handoff to widget-check.mjs; never include these session URLs in reports.

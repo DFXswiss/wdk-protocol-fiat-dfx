@@ -78,8 +78,8 @@ on subsequent runs, except for the full-stack screenshots with unique run IDs.
 These are the original exploratory probes, not a uniform assertion suite. The
 matrix records failed steps but exits zero; native quotes exit nonzero on an
 unexpected listing or rejection;
-the differential prints mismatch counts. Inspect these probes' output, not just
-exit codes. The journey runner exits nonzero if a journey records a `stop` or
+the differential prints mismatch counts and exits 1 on any mismatch. Inspect the
+matrix output for failed steps. The journey runner exits nonzero if a journey records a `stop` or
 page errors. In sandbox, `eth-too-low` is an ordinary flow because 1 EUR is
 accepted; production rejects that amount. Full-stack exits nonzero for failed
 or blocked steps.
@@ -216,7 +216,7 @@ DFX_ENV=production node native-quotes.mjs > out/native-quotes-production.log 2>&
 
 Directly imports `../src/signature.js`, compares 20,000 Solana signatures with
 `bs58` and 5,000 Spark signatures with `@noble/curves`. Both mismatch counts
-must be zero.
+must be zero; any mismatch makes the script exit 1.
 
 ```sh
 node signature-diff.mjs > out/signature-diff.log 2>&1

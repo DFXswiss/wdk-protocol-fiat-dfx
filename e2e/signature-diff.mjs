@@ -26,3 +26,4 @@ for (let i = 0; i < 5000; i++) {
   if (normalizeSignature('spark', der) !== compact) { bad2++; if (bad2 < 5) console.log('spark mismatch', der) }
 }
 console.log('spark checked 5000, mismatches', bad2)
+if (bad || bad2) process.exitCode = 1
