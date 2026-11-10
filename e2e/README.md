@@ -106,7 +106,8 @@ The default is 15 EUR of USDC to account index 0 of a Base ERC-4337 Safe
 corresponding setting. `--asset` currently accepts USDC. The URL file must not
 exist and is created with mode 0600; it contains a session and must be kept
 private. JSON lines go to stdout and optionally to a new 0600 file with
-`--out <path>`; the seed, session and full URL are not printed.
+`--out <path>`; the seed, session and full URL are not printed. Before signing
+in, the script checks that the installed module copy matches the working tree.
 
 `--confirm` requires `--screenshots <dir>` and a clean working tree; HEAD and
 the working tree are checked again at the end. The screenshot directory is
@@ -500,7 +501,7 @@ If the account has no code yet, the first UserOperation deploys it.
 Before anything is signed, the script checks the chain id of `--rpc`, and that
 `--bundler` answers chain id 8453 and lists EntryPoint v0.7
 (`0x0000000071727De22E5E9d8BAf0edAc6f37da032`). It reads the seed like
-`safe-rescue.mjs` and never prints it.
+`safe-rescue.mjs` and never prints it. Only the bundler URL origin is printed.
 
 - Without `--send` it is a dry run: account, balances, amount and the fee WDK
   quotes.
@@ -585,7 +586,9 @@ sells 0.0001 ETH. `--rpc` defaults to
 recursively, before the first network call. If it already exists, the script
 exits 3 and prints `not run: wallet locked`. It removes the directory at the
 end only when this process created it. `--out` repeats the JSON lines in that
-file with mode `0600`.
+new file with mode `0600`. The path must not exist and cannot name the seed
+file. Before signing in, the script checks that the installed module copy matches
+the working tree.
 
 `--screenshots <dir>` saves masked PNGs for the loaded widget and payment
 information for each case, and, when sending, for each deposit on the explorer

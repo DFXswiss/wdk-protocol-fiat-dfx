@@ -137,9 +137,29 @@ async function readSeedFile (path) {
   }
 }
 
+const secrets = []
+
+function rememberUrl (value) {
+  if (!value) return
+  secrets.push(value)
+  try {
+    const url = new URL(value)
+    const rawQueryValues = url.search.slice(1).split('&').map(pair => pair.slice(pair.indexOf('=') + 1))
+    for (const part of [...url.pathname.split('/'), ...url.searchParams.values(), ...rawQueryValues, url.username, url.password]) {
+      if (part.length >= 16) {
+        secrets.push(part)
+        try { secrets.push(decodeURIComponent(part)) } catch {}
+      }
+    }
+  } catch {}
+}
+
 function maskSensitiveText (value, seed) {
   let message = String(value ?? 'Unknown error')
   if (seed) message = message.split(seed).join('[REDACTED SEED]')
+  for (const secret of secrets.filter(Boolean).sort((a, b) => b.length - a.length)) {
+    message = message.split(secret).join('[REDACTED]')
+  }
   return message.replace(/\b(?:0x)?[0-9a-fA-F]{64}\b/g, '[REDACTED KEY]')
 }
 
@@ -233,8 +253,13 @@ function userOperationLog (txReceipt, userOpHash, safe) {
 async function main () {
   let seed
   let provider
+  const args = process.argv.slice(2)
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--rpc' || args[i] === '--bundler') rememberUrl(args[i + 1])
+  }
+  rememberUrl(DEFAULT_RPC)
   try {
-    const options = parseArgs(process.argv.slice(2))
+    const options = parseArgs(args)
     const rpcUrl = new URL(options.rpc)
     if (!['http:', 'https:'].includes(rpcUrl.protocol)) throw new Error('--rpc must use HTTP or HTTPS')
     provider = new JsonRpcProvider(options.rpc, undefined, { cacheTimeout: -1 })
@@ -309,7 +334,7 @@ async function main () {
     const fee = quotedFeeOf(quote)
 
     console.log(`chainId: ${chainId}`)
-    console.log(`Bundler: ${options.bundler}`)
+    console.log(`Bundler: ${new URL(options.bundler).origin}`)
     console.log(`Account: ${options.accountIndex}`)
     console.log(`Safe: ${safe}`)
     console.log(`Safe deployed: ${deployed ? 'yes' : 'no'}`)

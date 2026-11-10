@@ -1,7 +1,7 @@
 // Production purchase handoff and payout verification. The bank transfer is manual.
 import { execFileSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { chmodSync, constants, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync, writeSync } from 'node:fs'
+import { chmodSync, closeSync, constants, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, writeFileSync, writeSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
@@ -44,6 +44,57 @@ function emit (record) {
       if (count <= 0) throw new Error('--out write failed')
       offset += count
     }
+  }
+}
+
+function assertModuleCopy () {
+  const installed = resolve(root, 'e2e/node_modules/@dfx.swiss/wdk-protocol-fiat-dfx')
+  const mismatch = () => new NotRunError('not run: the installed module in e2e/node_modules differs from the working tree; run npm ci in e2e')
+  try {
+    // Reject symlinks in every path component, including the installed package directory.
+    const checkPath = path => {
+      let current = resolve('/')
+      for (const part of resolve(path).split('/').filter(Boolean)) {
+        current = resolve(current, part)
+        if (lstatSync(current).isSymbolicLink()) throw mismatch()
+      }
+    }
+    const collect = base => {
+      const files = []
+      const visit = relative => {
+        const path = resolve(base, relative)
+        checkPath(path)
+        const stat = lstatSync(path)
+        if (stat.isDirectory()) {
+          for (const name of readdirSync(path)) visit(`${relative}/${name}`)
+        } else if (stat.isFile()) files.push(relative)
+        else throw mismatch()
+      }
+      for (const entry of ['index.js', 'bare.js']) {
+        checkPath(resolve(base, entry))
+        if (!lstatSync(resolve(base, entry)).isFile()) throw mismatch()
+        visit(entry)
+      }
+      for (const entry of ['src', 'types']) {
+        checkPath(resolve(base, entry))
+        if (!lstatSync(resolve(base, entry)).isDirectory()) throw mismatch()
+        visit(entry)
+      }
+      return files.sort()
+    }
+    const source = collect(root)
+    const copy = collect(installed)
+    if (source.length !== copy.length || source.some((file, i) => file !== copy[i])) throw mismatch()
+    const digest = path => {
+      const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+      try { return createHash('sha256').update(readFileSync(fd)).digest('hex') } finally { closeSync(fd) }
+    }
+    for (const file of source) {
+      if (digest(resolve(root, file)) !== digest(resolve(installed, file))) throw mismatch()
+    }
+    emit({ step: 'module-copy', ok: true, files: source.length })
+  } catch {
+    throw mismatch()
   }
 }
 
@@ -239,6 +290,7 @@ async function main () {
   if (options.out) {
     try { state.out = await createPrivate(options.out) } catch { throw new UsageError('--out must be a new private file') }
   }
+  assertModuleCopy()
   const seed = await privateSeed(options.seedFile)
   secrets.push(seed, seed.split(/\s+/).join(' '))
   const walletName = options.account === 'smart' ? '@tetherto/wdk-wallet-evm-erc-4337' : '@tetherto/wdk-wallet-evm'
