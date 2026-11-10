@@ -25,6 +25,12 @@ import { BLOCKCHAINS, ERC6492_NETWORKS, EVM_BLOCKCHAINS, EVM_CHAIN_IDS, FAILED_S
 /** @typedef {import('@tetherto/wdk-wallet/protocols').SupportedCountry} SupportedCountry */
 
 /**
+ * @template T
+ * @template {PropertyKey} K
+ * @typedef {T extends unknown ? Omit<T, K> : never} DistributiveOmit
+ */
+
+/**
  * Configuration for DFX API and widget access.
  *
  * @typedef {Object} DfxProtocolConfig
@@ -81,12 +87,12 @@ import { BLOCKCHAINS, ERC6492_NETWORKS, EVM_BLOCKCHAINS, EVM_CHAIN_IDS, FAILED_S
 /**
  * Options for an indicative DFX purchase quote.
  *
- * @typedef {Omit<BuyOptions, 'recipient'> & DfxQuoteOptions} DfxBuyQuoteOptions
+ * @typedef {DistributiveOmit<BuyOptions, 'recipient'> & DfxQuoteOptions} DfxBuyQuoteOptions
  */
 /**
  * Options for an indicative DFX sale quote.
  *
- * @typedef {Omit<SellOptions, 'refundAddress'> & DfxQuoteOptions} DfxSellQuoteOptions
+ * @typedef {DistributiveOmit<SellOptions, 'refundAddress'> & DfxQuoteOptions} DfxSellQuoteOptions
  */
 
 const ACCOUNT_ERRORS = {

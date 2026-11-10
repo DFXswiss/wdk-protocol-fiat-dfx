@@ -192,6 +192,7 @@ async function route (path, body, url) {
     check(body.smartAccount === undefined || typeof body.smartAccount === 'boolean', 'Ungültiger Kontotyp.')
     check(body.prepared === undefined || typeof body.prepared === 'boolean', 'Ungültige Wallet-Auswahl.')
     check(!body.prepared || (seedFile && body.seed === undefined), 'Keine vorbereitete Wallet verfügbar oder widersprüchliche Auswahl.')
+    check(environment !== 'production' || body.prepared || body.seed?.trim(), 'In Production bitte die vorbereitete Wallet laden oder Wiederherstellungswörter eingeben.')
     let seed
     try { seed = body.prepared ? await preparedSeed() : body.seed?.trim() || WDK.getRandomSeedPhrase() } catch { throw new WalletInputError('Vorbereitete Wallet nicht lesbar. Eigene Seed-Datei und Rechte nur für den Eigentümer prüfen (keine Gruppen- oder Fremdrechte, z. B. 0600).') }
     const next = { seed, accounts: [], orders: [] }

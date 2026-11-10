@@ -157,7 +157,7 @@ function assertModuleCopy () {
         } else if (stat.isFile()) files.push(relative)
         else throw mismatch()
       }
-      for (const entry of ['index.js', 'bare.js']) {
+      for (const entry of ['package.json', 'index.js', 'bare.js']) {
         checkPath(resolve(base, entry))
         if (!lstatSync(resolve(base, entry)).isFile()) throw mismatch()
         visit(entry)

@@ -107,7 +107,7 @@ corresponding setting. `--asset` currently accepts USDC. The URL file must not
 exist and is created with mode 0600; it contains a session and must be kept
 private. JSON lines go to stdout and optionally to a new 0600 file with
 `--out <path>`; the seed, session and full URL are not printed. Before signing
-in, the script checks that the installed module copy matches the working tree.
+in, the script checks that the installed module copy (`package.json`, `index.js`, `bare.js`, `src/`, `types/`) matches the working tree.
 
 `--confirm` requires `--screenshots <dir>` and a clean working tree; HEAD and
 the working tree are checked again at the end. The screenshot directory is
@@ -267,9 +267,9 @@ defaults to 4748; the server binds only to `127.0.0.1`. The seed file must be a
 nonempty regular file owned by the current user with owner-only permissions
 (no group or other access), e.g. `0600`, and cannot be a symlink.
 It is checked at startup and again when loaded. Its contents stay on
-the server and are never returned to the browser or logged. A newly generated
-wallet has no exported recovery phrase; use the prepared wallet for a purchase
-that must remain accessible after restart.
+the server and are never returned to the browser or logged. In production,
+random wallet creation is disabled; load the prepared wallet or enter a nonempty
+recovery phrase. A wallet generated in sandbox has no exported recovery phrase.
 
 The portfolio fetches native balances only for chains with public RPCs in
 `CASES`, plus configured tokens (currently Arbitrum USDC at
@@ -587,8 +587,8 @@ recursively, before the first network call. If it already exists, the script
 exits 3 and prints `not run: wallet locked`. It removes the directory at the
 end only when this process created it. `--out` repeats the JSON lines in that
 new file with mode `0600`. The path must not exist and cannot name the seed
-file. Before signing in, the script checks that the installed module copy matches
-the working tree.
+file. Before signing in, the script checks that the installed module copy
+(`package.json`, `index.js`, `bare.js`, `src/`, `types/`) matches the working tree.
 
 `--screenshots <dir>` saves masked PNGs for the loaded widget and payment
 information for each case, and, when sending, for each deposit on the explorer

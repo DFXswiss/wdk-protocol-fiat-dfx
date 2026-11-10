@@ -50,10 +50,11 @@ export interface DfxQuoteOptions {
 export type DfxBuyOptions = BuyOptions & DfxTradeOptions;
 /** Options for a DFX sale widget session. */
 export type DfxSellOptions = SellOptions & DfxTradeOptions;
+export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 /** Options for an indicative DFX purchase quote. */
-export type DfxBuyQuoteOptions = Omit<BuyOptions, 'recipient'> & DfxQuoteOptions;
+export type DfxBuyQuoteOptions = DistributiveOmit<BuyOptions, 'recipient'> & DfxQuoteOptions;
 /** Options for an indicative DFX sale quote. */
-export type DfxSellQuoteOptions = Omit<SellOptions, 'refundAddress'> & DfxQuoteOptions;
+export type DfxSellQuoteOptions = DistributiveOmit<SellOptions, 'refundAddress'> & DfxQuoteOptions;
 
 /** Provides DFX fiat quotes, widget URLs and transaction status. */
 export default class DfxProtocol extends FiatProtocol {

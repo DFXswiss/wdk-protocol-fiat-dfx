@@ -277,6 +277,7 @@ async function init () {
     $('sandbox-note').hidden = production
     $('production-note').hidden = !production
     $('load-prepared').hidden = !wallet.preparedWallet
+    $('create-wallet').hidden = production
     $('create-wallet').disabled = $('restore-submit').disabled = false
     if (production) setInterval(refreshBalances, 30000)
     if (wallet.accounts.length) { state.accounts = wallet.accounts; renderAccounts(); show('portfolio') }
