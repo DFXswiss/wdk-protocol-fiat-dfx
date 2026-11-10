@@ -108,7 +108,7 @@ and 16) belong to this repository's branch `feat/dfx-fiat-module`, which adds `e
 | Real purchase into an undeployed ERC-4337 account | wallet simulator in production; `cd e2e && node safe-rescue.mjs --native …` | On this branch (2026-10-29): 15 EUR of ETH bought for the Base smart account, which signed in to production DFX while it had no code; DFX paid 0.00565071 ETH to it and the module reports `completed`; the owner then deployed it without a bundler and moved the full balance out (section 14) |
 | Sending from an ERC-4337 account through a bundler | on Base a one-off script (not committed), then `cd e2e && node bundler-send.mjs …`; on a fork the same script | On 2026-10-30, on Base itself through the public Candide bundler: three UserOperations from an account that had no code; the first deployed it, and each settled with receipt status 1 and a `UserOperationEvent` with `success = true`; then the committed script sent 1 USDC (`transfer`) and the remaining ETH (`--all`) through the same bundler, each exit 0. On an `anvil` fork of Base with a local Alto bundler, the committed script: four sends (ETH that deploys, ETH, USDC `transfer`, `--all`) exit 0, five runs that sent no UserOperation (four stopped by the script, one refused by the bundler at gas estimation), and 7/7 mutations or removed checks detected (section 15) |
 | Real purchase of USDC | wallet simulator in production; `cast send` for the transfer out | On 2026-10-30: 15 EUR of USDC bought for the Base EOA account; DFX paid 12.528366 USDC and a network start fee of 0.00027499 ETH to it; the owner moved the full USDC out with one ERC-20 `transfer`, and the module then reported `completed` (section 16) |
-| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --send --confirm --screenshots … --follow …` (`--screenshots` and `--follow` required since `88c9e5b`; before `92be2ce` also `--iban-file …`) | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17). On 2026-11-06 at `a29148b`: exit 1 after the EOA's 1 USDT deposit, at the Etherscan screenshot, which answers headless Chromium with HTTP 403; the sandbox booked that sale to `PayoutInProgress` anyway. Since `88c9e5b` every sell is followed to its booking with Blockscout and app screenshots and recorded as protocol version 2 (`hybrid`); 11/11 mutations of the new checks detected. A run at `aa06f6c` stopped red at the explorer of its second deposit, and its screenshots showed that the IBAN mask had blacked out the whole payment and booking cards since `a29148b`; fixed in `0ef6cef` to `b1253cb` (section 17) |
+| Real sell, sandbox | `cd e2e && node real-sell.mjs --seed-file … --send --confirm --screenshots … --follow …` (`--screenshots` and `--follow` required since `88c9e5b`; before `92be2ce` also `--iban-file …`) | On 2026-11-02 at `3041a0b`: exit 0; 1 USDT and 0.0001 ETH sent from a WDK account on Sepolia to the DFX sandbox deposit address shown in the widget; each receipt status 1, balances exact, the sandbox recognized each hash as a `Sell` with the external ID, and the module reported `in_progress` by external ID and by uid. An earlier run at `4b360f6` sent 1 USDT and stopped red at its own receipt check (fixed in `3041a0b`). 6/6 mutations of its checks detected. On 2026-11-04 at `6960dd0`: exit 0 for the EOA and for a fresh undeployed Safe, which signed in with no code, deployed with its first UserOperation and whose two deposits the sandbox recognized; 12/12 mutations detected (section 17). On 2026-11-06 at `a29148b`: exit 1 after the EOA's 1 USDT deposit, at the Etherscan screenshot, which answers headless Chromium with HTTP 403; the sandbox booked that sale to `PayoutInProgress` anyway. Since `88c9e5b` every sell is followed to its booking with Blockscout and app screenshots and recorded as protocol version 2 (`hybrid`); 11/11 mutations of the new checks detected. A run at `aa06f6c` stopped red at the explorer of its second deposit, and its screenshots showed that the IBAN mask had blacked out the whole payment and booking cards since `a29148b`; fixed in `0ef6cef` to `b1253cb` (section 17). On 2026-11-07 and 2026-11-09 six runs at `6c7f5ab` and `18f0acf` ended red: the public bundler stopped deploying Safes, the sandbox held native ETH deposits for hours, the Safe gas reserve was too small for a key-based bundler (raised in `714d548`), and at `18f0acf` a new Safe user's sale stayed at `Processing` after its deposit was recognized and forwarded (section 17) |
 | `e2e/` probes at `d35b031` | the commands above | On 2026-11-05, every probe that could run against the module of `d35b031`: signature differential 0 mismatches; native quotes as expected; live matrix sandbox 178/186 and production 177/178 (DFX catalogue data only); widget check 4/4 in both environments; wallet journeys 7/7; deployed ERC-4337 account 11/11; Bare entry point 4/4; twelve mutations of the real sell script detected. The four full-stack probes could not run at `d35b031`, whose challenge check rejected the local API's `[loc]_` challenge; with the module environment `local` they ran at `efc82f3` on 2026-11-06 with the results of `20ec94d` (section 18) |
 | Reviews | independent code review; Tether's `wdk-review-jsdocs`, `wdk-review-dts`, `wdk-review-tests` | see [section 10](#10-reviews-2026-09-28): all findings fixed or named; fifth pass of all skills on `498d4e6` (2026-09-30) |
 
@@ -575,6 +575,9 @@ Production uses the same code; it was not tested there. The module cannot work a
 - **The bank payout of a sale.** The real sales of section 17 end at `PayoutInProgress` (before `88c9e5b`, when the
   DFX sandbox recognized the deposit); a fiat payout cannot be reached with test money, and no sale was made with real
   money in production.
+- **The booking of a sale from a new Safe user.** At `18f0acf` the Safe deployed itself, sent its deposit and the
+  sandbox recognized and forwarded it, but the sale stayed at `Processing`: the new user has no name or address
+  (section 17, 2026-11-09).
 - **A rejected transfer in the wallet.** WDK sends without a confirmation dialog, so a transfer that the user
   rejects in the wallet cannot occur in these runs.
 - **A scheduled run.** No workflow in this pull request runs `e2e/real-sell.mjs`. A manual or scheduled GitHub run
@@ -937,8 +940,6 @@ payout, a sale with real money in production, or a rejected transfer (section "N
 
 ### Up to the booking, protocol version 2 (2026-11-07)
 
-On 2026-11-09 at `6c7f5ab`, both EOA sales reached `PayoutInProgress`, but the Safe send was rejected by the Pimlico Sepolia bundler with 0.0005 ETH reserved for gas; a subsequent read-only quote for that Safe required 0.0032 ETH prefund. The Safe gas reserve is raised from 0.0005 to 0.004 ETH, and the script now checks the largest quoted prefund against the reserve before sending from the Safe.
-
 The final run at `a29148b` (`--account all --send --confirm --screenshots … --follow 60`) exited 1 after its first
 deposit: 1 USDT from the EOA,
 [`0xfd99f596f4480105831332393039fcbbf304227021f15c370d6141a22e695af1`](https://eth-sepolia.blockscout.com/tx/0xfd99f596f4480105831332393039fcbbf304227021f15c370d6141a22e695af1),
@@ -1004,6 +1005,38 @@ Not mutated: the counting of read retries, because a retry cannot be caused on p
 24-character limit for masked elements, which only decides how much around an IBAN is blacked out. Before the fix,
 the explorer check was red at `a29148b` (above). The run at the head of this pull request is in the pull
 request description. No purchase with `real-buy.mjs` is recorded in this document.
+
+### Bundler, Safe gas and a new Safe user's booking (2026-11-09)
+
+Six runs at `6c7f5ab` and `18f0acf` ended red; their records are in
+`e2e/evidence/2026-11-09-sandbox-real-sell-pimlico.jsonl`.
+
+- **No deployment by the public Candide bundler.** Two runs at `6c7f5ab` on 2026-11-07 stopped with `User operation
+  … was not included within 4 minutes` at the Safe's first UserOperation, the one that deploys it. For the next 12
+  hours the Candide bundler included no `AccountDeployed` on Sepolia, while ordinary UserOperations from it and
+  deployments by other bundlers continued. The later runs use `--bundler` with a key-based Pimlico endpoint; WDK
+  recognizes it and takes the gas price from `pimlico_getUserOperationGasPrice`. The protocol records only the
+  bundler's origin.
+- **Native ETH not forwarded by the sandbox.** Two runs at `6c7f5ab` on 2026-11-09 stopped at `Follow timed out before
+  payout` for the EOA's 0.0001 ETH sale (ids 10028 and 10030, state `Processing`, reason `InputNotConfirmed`). The
+  sandbox did not forward the ETH from either deposit address until 13:14 UTC, while the USDT of the same runs was
+  forwarded within four minutes; both sales then reached `PayoutInProgress`. The cause is not visible without the
+  sandbox's logs.
+- **Safe gas reserve.** A run at `6c7f5ab` brought both EOA sales to `PayoutInProgress`, but the bundler rejected the
+  Safe's first UserOperation: the Safe held 0.0005 ETH for gas, and a read-only quote for it afterwards required a
+  0.0032 ETH prefund. Since `714d548` the reserve is 0.004 ETH and `safe-prefund` compares the largest quoted fee with
+  it before the Safe sends; since `18f0acf` a failed Safe send logs only ERC-4337 and JSON-RPC error codes.
+- **A new Safe user's sale stays at `Processing`.** At `18f0acf` (`--asset USDT`, because account 0 had too little
+  Sepolia ETH for both assets) the EOA's 1 USDT reached `PayoutInProgress` (id 10034). The Safe passed `safe-prefund`
+  (largest quote 0.00304 ETH against 0.004 ETH), deployed itself and sent 1 USDT in one UserOperation
+  ([`0x0781dd727bb77c8452280d98e2d432599bb014e89ecd7469441f4cc846281ac6`](https://eth-sepolia.blockscout.com/tx/0x0781dd727bb77c8452280d98e2d432599bb014e89ecd7469441f4cc846281ac6),
+  status 1, 1,622,608 gas), the sandbox recognized it as a `Sell` (id 10035) and forwarded the USDT four minutes
+  later. The sale then stayed at `Processing` with no reason for more than 14 hours. Each run's Safe is a new sandbox
+  user with an invented bank account but no name or address. An open change in the DFX backend describes sandbox
+  sales from such users that pass the AML check and then fail payout preparation on every attempt because the
+  creditor's name and address are missing; the transaction API shows these as `Processing` without a reason. That
+  this is the cause for id 10035 is not verified, as it needs the sandbox's data. Completing a new user's personal
+  data in the sandbox was not done.
 
 ## 18. Re-run of the `e2e/` probes at `d35b031` (2026-11-05)
 
