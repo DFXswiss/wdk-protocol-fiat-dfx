@@ -434,7 +434,7 @@ The server replays raw sandbox responses from
 recording date. **Recorded on 2026-09-28.** The fixture preserves decimal JSON tokens
 without parsing and reserializing response numbers. USDT on Ethereum and CHF are
 tested with `10000n` fiat minor units or `100000000n` crypto minor units.
-Authenticated tests derive accounts at indexes 0 and 1 from the public BIP-39 test
+Authenticated tests derive the account at index 0 from the public BIP-39 test
 phrase in Tether's testing conventions and sign locally. The server verifies
 EIP-191 signatures against the last issued challenge. Challenges, local session
 tokens and request history reset before every test; successive logins produce

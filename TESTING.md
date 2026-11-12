@@ -1118,7 +1118,7 @@ listed there enabled):
 
 | Probe | Result at `efc82f3` | As on `20ec94d` (section 12) |
 | --- | --- | --- |
-| `fullstack.mjs` | 29/29 steps, exit 0; the sell bank account is `CH3600000000000000000`; since 2026-11-12 each run invents its IBAN | yes |
+| `fullstack.mjs` | 29/29 steps, exit 0; the sell bank account is `CH3600000000000000000` | yes |
 | `fullstack-processing.mjs` | 24 steps OK, 2 red: sell matching by the real `BuyFiat` job, the +10 % counter-test unmatched and `NoSuchElementError` from the module; the two six-minute observation steps red because this probe does not perform the operating steps the AML decision needs (section 11) | yes |
 | `fullstack-lifecycle.mjs` (`OBSERVE_MINUTES=15`) | 56 steps OK, 2 red: the crypto payout for buy A ("no positive crypto output and fee") and the fiat bank execution for the sale ("no executable fiat output") are not prepared by the local stack | yes |
 | `kyc-widget.mjs` | 41 steps OK, 2 red: sign-in, level 10, level 20 and nationality through the UI, then quote and widget for the same account; on *Continue* the API log shows 14 × `PUT /v2/kyc` 503 from `SumsubService.createApplicant` (section 7), and the probe's own boundary check stays red because no identification step is created (section 11). The widget now shows "Something went wrong" with *Continue* instead of a spinner | yes, apart from the widget's message |
