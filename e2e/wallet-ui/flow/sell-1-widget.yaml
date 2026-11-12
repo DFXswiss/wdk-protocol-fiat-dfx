@@ -51,9 +51,12 @@ appId: io.tether.wdk.starter.reactnative
 # the widget is open inside the wallet and no bank account is shown yet; the payment-information step prints the payout IBAN next to the deposit address, so that step is not captured.
 - takeScreenshot: sell-widget-open
 - tapOn: "Add or select your IBAN"
+# Centre the field: with many saved accounts it otherwise ends up under the Done button.
 - scrollUntilVisible:
     element: "XX XXXX XXXX XXXX XXXX X"
     direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn: "XX XXXX XXXX XXXX XXXX X"
 - inputText: ${IBAN}
 # Enter submits the bank form. There is no separate ADD BANK ACCOUNT tap.
