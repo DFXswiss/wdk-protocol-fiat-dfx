@@ -1,0 +1,10 @@
+{"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"step":"version","asset":null,"ok":true,"commit":"6ba89882052fcb4976b5f52f01738485fc0f2185","startedAt":"2026-11-02T13:27:05.828Z"}
+{"step":"balance","asset":null,"ok":true,"usdt":"1970000000","eth":"21713737354022396","usdtNeed":"1000000","ethNeed":"2100000000000000"}
+{"step":"ready","asset":null,"ok":true,"runId":"1793636385645-aaf8c6","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793636385645-aaf8c6-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"step":"paymentInfos","asset":"USDT","ok":true,"id":34114,"depositAddress":"0x85b46CdB6895F6a6a3e258cB728C54fF1fe6B27b","currency":"CHF"}
+{"step":"balances-before","asset":"USDT","ok":true,"usdt":"1970000000","eth":"21713737354022396","nonce":"193"}
+{"step":"send","asset":"USDT","ok":true,"hash":"0x5f39e5cc7687bcd70ccb7cd642f4ebeb2ee736d8dc52d5d65848ad9c0615a7be"}
+{"step":"receipt","asset":"USDT","ok":false,"error":"Receipt has no gasUsed or effectiveGasPrice"}

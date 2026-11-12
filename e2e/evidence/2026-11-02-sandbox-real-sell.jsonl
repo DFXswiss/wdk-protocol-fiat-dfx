@@ -1,0 +1,23 @@
+{"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"step":"version","asset":null,"ok":true,"commit":"6ba89882052fcb4976b5f52f01738485fc0f2185","startedAt":"2026-11-02T13:27:05.828Z"}
+{"step":"balance","asset":null,"ok":true,"usdt":"1969000000","eth":"21713737351768540","usdtNeed":"1000000","ethNeed":"2100000000000000"}
+{"step":"ready","asset":null,"ok":true,"runId":"1793636501647-982c3d","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793636501647-982c3d-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"step":"paymentInfos","asset":"USDT","ok":true,"id":34116,"depositAddress":"0x85b46CdB6895F6a6a3e258cB728C54fF1fe6B27b","currency":"CHF"}
+{"step":"balances-before","asset":"USDT","ok":true,"usdt":"1969000000","eth":"21713737351768540","nonce":"194"}
+{"step":"send","asset":"USDT","ok":true,"hash":"0x82632389ae5ca1d5d087520187bb62fb9ed7d9926b5eaad25110d9e666e89075"}
+{"step":"receipt","asset":"USDT","ok":true,"hash":"0x82632389ae5ca1d5d087520187bb62fb9ed7d9926b5eaad25110d9e666e89075","status":1,"block":"12049306","gasUsed":"42946","effectiveGasPrice":"16"}
+{"step":"balances-after","asset":"USDT","ok":true,"usdt":"1968000000","eth":"21713737351081404","nonce":"195"}
+{"step":"backend","asset":"USDT","ok":true,"transaction":{"id":9955,"uid":"T8F220E90E28277BF","type":"Sell","state":"Created","inputTxId":"0x82632389ae5ca1d5d087520187bb62fb9ed7d9926b5eaad25110d9e666e89075","inputAmount":1,"inputAsset":"USDT","externalTransactionId":"wdk-real-sell-1793636501647-982c3d-USDT"}}
+{"step":"module","asset":"USDT","ok":true,"externalTransactionId":{"cryptoAsset":"USDT","fiatCurrency":"CHF","status":"in_progress"},"uid":{"cryptoAsset":"USDT","fiatCurrency":"CHF","status":"in_progress"}}
+{"step":"quoteSell","asset":"ETH","ok":true,"cryptoAmount":"100000000000000","fiatAmount":"20","fee":"0","rate":"2000"}
+{"step":"sellUrl","asset":"ETH","ok":true,"externalTransactionId":"wdk-real-sell-1793636501647-982c3d-ETH","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"step":"paymentInfos","asset":"ETH","ok":true,"id":34118,"depositAddress":"0x85b46CdB6895F6a6a3e258cB728C54fF1fe6B27b","currency":"CHF"}
+{"step":"balances-before","asset":"ETH","ok":true,"usdt":"1968000000","eth":"21713737351081404","nonce":"195"}
+{"step":"send","asset":"ETH","ok":true,"hash":"0xec0df28690226c0d8dfe16040b49f8951e5ae66b860782683db0aecbbb4435a0"}
+{"step":"receipt","asset":"ETH","ok":true,"hash":"0xec0df28690226c0d8dfe16040b49f8951e5ae66b860782683db0aecbbb4435a0","status":1,"block":"12049308","gasUsed":"21000","effectiveGasPrice":"16"}
+{"step":"balances-after","asset":"ETH","ok":true,"usdt":"1968000000","eth":"21613737350745404","nonce":"196"}
+{"step":"backend","asset":"ETH","ok":true,"transaction":{"id":9957,"uid":"T4F6BD118E64AE6DA","type":"Sell","state":"Created","inputTxId":"0xec0df28690226c0d8dfe16040b49f8951e5ae66b860782683db0aecbbb4435a0","inputAmount":0.0001,"inputAsset":"ETH","externalTransactionId":"wdk-real-sell-1793636501647-982c3d-ETH"}}
+{"step":"module","asset":"ETH","ok":true,"externalTransactionId":{"cryptoAsset":"ETH","fiatCurrency":"CHF","status":"in_progress"},"uid":{"cryptoAsset":"ETH","fiatCurrency":"CHF","status":"in_progress"}}
+{"step":"protocol","asset":null,"ok":true,"path":"<git dir>/echter-lauf.json","head":"3041a0bb5bf678d1870f5858cb3ca1e9b5433740","backend":"6ba89882052fcb4976b5f52f01738485fc0f2185"}
