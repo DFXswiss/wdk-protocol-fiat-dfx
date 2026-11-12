@@ -12,7 +12,8 @@ import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { closeSync, constants, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmdirSync, writeSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { basename, dirname, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
@@ -51,7 +52,7 @@ class UsageError extends Error {}
 class NotRunError extends Error {}
 
 const secrets = []
-const state = { lockHeld: false, lockDir: '', provider: null, browser: null, out: null, receiptBlock: 0, retries: 0, explorerReloads: 0, chainId: 0n, asset: null }
+const state = { lockHeld: false, lockDir: '', accountLockDir: '', provider: null, browser: null, out: null, receiptBlock: 0, retries: 0, explorerReloads: 0, chainId: 0n, asset: null }
 
 function redact (value) {
   let text = String(value ?? 'Unknown error')
@@ -493,15 +494,19 @@ async function readVersion (preflight) {
   return { commit: body.commit, startedAt: body.startedAt == null ? '' : String(body.startedAt) }
 }
 
-function takeLock (dir) {
+function takeLock (dir, account = false) {
   try {
     mkdirSync(dir)
   } catch (error) {
+    if (account) throw new NotRunError(`not run: cannot acquire account lock (${error.code || 'failed'})`)
     if (error.code === 'EEXIST') throw new Error('wallet locked')
     throw new Error(`cannot create lock (${error.code || 'failed'})`)
   }
-  state.lockHeld = true
-  state.lockDir = dir
+  if (account) state.accountLockDir = dir
+  else {
+    state.lockHeld = true
+    state.lockDir = dir
+  }
 }
 
 async function openOut (path, seedFile) {
@@ -1017,6 +1022,8 @@ function assertRecordPath (path, seedFile, outPath) {
 }
 
 async function writeRecord (path, record) {
+  const text = redact(JSON.stringify(record, null, 2))
+  JSON.parse(text)
   const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
   try {
     const stat = await file.stat()
@@ -1024,7 +1031,7 @@ async function writeRecord (path, record) {
       throw new Error('--record is not a private regular file')
     }
     await file.chmod(0o600)
-    await file.writeFile(`${JSON.stringify(record, null, 2)}\n`)
+    await file.writeFile(`${text}\n`)
   } finally {
     await file.close()
   }
@@ -1422,6 +1429,7 @@ async function main () {
     .registerProtocol('sepolia', 'dfx', DfxProtocol, { environment: 'sandbox', network: 'sepolia' })
   const account = await wdk.getAccount('sepolia', 0)
   const accountAddress = getAddress(await account.getAddress())
+  if (options.send) takeLock(join(tmpdir(), `wdk-real-sell-${accountAddress.toLowerCase()}.lock`), true)
   const fiat = account.getFiatProtocol('dfx')
   if (!(fiat instanceof DfxProtocol)) throw new Error('getFiatProtocol(\'dfx\') did not return the DFX module')
   const usdt = new Contract(USDT, ERC20_ABI, state.provider)
@@ -1536,6 +1544,15 @@ try {
   if (state.browser) await state.browser.close().catch(() => {})
   state.provider?.destroy()
   if (state.out) await state.out.close().catch(() => {})
+  if (state.accountLockDir) {
+    try {
+      rmdirSync(state.accountLockDir)
+      state.accountLockDir = ''
+    } catch (error) {
+      console.error(`real-sell failed: ${redact(error.message)}`)
+      if (!process.exitCode) process.exitCode = 1
+    }
+  }
   if (state.lockHeld) {
     try {
       rmdirSync(state.lockDir)

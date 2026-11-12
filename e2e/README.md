@@ -57,9 +57,11 @@ Real Sepolia sell against `dev.api.dfx.swiss`. WDK signs and sends from this scr
 
 Without `--send` the script quotes and opens the widget, and sends nothing. `--send` and `--confirm` are both required to send, and then `--follow` (1–240 minutes), `--screenshots` (directory mode `0700`) and `--record <file>` are required. `--asset` is `USDT`, `ETH` or `all` (default `all`). `--account` is `eoa`, `smart` or `all` (default `all`). `--rpc` defaults to a public Sepolia endpoint. `--bundler` defaults to the public Candide Sepolia bundler. `--lock <dir>` takes an exclusive directory lock for the wallet.
 
+`--seed-file` is required. `--out <file>` optionally writes the log, and `--explorer <origin>` defaults to `https://eth-sepolia.blockscout.com` and must be an HTTP or HTTPS origin without credentials. `--follow` defaults to 0 and accepts integers from 0 to 240; a send requires at least 1. A send also takes a fixed lock in the system temporary directory named `wdk-real-sell-<lowercase EOA address>.lock`, in addition to any `--lock`; an occupied or uncreatable account lock exits 3 before sending.
+
 The deposit-address balance in the receipt block must exceed the balance in the previous block by the amount sent, for an EOA and for a Safe. A mismatch exits 1.
 
-Exit 2 is usage. Exit 3 is only a `NotRunError`: an unusable seed file, duplicate `@tetherto/wdk-wallet` copies, a module copy that differs from this tree (the digest differs, the file list differs, the installed copy is missing, or a symlink is rejected), an unreachable RPC, a preflight `/version` that is unreachable or without a usable answer, an unreachable bundler, or a balance too small to send. Any other failure exits 1, including a bundler HTTP status, a bundler that answers with the wrong chain or EntryPoint, a wrong chain id, a dirty tree, a lock that already exists, a git failure, an unavailable DFX protocol, a Safe that already has code, and any other exception.
+Exit 2 is usage. Exit 3 is only a `NotRunError`: an unusable seed file, duplicate `@tetherto/wdk-wallet` copies, a module copy that differs from this tree (the digest differs, the file list differs, the installed copy is missing, or a symlink is rejected), an unreachable RPC, a preflight `/version` that is unreachable or without a usable answer, an unreachable bundler, a balance too small to send, or an unavailable fixed account lock. Any other failure exits 1, including a bundler HTTP status, a bundler that answers with the wrong chain or EntryPoint, a wrong chain id, a dirty tree, an unavailable optional lock, a git failure, an unavailable DFX protocol, a Safe that already has code, and any other exception.
 
 `--record` must not exist yet, must not be the seed file, and must not be `--out`. The file is created only after a passing send with a clean tree. Schema `dfx-real-run/v1`. The script does not write into the git directory.
 
@@ -72,6 +74,10 @@ node real-sell.mjs --seed-file /path/to/seed.txt --send --confirm --follow 30 \
 ## real-buy.mjs
 
 Real Base purchase against production. The script quotes, and with `--confirm` writes a buy URL to `--url-file` and waits for the payout. The bank transfer is manual. No wallet user interface confirms the transaction. `--confirm` also requires `--screenshots` and `--record <file>`. `--lock <dir>` is optional. `--account` is `smart` or `eoa` (default `smart`). Only USDC. `--rpc` defaults to `https://mainnet.base.org`.
+
+`--seed-file` is required. `--index` defaults to 0 and accepts integers from 0 to 2147483647; `--asset` defaults to `USDC` and only accepts `USDC`. `--amount` defaults to 15 EUR and must be positive with at most two decimal places. `--wait-minutes` defaults to 240 and accepts integers from 1 to 10080. `--out <file>` optionally writes the log; `--explorer <origin>` defaults to `https://base.blockscout.com` and must be an HTTP or HTTPS origin without credentials. `--url-file` is required with `--confirm`.
+
+For either script, a `--follow` or `--wait-minutes` period that outlasts the widget session ends in failure because the reads do not renew that session.
 
 The file given by `--url-file` contains the buy URL with a session, is created with owner-only permissions, and should be deleted after the purchase.
 
@@ -91,6 +97,8 @@ node real-buy.mjs --seed-file /path/to/seed.txt --confirm --screenshots /path/to
 
 Sends a Base ERC-4337 user operation through a bundler when `--send` is set. Without `--send` it prints a dry run and sends nothing. `--rpc <url>` is required. `--seed-file <path>` or `WALLET_SIM_SEED_FILE` is required. There is no default RPC and no default seed file. `--bundler`, `--to`, and `--amount` (or `--native --all`) are required. `--send` requires `--confirm` equal to the Safe address. A missing `--rpc` or seed exits 2 and the message does not include the path or URL. Other failures exit 1.
 
+`--account` defaults to 0 and accepts decimal integers without leading zeroes through 2147483647. `--token` defaults to Base USDC and accepts a valid EVM address; `--native` selects ETH and cannot be combined with `--token`. `--all` is only for `--native` and cannot be combined with `--amount`; otherwise `--amount` is a decimal asset amount. `--max-fee` is an optional positive decimal ETH amount. `--fork-fund` is an optional positive decimal asset amount for a local RPC only, and supports only Base USDC when using a token. `--to` must be a valid nonzero address and, for tokens, must differ from the token contract.
+
 ```sh
 node bundler-send.mjs --rpc https://mainnet.base.org --bundler https://example.invalid \
   --to 0x0000000000000000000000000000000000000001 --amount 1 --seed-file /path/to/seed.txt
@@ -99,6 +107,8 @@ node bundler-send.mjs --rpc https://mainnet.base.org --bundler https://example.i
 ## safe-rescue.mjs
 
 Moves the full token or ETH balance of a Base Safe to `--to` when `--send` is set. Without `--send` it prints a dry run. `--rpc <url>` is required. `--seed-file <path>` or `WALLET_SIM_SEED_FILE` is required. There is no default RPC and no default seed file. `--send` requires `--confirm` equal to the Safe address. A missing `--rpc` or seed exits 2 without echoing the value. Other failures exit 1.
+
+`--token` defaults to Base USDC and accepts a valid EVM address; `--native` selects ETH and cannot be combined with `--token`. `--fork-fund` is an optional positive decimal asset amount for a local RPC only, and supports only Base USDC when using a token. `--priority-fee-gwei` is optional, defaults to the RPC estimate, and must be greater than 0 and at most 1 gwei. `--to` must be a valid nonzero address and, for tokens, must differ from the token contract.
 
 The script reads two non-public WDK values (`_ownerAccount` and `_getInitCodeOverrides`) to check the owner and the predicted Safe. Those calls are not part of the module's public API.
 

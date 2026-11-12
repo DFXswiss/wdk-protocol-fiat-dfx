@@ -258,6 +258,8 @@ function assertRecordPath (path, seedFile, otherPaths) {
 }
 
 async function writeRecord (path, record) {
+  const text = redact(JSON.stringify(record, null, 2))
+  JSON.parse(text)
   const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
   try {
     const stat = await file.stat()
@@ -265,7 +267,7 @@ async function writeRecord (path, record) {
       throw new Error('--record is not a private regular file')
     }
     await file.chmod(0o600)
-    await file.writeFile(`${JSON.stringify(record, null, 2)}\n`)
+    await file.writeFile(`${text}\n`)
   } finally {
     await file.close()
   }

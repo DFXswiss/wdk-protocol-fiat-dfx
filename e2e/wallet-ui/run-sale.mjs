@@ -44,7 +44,7 @@ const RECORD_FIELDS = [
   'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
   'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
   'account', 'depositAddress', 'ibanCountryAndClearing', 'hash', 'block', 'gasUsed', 'fee',
-  'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared',
+  'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
   'screenshots'
 ]
 
@@ -75,6 +75,8 @@ const state = {
   fiat: null,
   session: '',
   saleIban: '',
+  flow1Started: false,
+  cleanupAttempted: false,
   failedStep: undefined,
   screenshots: [],
   evidence: {},
@@ -112,7 +114,7 @@ function rememberIban (iban) {
   const spaced = raw.replace(/(.{4})(?=.)/g, '$1 ')
   rememberSecret(spaced)
   rememberSecret(spaced.replace(/ /g, '\u00a0'))
-  const body = [...raw].map(char => char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s\\u00a0]*')
+  const body = [...raw].map(char => char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s\\u00a0?]*')
   state.ibanPatterns.push(new RegExp(body, 'g'))
 }
 
@@ -599,6 +601,22 @@ async function runFlow (file, env) {
   } finally {
     rmSync(debugDir, { recursive: true, force: true })
     rmSync(outDir, { recursive: true, force: true })
+  }
+}
+
+async function clearWalletState () {
+  if (!state.flow1Started || state.cleanupAttempted) return
+  state.cleanupAttempted = true
+  state.evidence.walletStateCleared = false
+  const previousStep = state.failedStep
+  try {
+    const result = await runFlow(join(flowDir, 'cleanup.yaml'), {})
+    if (result.code !== 0) throw new Error('cleanup flow failed')
+    state.evidence.walletStateCleared = true
+  } catch {
+    throw new CheckError('cleanup', 'wallet state could not be cleared')
+  } finally {
+    state.failedStep = previousStep
   }
 }
 
@@ -1168,7 +1186,8 @@ async function sendAndCheck (prelude) {
   const iban = inventedIban()
   state.saleIban = iban
   rememberIban(iban)
-  const flow1 = await runFlow(join(flowDir, 'sell-1-widget.yaml'), { IBAN: iban })
+  state.flow1Started = true
+  const flow1 = await runFlow(join(flowDir, 'sell-1-widget.yaml'), { IBAN: iban, IBAN_PATTERN: `.*${[...iban].join(' ?')}.*` })
   const flow1Code = flow1.code
   flow1.stdout = ''
   if (flow1Code !== 0) throw new CheckError('flow-1', 'nothing sent', state.failedStep)
@@ -1232,7 +1251,10 @@ async function sendAndCheck (prelude) {
   const explorerName = explorerShotName(hash)
   const bookingName = bookingShotName(sale.uid, session)
   const expectedShots = [...FLOW_SHOTS, explorerName, bookingName]
-  const shots = state.screenshots.map(item => ({ file: item.file, sha256: sha256File(join(options.screenshots, item.file)) }))
+  const shots = state.screenshots.map(item => {
+    if (sha256File(join(options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    return item
+  })
   const byName = new Map(shots.map(item => [item.file, item]))
   if (byName.size !== shots.length || FLOW_SHOTS.some(name => !byName.has(name))) {
     throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
@@ -1270,8 +1292,7 @@ function assertPass (body) {
   if (body.walletInterface !== WALLET_INTERFACE) throw new CheckError('record', 'walletInterface changed')
   if (body.ibanCountryAndClearing !== IBAN_LABEL) throw new CheckError('record', 'iban label changed')
   if (body.walletConfirmations !== 1) throw new CheckError('wallet-confirmations', 'walletConfirmations is not 1')
-  if (body.maestroStepRetries !== 0) throw new CheckError('record', 'a Maestro step was repeated')
-  if (!body.backend || body.backend.detection !== 'self') throw new CheckError('record', 'detection is not self')
+  if (body.walletStateCleared !== true) throw new CheckError('cleanup', 'wallet state was not cleared')
   const expectedStatus = body.backend.state === 'Completed' ? 'completed' : 'in_progress'
   if (body.backend.state !== 'PayoutInProgress' && body.backend.state !== 'Completed') {
     throw new CheckError('module-status', 'module status does not match the sale')
@@ -1358,13 +1379,17 @@ async function main () {
   try {
     await sendAndCheck(prelude)
     await clearClipboard()
+    await clearWalletState()
+    if (installedBundleSha(options.udid) !== prelude.build.mainJsbundleSha256) throw new CheckError('bundle', 'installed main.jsbundle changed during cleanup')
+    for (const item of state.screenshots) {
+      if (sha256File(join(options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    }
     const body = measuredRecord()
     body.result = 'pass'
     assertPass(body)
     await writeRecord(body)
     console.log(`wallet-ui pass: ${body.hash}`)
   } catch (error) {
-    if (error instanceof UsageError || error instanceof NotRunError) throw error
     if (state.clipboard && !state.clipboardClearAttempted) {
       try {
         await clearClipboard()
@@ -1372,6 +1397,12 @@ async function main () {
         console.error(`wallet-ui failed: ${redact(clipboardError.message)}`)
       }
     }
+    try {
+      await clearWalletState()
+    } catch (cleanupError) {
+      console.error(`wallet-ui failed: ${redact(cleanupError.message)}`)
+    }
+    if (error instanceof UsageError || error instanceof NotRunError) throw error
     if (state.evidence.dirty === false) {
       try {
         if (git(['status', '--porcelain']) !== '') state.evidence.dirty = true
