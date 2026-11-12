@@ -8,7 +8,7 @@ Install once from this directory. `e2e/.npmrc` sets `install-links=true` so this
 npm ci
 ```
 
-Node.js 22 or newer. Do not print a seed. A seed file must be a non-empty regular file owned by the current user, mode `0600`, and not a symlink.
+Node.js 22 or newer. Do not print a seed. A seed file must be a non-empty regular file owned by the current user, without group or other permission bits (for example mode `0600`), and not a symlink.
 
 `DFX_ENV=production` selects production for `live-matrix.mjs` and `native-quotes.mjs`. Anything else, including an unset variable, selects the sandbox. Sandbox sign-in (`POST /v1/auth`) can create a DFX user. Production sign-in uses the same call on `api.dfx.swiss`.
 
