@@ -62,9 +62,9 @@ node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid> \
 
 `--follow` is 1 to 240 minutes. `--screenshots` must be a directory owned by the current user with mode `0700`, and it must not already contain `sell-widget-open.png`, `send-review.png`, or `send-success.png`. `--record` must not exist yet and must not be the seed file. `--rpc` defaults to `https://ethereum-sepolia-rpc.publicnode.com`.
 
-Exit 0 is a pass. Exit 1 is a failed check; the record file then holds one JSONL line with `result` `fail` and `failedCheck`. Exit 2 is usage. Exit 3 means the run did not start: the reason is printed and no record is written. Nothing is retried. A second Maestro process on the machine makes the preflight exit 3, and makes the gap between the two flows exit 1 with `nothing sent`.
+Exit 0 is a pass. Exit 1 is a failed check; the record file then holds one JSONL line with `result` `fail` and `failedCheck`, unless the record cannot be written. Exit 2 is usage. Exit 3 means the run did not start: the reason is printed and no record is written; this includes an occupied or uncreatable lock. No Maestro flow, tap, or send is repeated. The receipt is read for up to 60 seconds, fixed-block balance reads are repeated when a node is lagging, the backend record is read every 20 seconds until `--follow` ends, and the explorer page is reloaded for up to five minutes until it shows the hash and Success. The record counts backend reads in `backendReads`, RPC read retries in `rpcReadRetries`, and explorer reloads in `explorerReloads`. A second Maestro process on the machine makes the preflight exit 3, and makes the gap between the two flows exit 1 with `nothing sent`.
 
-The seed file is given to the simulator clipboard through a file descriptor. The IBAN is a new Swiss IBAN for that run (clearing `00000`). The record stores `CH 00000 (invented per run)` and does not store the IBAN. The clipboard is cleared before the record is written, and again if the run stops earlier.
+The seed file is given to the simulator clipboard through a file descriptor. The IBAN is a new Swiss IBAN for that run (clearing `00000`). The record stores `CH 00000 (invented per run)` and does not store the IBAN. Before a record is written, the runner tries up to three times to clear the clipboard. The record reports the result in `clipboardCleared`. If clearing fails, the run exits 1 and the clipboard must be cleared by hand; an earlier failed check remains in the record.
 
 ## Traps
 
@@ -74,7 +74,7 @@ The app aborts at launch on the iOS 27.0 runtime. Use the iOS 26.5 runtime.
 
 Tapping Paste while the clipboard is empty crashes the app. That crash is upstream and is not fixed here.
 
-`npm install` inside the starter follows `file:../../..` into this module. If that install changes the module tree, `run-sale.mjs` refuses the run.
+`npm install` inside the starter follows `file:../../..` into this module. If that install changes the module tree, `build.sh` stops without a build record.
 
 ## Recorded runs
 

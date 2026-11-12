@@ -43,7 +43,7 @@ const RECORD_FIELDS = [
   'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
   'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
   'account', 'depositAddress', 'ibanCountryAndClearing', 'hash', 'block', 'gasUsed', 'fee',
-  'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'maestroStepRetries',
+  'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared',
   'screenshots'
 ]
 
@@ -58,6 +58,7 @@ class CheckError extends Error {
 
 const state = {
   clipboard: false,
+  clipboardClearAttempted: false,
   lockHeld: false,
   lockDir: '',
   udid: '',
@@ -67,6 +68,7 @@ const state = {
   recordWritten: false,
   backendReads: 0,
   rpcReadRetries: 0,
+  explorerReloads: 0,
   browser: null,
   fiat: null,
   session: '',
@@ -287,8 +289,8 @@ function takeLock (dir) {
   try {
     mkdirSync(dir)
   } catch (error) {
-    if (error.code === 'EEXIST') throw new CheckError('lock', 'wallet locked')
-    throw new CheckError('lock', `cannot create lock (${error.code || 'failed'})`)
+    if (error.code === 'EEXIST') throw new NotRunError('not run: wallet locked')
+    throw new NotRunError(`not run: cannot create lock (${error.code || 'failed'})`)
   }
   state.lockHeld = true
   state.lockDir = dir
@@ -580,7 +582,7 @@ async function runFlow (file, env) {
     try {
       copied = copyShots(outDir, state.options.screenshots)
     } catch {
-      throw new CheckError('screenshots', 'screenshot copy failed')
+      throw new CheckError('screenshots', `screenshot copy failed${state.evidence.depositAddress ? '' : '; nothing sent'}`)
     }
     state.screenshots.push(...copied)
     return { code: result.code, stdout: result.stdout }
@@ -591,9 +593,19 @@ async function runFlow (file, env) {
 }
 
 async function clearClipboard () {
-  const result = await runCapture('xcrun', ['simctl', 'pbcopy', state.udid], 'empty')
-  if (result.code !== 0) throw new CheckError('clipboard', 'clipboard clear failed')
-  state.clipboard = false
+  state.clipboardClearAttempted = true
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const result = await runCapture('xcrun', ['simctl', 'pbcopy', state.udid], 'empty')
+      if (result.code === 0) {
+        state.clipboard = false
+        state.evidence.clipboardCleared = true
+        return
+      }
+    } catch {}
+  }
+  state.evidence.clipboardCleared = false
+  throw new CheckError('clipboard', 'the simulator clipboard could not be cleared and may still hold the seed; clear it by hand')
 }
 
 async function copySeed (seedFile) {
@@ -1050,6 +1062,7 @@ async function captureExplorer (browser, hash) {
       } catch (error) {
         if (error.name !== 'TimeoutError') throw error
         if (Date.now() >= deadline) break
+        state.explorerReloads++
         continue
       }
       await maskedScreenshot(page, filePath, state.saleIban ? [state.saleIban] : [], false, 'explorer', [hash], 'explorer-capture')
@@ -1229,6 +1242,7 @@ function measuredRecord () {
     if (key === 'date') body.date = new Date().toISOString()
     else if (key === 'backendReads') body.backendReads = state.backendReads
     else if (key === 'rpcReadRetries') body.rpcReadRetries = state.rpcReadRetries
+    else if (key === 'explorerReloads') body.explorerReloads = state.explorerReloads
     else if (key === 'maestroStepRetries') body.maestroStepRetries = 0
     else if (key === 'screenshots') {
       if (state.screenshots.length || evidence.screenshots) body.screenshots = evidence.screenshots || state.screenshots
@@ -1340,6 +1354,13 @@ async function main () {
     console.log(`wallet-ui pass: ${body.hash}`)
   } catch (error) {
     if (error instanceof UsageError || error instanceof NotRunError) throw error
+    if (state.clipboard && !state.clipboardClearAttempted) {
+      try {
+        await clearClipboard()
+      } catch (clipboardError) {
+        console.error(`wallet-ui failed: ${redact(clipboardError.message)}`)
+      }
+    }
     if (state.evidence.dirty === false) {
       try {
         if (git(['status', '--porcelain']) !== '') state.evidence.dirty = true
@@ -1358,32 +1379,32 @@ try {
   const message = redact(error?.message ?? error)
   const name = error instanceof CheckError ? `${error.failedCheck}: ` : ''
   if (error instanceof UsageError || error instanceof NotRunError) console.error(`wallet-ui: ${message}`)
+  else if (error instanceof CheckError && error.failedCheck === 'clipboard' && state.evidence.clipboardCleared === false) console.error(`wallet-ui failed: ${message}`)
   else console.error(`wallet-ui failed: ${name}${message}`)
   if (error instanceof UsageError) process.exitCode = 2
   else if (error instanceof NotRunError) process.exitCode = 3
   else process.exitCode = 1
 } finally {
-  if (state.clipboard) {
-    try {
-      await clearClipboard()
-    } catch (error) {
-      console.error(`wallet-ui failed: ${redact(error.message)}`)
-      if (!process.exitCode) process.exitCode = 1
-    }
-  }
   if (state.browser) {
     await state.browser.close().catch(() => {})
     state.browser = null
   }
-  if (state.provider) state.provider.destroy()
-  if (state.wdk) await state.wdk.dispose?.()
+  try {
+    if (state.provider) state.provider.destroy()
+  } catch (error) {
+    console.error(`wallet-ui cleanup warning: ${redact(error?.message ?? error).replace(/[\r\n]+/g, ' ')}`)
+  }
+  try {
+    if (state.wdk) await state.wdk.dispose?.()
+  } catch (error) {
+    console.error(`wallet-ui cleanup warning: ${redact(error?.message ?? error).replace(/[\r\n]+/g, ' ')}`)
+  }
   if (state.lockHeld) {
     try {
       rmdirSync(state.lockDir)
       state.lockHeld = false
     } catch (error) {
-      console.error(`wallet-ui failed: ${redact(error.message)}`)
-      if (!process.exitCode) process.exitCode = 1
+      console.error(`wallet-ui cleanup warning: ${redact(error?.message ?? error).replace(/[\r\n]+/g, ' ')}`)
     }
   }
 }
