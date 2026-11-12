@@ -6,7 +6,8 @@
 # the single non-Pods workspace and the single shared scheme under ios/.
 set -euo pipefail
 
-STARTER_COMMIT="${STARTER_COMMIT:-031e210e8d7ef322a9c3100f5aed3f4b7c6e34e6}"
+PINNED_STARTER_COMMIT="031e210e8d7ef322a9c3100f5aed3f4b7c6e34e6"
+STARTER_COMMIT="${STARTER_COMMIT:-$PINNED_STARTER_COMMIT}"
 STARTER_WORKSPACE="${STARTER_WORKSPACE:-}"
 STARTER_SCHEME="${STARTER_SCHEME:-}"
 BUNDLE_ID="io.tether.wdk.starter.reactnative"
@@ -16,8 +17,8 @@ if [[ $# -ne 1 || -z "${1}" ]]; then
   exit 2
 fi
 UDID="$1"
-if [[ ! "$STARTER_COMMIT" =~ ^031e210[0-9a-f]{33}$ ]]; then
-  echo "STARTER_COMMIT must be the full 40-character hash of 031e210" >&2
+if [[ "$STARTER_COMMIT" != "$PINNED_STARTER_COMMIT" ]]; then
+  echo "STARTER_COMMIT must equal the pinned commit" >&2
   exit 2
 fi
 
@@ -116,6 +117,12 @@ fi
 patch_sha="$(shasum -a 256 "$ROOT/starter.patch" | awk '{print $1}')"
 bundle_sha="$(shasum -a 256 "$bundle" | awk '{print $1}')"
 mkdir -p "$ROOT/out"
+rm -f "$ROOT/out/build.json"
+module_status="$(git -C "$MODULE" status --porcelain)"
+if [[ -n "$module_status" ]]; then
+  echo "the module tree changed during the build" >&2
+  exit 1
+fi
 cat > "$ROOT/out/build.json" <<EOF
 {
   "moduleHead": "${module_head}",
