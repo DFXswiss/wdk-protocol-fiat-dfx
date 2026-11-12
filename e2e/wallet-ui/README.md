@@ -29,7 +29,7 @@ The starter is not upstream. `build.sh` checks out commit `031e210` and applies 
 
 ## Prerequisites
 
-Xcode, the iOS 26.5 simulator runtime, Maestro 2.10, a JDK on `PATH`, and Node.js 22 or newer. Install the module probes once with `npm ci` in `e2e/` before `run-sale.mjs`. The app aborts at launch on iOS 27.0.
+Xcode, CocoaPods, the iOS 26.5 simulator runtime, Maestro 2.10, a JDK on `PATH`, and Node.js 22 or newer. Install the module probes once with `npm ci` in `e2e/` before `run-sale.mjs`. The app aborts at launch on iOS 27.0. CocoaPods is required by `npx expo prebuild --platform ios`.
 
 `STARTER_COMMIT` defaults to `031e210e8d7ef322a9c3100f5aed3f4b7c6e34e6`, the full hash of `031e210`. An override must be that same hash. The script stops if the checkout is any other commit. That hash is not in the patch. Leave `STARTER_WORKSPACE` and `STARTER_SCHEME` empty to use the single non-Pods workspace and the single shared scheme under `ios/`. Set them when that discovery is not unique.
 
@@ -43,7 +43,7 @@ From `e2e/wallet-ui/`:
 ./build.sh <simulator-udid>
 ```
 
-The script clones the starter, checks out `STARTER_COMMIT`, applies `starter.patch`, copies `.env.example` to `.env`, writes `.npmrc`, installs, builds a Release simulator app, and installs it. Only the Sepolia provider in `.env` is used for this sale. Do not print `.env`. The script then writes `out/build.json` with the module head, the starter commit, the patch digest, and the digest of `main.jsbundle` in the installed app.
+The script clones the starter, checks out `STARTER_COMMIT`, applies `starter.patch`, copies `.env.example` to `.env`, writes `.npmrc`, and installs. The starter does not commit `ios/`. The script then runs `npx expo prebuild --clean --platform ios`, which creates that directory and needs CocoaPods, and only then looks up the workspace and scheme. It builds a Release simulator app with `IPHONEOS_DEPLOYMENT_TARGET=17.0`, terminates and uninstalls any copy already on the simulator, and installs the new app. Only the Sepolia provider in `.env` is used for this sale. Do not print `.env`. The script then writes `out/build.json` with the module head, the starter commit, the patch digest, and the digest of `main.jsbundle` in the installed app.
 
 ## Run
 

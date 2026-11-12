@@ -41,6 +41,10 @@ cp "$STARTER/.env.example" "$STARTER/.env"
 printf 'install-links=true\n' > "$STARTER/.npmrc"
 (cd "$STARTER" && npm install)
 
+# ios/ is not in the starter checkout. Expo prebuild creates it and does not move HEAD.
+export LANG=en_US.UTF-8
+(cd "$STARTER" && npx expo prebuild --clean --platform ios)
+
 if [[ -z "$STARTER_WORKSPACE" ]]; then
   found=""
   count=0
@@ -78,6 +82,7 @@ xcodebuild \
   -sdk iphonesimulator \
   -destination "platform=iOS Simulator,id=$UDID" \
   -derivedDataPath "$derived" \
+  IPHONEOS_DEPLOYMENT_TARGET=17.0 \
   build
 
 app=""
@@ -91,6 +96,8 @@ if [[ "$count" -ne 1 ]]; then
   echo "expected one simulator app product, found $count" >&2
   exit 1
 fi
+xcrun simctl terminate "$UDID" "$BUNDLE_ID" || true
+xcrun simctl uninstall "$UDID" "$BUNDLE_ID" || true
 xcrun simctl install "$UDID" "$app"
 container="$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" app)"
 bundle="$container/main.jsbundle"
@@ -100,6 +107,7 @@ if [[ ! -f "$bundle" ]]; then
 fi
 
 module_head="$(git -C "$MODULE" rev-parse HEAD)"
+# expo prebuild does not change HEAD. This still checks the checkout commit.
 starter_head="$(git -C "$STARTER" rev-parse HEAD)"
 if [[ "$starter_head" != "$STARTER_COMMIT" ]]; then
   echo "checked out $starter_head, expected $STARTER_COMMIT" >&2
