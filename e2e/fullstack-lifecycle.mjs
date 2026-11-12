@@ -31,11 +31,11 @@ const scenarioIbans = new Set()
 function createScenarioIban() {
   let iban
   do {
-    const bban = '00762' + Array.from({ length: 12 }, () => randomInt(10)).join('')
+    const bban = '00000' + Array.from({ length: 12 }, () => randomInt(10)).join('')
     const checksum = String(98n - BigInt(`${bban}121700`) % 97n).padStart(2, '0')
     iban = `CH${checksum}${bban}`
   } while (scenarioIbans.has(iban))
-  assert.match(iban, /^CH\d{2}00762\d{12}$/)
+  assert.match(iban, /^CH\d{2}00000\d{12}$/)
   const rearranged = (iban.slice(4) + iban.slice(0, 4))
     .replace(/[A-Z]/g, letter => String(letter.charCodeAt(0) - 55))
   assert.equal(BigInt(rearranged) % 97n, 1n, 'Invalid scenario IBAN checksum')

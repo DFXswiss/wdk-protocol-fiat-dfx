@@ -4,7 +4,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync, renameSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { randomUUID, randomBytes } from 'node:crypto'
+import { randomUUID, randomBytes, randomInt } from 'node:crypto'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 
@@ -25,7 +25,12 @@ const DB_CONTAINER = process.env.DFX_LOCAL_DB_CONTAINER ?? 'dfx-e2e-wdk2-db-1'
 const API_CONTAINER = process.env.DFX_LOCAL_API_CONTAINER ?? DB_CONTAINER.replace(/-db-1$/, '-api-1')
 const DIR = fileURLToPath(new URL('./out/', import.meta.url))
 const runId = `wdk-processing-${Date.now()}-${randomUUID().slice(0, 8)}`
-const IBAN = 'CH3600000000000000000'
+function inventedIban() {
+  const bban = '00000' + Array.from({ length: 12 }, () => String(randomInt(10))).join('')
+  const remainder = [...`${bban}121700`].reduce((n, digit) => (n * 10 + Number(digit)) % 97, 0)
+  return `CH${String(98 - remainder).padStart(2, '0')}${bban}`
+}
+const IBAN = inventedIban()
 const secrets = new Set()
 const results = {
   runId, startedAt: new Date().toISOString(), api: API, app: APP,

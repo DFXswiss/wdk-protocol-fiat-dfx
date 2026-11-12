@@ -1038,6 +1038,28 @@ Six runs at `6c7f5ab` and `18f0acf` ended red; their records are in
   this is the cause for id 10035 is not verified, as it needs the sandbox's data. Completing a new user's personal
   data in the sandbox was not done.
 
+### Runs of 2026-11-10
+
+Five runs of `e2e/real-sell.mjs` on 2026-11-10, each with `--account eoa --asset USDT --follow 60`, from the EOA
+`0x4B33B90cFC38341Db2b9EC5cF3B737508801c617`, each sending 1 USDT on Sepolia and each using an IBAN invented for that
+run. Times are UTC.
+
+| Head | Sandbox `/version` at start | Transaction | Block | Sandbox id | Result |
+| --- | --- | --- | --- | --- | --- |
+| `d019c89` | `e83bb48` | `0xaa2afa754159ac355435d146a83db7b2efdde1b3a629f36510c991dfefbca51f` | 12104758 | 10039 | `Created` 12:55, `Processing` 12:56, `PayoutInProgress` 13:00; exit 0 |
+| `fd83950`, attempt 1 | `e83bb48` | `0x674f58cc1b9d008f4adc9f0a606fcab46ae0efa1632bf135da049743a1927b87` | 12104823 | 10040 | `Created` 13:08, `Processing` 13:09, then `Follow timed out before payout` after 60 minutes; red |
+| `fd83950`, attempt 2 | `ed7c4c9` | `0xdba21f36a4e5a9313ca69e7ac5430a13e2a18ca57708bea35c24d1e9e49d10cf` | 12105124 | 10041 | `Created` 14:09, `Processing` 14:10, then the same timeout; red |
+| `fd83950`, attempt 3 | `686f9ea` | `0xd47d5fda2f43e1ed6da83158a5c7bae2b789f091583d9acf5c240762283e897f` | 12105425 | 10042 | `Created` 15:09, `Processing` 15:11, `PayoutInProgress` 15:25; exit 0, run protocol written |
+| `0cbde75` | `d401879` | `0xcaf6bd7584c7c75d68f295979dc08e0cac2d04f3c8552e32c220dc1928e573ee` | 12105666 | 10043 | `Created` 15:58, `Processing` 16:00, then the same timeout; red |
+
+In the three red runs the sandbox recognized the deposit, but did not forward it from the deposit address within
+the 60 minutes. For 10040 and 10041 the deposit address was still at nonce 0 at 15:26 UTC, reason
+`InputNotConfirmed`. On 2026-11-12 all three deposit addresses (`0xdA64713a0Ec85bf79993ddEFC938a7DD41319FA5`,
+`0x4633C82F3764FD5aC486215F4D1bddc64480C0c2`, `0x8979EfdA323cc1014dEe650E34991b38bC31A78E`) were at nonce 1, so the
+sandbox forwarded later. The final state of the three sales was not read again. The cause is not visible without
+the sandbox's logs. A green run after red attempts at the same head is flaky by the standard of this document and
+is not evidence of stability. The run at the head of the pull request is in the pull request description.
+
 ## 18. Re-run of the `e2e/` probes at `d35b031` (2026-11-05)
 
 Every probe under `e2e/` that could run against the module was run again at `d35b031` from a clean
@@ -1076,7 +1098,7 @@ the exact sandbox (`[dev]_`) or production text and rejected every other challen
 frontend rebuilt with that API origin), and `fullstack.mjs` stopped at its first module step with `Unexpected DFX
 sign-in challenge`; the other three were not started for the same reason. In `fullstack.mjs` and
 `fullstack-processing.mjs` the fixed IBAN, which belongs to a real person, was replaced by the local test IBAN
-`CH3600000000000000000`.
+`CH3600000000000000000`; since 2026-11-12 each run invents its IBAN.
 
 **Environment `local` (2026-11-06).** Since `f64b8d4` the module has a third environment, `local`, for exactly this
 stack: `apiUrl` and `appUrl` must be HTTP(S) loopback origins (`localhost`, `127.0.0.1` or `[::1]`, no path, query,
@@ -1096,7 +1118,7 @@ listed there enabled):
 
 | Probe | Result at `efc82f3` | As on `20ec94d` (section 12) |
 | --- | --- | --- |
-| `fullstack.mjs` | 29/29 steps, exit 0; the sell bank account is `CH3600000000000000000` | yes |
+| `fullstack.mjs` | 29/29 steps, exit 0; the sell bank account is `CH3600000000000000000`; since 2026-11-12 each run invents its IBAN | yes |
 | `fullstack-processing.mjs` | 24 steps OK, 2 red: sell matching by the real `BuyFiat` job, the +10 % counter-test unmatched and `NoSuchElementError` from the module; the two six-minute observation steps red because this probe does not perform the operating steps the AML decision needs (section 11) | yes |
 | `fullstack-lifecycle.mjs` (`OBSERVE_MINUTES=15`) | 56 steps OK, 2 red: the crypto payout for buy A ("no positive crypto output and fee") and the fiat bank execution for the sale ("no executable fiat output") are not prepared by the local stack | yes |
 | `kyc-widget.mjs` | 41 steps OK, 2 red: sign-in, level 10, level 20 and nationality through the UI, then quote and widget for the same account; on *Continue* the API log shows 14 × `PUT /v2/kyc` 503 from `SumsubService.createApplicant` (section 7), and the probe's own boundary check stays red because no identification step is created (section 11). The widget now shows "Something went wrong" with *Continue* instead of a spinner | yes, apart from the widget's message |

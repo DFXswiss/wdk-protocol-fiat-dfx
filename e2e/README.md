@@ -346,7 +346,8 @@ transaction states. These remain in the disposable database for inspection.
 Buy assignment uses the backend admin endpoint; sell assignment is an explicit
 SQL fixture and does **not** prove automatic backend sell matching. No real bank
 transfer, blockchain deposit or payout is tested. Use only a disposable harness
-with the expected local `[loc]_` signing challenge.
+with the expected local `[loc]_` signing challenge. The sell bank account is a
+checksum-valid Swiss IBAN with clearing number 00000, invented once per run.
 
 Results update atomically at `out/fullstack/results.json`; screenshots are under
 `out/fullstack/shots/`. Inspect per-step evidence and rendered screenshots.
@@ -388,7 +389,9 @@ the real admin endpoints:
 The AML job needs about ten minutes per decision, so a full run takes 60–90
 minutes. The environment step seeds a numeric referral code when none exists (see
 `TESTING.md` for the backend finding behind it). Use a fresh IBAN per scenario: DFX
-allows an active IBAN on one account only, and the script generates valid ones.
+allows an active IBAN on one account only, and the script generates valid ones
+with clearing number 00000. `fullstack-processing.mjs` invents one such IBAN per
+run, as `fullstack.mjs` does.
 
 If a required milestone is not reached (compliance Pass, an AML decision within
 the observation window, BuyFiat input assignment, or the backend boundary required
@@ -453,7 +456,9 @@ Before any transaction, the script checks the chain id, that the WDK account
 address equals the address predicted from WDK's own Safe parameters, and that
 `--to` is neither the account, its owner nor the zero address, and for a token
 not the token contract. It reads the seed from
-`WALLET_SIM_SEED_FILE` or `~/.wdk-dfx-real/seed.txt` and never prints it. The
+`WALLET_SIM_SEED_FILE` or `~/.wdk-dfx-real/seed.txt` and never prints it.
+Failure text on stderr masks that seed, 64-character hex keys, and the `--rpc`
+URL, including a path, query or userinfo part of at least 16 characters. The
 seed file must meet the same rule as for the simulator: a nonempty regular file,
 owned by the current user, owner-only permissions, not a symlink.
 

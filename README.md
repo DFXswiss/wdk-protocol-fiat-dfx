@@ -450,9 +450,11 @@ outside Jest:
 node tests/integration/record.js
 ```
 
-Only the recording script contacts the live sandbox and creates a fresh sandbox
-user through `POST /v1/auth`, recording its address and IP at DFX. It stores no
-authentication token and replaces the challenge address with a placeholder.
+Only the recording script contacts the live sandbox. It signs in through
+`POST /v1/auth` always with the same fixed test account from
+`tests/integration/helpers.js` (the first recording created that sandbox user).
+DFX records the address and IP. It stores no authentication token and replaces
+the challenge address with a placeholder.
 After recording, update the literal expectations in `tests/integration/module.test.js`
 and the complete catalogs in `tests/integration/fixtures/expected-catalog.json`
 using independently calculated values. Update this paragraph with the actual
