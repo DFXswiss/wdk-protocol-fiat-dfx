@@ -127,7 +127,7 @@ function git (args) {
 
 function runCapture (command, args, stdinMode) {
   const stdin = stdinMode === 'empty' ? 'pipe' : stdinMode === 'ignore' || stdinMode == null ? 'ignore' : stdinMode
-  return new Promise((resolvePromise, reject) => {
+  return new Promise((resolve, reject) => {
     let child
     let settled = false
     const finish = (handler, value) => {
@@ -147,7 +147,7 @@ function runCapture (command, args, stdinMode) {
     child.stderr.on('data', () => {})
     child.on('error', error => finish(reject, error))
     child.on('close', code => {
-      finish(resolvePromise, {
+      finish(resolve, {
         code: code == null ? 1 : code,
         stdout: Buffer.concat(out).toString('utf8')
       })
@@ -724,13 +724,15 @@ async function checkChain (prelude, hash, depositAddress) {
     to = null
   }
   if (to !== USDT) throw new CheckError('receipt-to', 'to is not the token')
-  const logs = Array.isArray(raw.logs) ? raw.logs.filter(log => {
-    try {
-      return getAddress(log.address) === USDT && String(log.topics?.[0] ?? '').toLowerCase() === TRANSFER_TOPIC
-    } catch {
-      return false
-    }
-  }) : []
+  const logs = Array.isArray(raw.logs)
+    ? raw.logs.filter(log => {
+      try {
+        return getAddress(log.address) === USDT && String(log.topics?.[0] ?? '').toLowerCase() === TRANSFER_TOPIC
+      } catch {
+        return false
+      }
+    })
+    : []
   if (logs.length !== 1) throw new CheckError('transfer', `found ${logs.length} USDT Transfer logs`)
   const transfer = logs[0]
   const transferFrom = addressFromTopic(transfer.topics?.[1], 'transfer')
