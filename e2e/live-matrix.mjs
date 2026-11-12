@@ -14,18 +14,9 @@ import WalletManagerBtc from '@tetherto/wdk-wallet-btc'
 import WalletManagerSpark from '@tetherto/wdk-wallet-spark'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
 
-const require = createRequire(import.meta.url)
-const dfxWalletPath = createRequire(require.resolve('@dfx.swiss/wdk-protocol-fiat-dfx')).resolve('@tetherto/wdk-wallet')
-const wdkWalletPath = createRequire(require.resolve('@tetherto/wdk')).resolve('@tetherto/wdk-wallet')
-if (dfxWalletPath !== wdkWalletPath) {
-  throw new Error(`Duplicate @tetherto/wdk-wallet copies: DFX resolves ${dfxWalletPath}; WDK resolves ${wdkWalletPath}. FiatProtocol class identity differs, so DFX registration would fail. Remove e2e/node_modules and reinstall from e2e/ with install-links=true (see .npmrc).`)
-}
-
 const ENV = process.env.DFX_ENV === 'production' ? 'production' : 'sandbox'
 const API = ENV === 'production' ? 'https://api.dfx.swiss' : 'https://dev.api.dfx.swiss'
-const seed = WDK.getRandomSeedPhrase()
 const OUT = new URL('./out/', import.meta.url)
-mkdirSync(OUT, { recursive: true })
 const masked = value => String(value).split(seed).join('[REDACTED]')
   .replace(/([?&]session=)[^&\s"<>]+/g, '$1[REDACTED]')
   .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, '[REDACTED-JWT]')
@@ -81,6 +72,18 @@ const CASES = [
 ]
 
 const only = process.argv[2]
+if (process.argv.length > 3 || (only !== undefined && !CASES.some(c => c.chain === only))) {
+  console.error(`Usage: node live-matrix.mjs [${CASES.map(c => c.chain).join('|')}]`)
+  process.exit(2)
+}
+const require = createRequire(import.meta.url)
+const dfxWalletPath = createRequire(require.resolve('@dfx.swiss/wdk-protocol-fiat-dfx')).resolve('@tetherto/wdk-wallet')
+const wdkWalletPath = createRequire(require.resolve('@tetherto/wdk')).resolve('@tetherto/wdk-wallet')
+if (dfxWalletPath !== wdkWalletPath) {
+  throw new Error(`Duplicate @tetherto/wdk-wallet copies: DFX resolves ${dfxWalletPath}; WDK resolves ${wdkWalletPath}. FiatProtocol class identity differs, so DFX registration would fail. Remove e2e/node_modules and reinstall from e2e/ with install-links=true (see .npmrc).`)
+}
+const seed = WDK.getRandomSeedPhrase()
+mkdirSync(OUT, { recursive: true })
 for (const c of CASES.filter(c => !only || c.chain === only)) {
   log(`\n=== ${c.chain} (network ${c.network})`)
   let fiat, account, address

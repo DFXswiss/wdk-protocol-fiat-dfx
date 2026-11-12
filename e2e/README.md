@@ -14,7 +14,7 @@ Node.js 22 or newer. Do not print a seed. A seed file must be a non-empty regula
 
 ## live-matrix.mjs
 
-Live matrix for ethereum, polygon, arbitrum, base, optimism, bsc, sepolia, polygon-4337, base-4337, tron, solana, bitcoin and spark. Each case registers WDK, reads catalogs, quotes, asks for an unknown transaction id, and opens buy and sell widget URLs. It sends no on-chain transaction. Output: `out/matrix-results-sandbox.json` or `out/matrix-results-production.json`. Session URLs are redacted in that file. Exit 0 only when every step passed; otherwise exit 1.
+Live matrix for ethereum, polygon, arbitrum, base, optimism, bsc, sepolia, polygon-4337, base-4337, tron, solana, bitcoin and spark. Each case registers WDK and reads catalogs; cases with listed assets also quote, ask for an unknown transaction id, and open buy and sell widget URLs. Bitcoin with an empty catalog checks four `Missing decimals` rejections instead. It sends no on-chain transaction. Output: `out/matrix-results-sandbox.json` or `out/matrix-results-production.json`. Session URLs are redacted in that file. Exit 0 only when every step passed; exit 2 for an unknown chain or more than one argument; otherwise exit 1.
 
 ```sh
 node live-matrix.mjs
@@ -73,6 +73,8 @@ node real-sell.mjs --seed-file /path/to/seed.txt --send --confirm --follow 30 \
 
 Real Base purchase against production. The script quotes, and with `--confirm` writes a buy URL to `--url-file` and waits for the payout. The bank transfer is manual. No wallet user interface confirms the transaction. `--confirm` also requires `--screenshots` and `--record <file>`. `--lock <dir>` is optional. `--account` is `smart` or `eoa` (default `smart`). Only USDC. `--rpc` defaults to `https://mainnet.base.org`.
 
+The file given by `--url-file` contains the buy URL with a session, is created with owner-only permissions, and should be deleted after the purchase.
+
 The balance after the payout, at the receipt block, must exceed the balance at the previous block by the payout transfer amount.
 
 Exit 2 is usage. Exit 3 is only a `NotRunError`: an unusable seed file, duplicate `@tetherto/wdk-wallet` copies, a module copy that differs from this tree (the digest differs, the file list differs, the installed copy is missing, or a symlink is rejected), an unreachable RPC, a preflight `/version` that is unreachable or without a usable answer, or a `--url-file` that cannot be created. A held lock, a dirty tree, a chain id that is not Base, an unavailable DFX protocol, a git failure, and any other exception exit 1.
@@ -107,7 +109,7 @@ node safe-rescue.mjs --rpc https://mainnet.base.org --to 0x000000000000000000000
 
 ## wallet-ui/
 
-`wallet-ui/` is a Sepolia sale of 1 USDT for EUR in which the WDK starter wallet on the iOS simulator confirms the send and the sandbox must book that hash through `PayoutInProgress`.
+`wallet-ui/` is a Sepolia sale of 1 USDT for EUR in which the WDK starter wallet on the iOS simulator confirms the send and the sandbox must book that hash to `PayoutInProgress` or `Completed`.
 
 It is the end-to-end run in this directory; the other scripts do not ask a wallet user interface to confirm.
 

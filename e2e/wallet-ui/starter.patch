@@ -578,8 +578,8 @@ index 170923a..83990b1 100644
 + * for the same transfer `sendAsset` will send. Bitcoin keeps estimateFee.
 + *
 + * The returned fee for an Ethereum token transfer is wei, not token base
-+ * units. The review screen formats a non-sponsored fee with the asset's
-+ * own decimals and symbol, and that screen's logic is left unchanged.
++ * units. The review screen formats it with 18 decimals and ETH, without
++ * adding it to the token total.
   */
  export async function quoteSendFee(
    account: any,
