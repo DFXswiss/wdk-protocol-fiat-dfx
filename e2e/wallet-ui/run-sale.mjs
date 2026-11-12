@@ -196,8 +196,7 @@ function parseArgs (args) {
     ['--record', 'record'],
     ['--screenshots', 'screenshots'],
     ['--follow', 'follow'],
-    ['--rpc', 'rpc'],
-    ['--lock', 'lock']
+    ['--rpc', 'rpc']
   ])
   const seen = new Set()
   for (let i = 0; i < args.length; i++) {
@@ -236,7 +235,6 @@ function parseArgs (args) {
     if (!options.follow) throw new UsageError('--send requires --follow <minutes>')
     if (!options.screenshots) throw new UsageError('--send requires --screenshots <dir>')
     if (!options.record) throw new UsageError('--send requires --record <file>')
-    if (!options.lock) throw new UsageError('--send requires --lock <dir>')
   }
   return options
 }
@@ -353,6 +351,7 @@ function bootedRuntime (udid) {
     }
   }
   if (!runtime) throw new NotRunError('not run: simulator is not booted')
+  if (runtime !== 'com.apple.CoreSimulator.SimRuntime.iOS-26-5') throw new NotRunError(`not run: the simulator runtime is ${runtime}; this run needs iOS 26.5`)
   return runtime
 }
 
@@ -1337,6 +1336,7 @@ async function main () {
       throw new UsageError('--screenshots already contains a result from this flow')
     }
   }
+  if (options.send) takeLock(join(tmpdir(), 'wdk-wallet-ui-run.lock'))
   const prelude = await preflight(options)
   if (!options.send) {
     console.log('wallet-ui preflight ok')
@@ -1356,7 +1356,6 @@ async function main () {
     ibanCountryAndClearing: IBAN_LABEL
   }
   try {
-    takeLock(options.lock)
     await sendAndCheck(prelude)
     await clearClipboard()
     const body = measuredRecord()

@@ -29,7 +29,7 @@ The starter is not upstream. `build.sh` checks out commit `031e210` and applies 
 
 ## Prerequisites
 
-Xcode, CocoaPods, the iOS 26.5 simulator runtime, Maestro 2.10, a JDK on `PATH`, and Node.js 22 or newer. Install the module probes once with `npm ci` in `e2e/` before `run-sale.mjs`. The app aborts at launch on iOS 27.0. CocoaPods is required by `npx expo prebuild --platform ios`.
+Xcode, CocoaPods, the iOS 26.5 simulator runtime (the only permitted runtime), Maestro 2.10, a JDK on `PATH`, and Node.js 22 or newer. Install the module probes once with `npm ci` in `e2e/` before `run-sale.mjs`. The app aborts at launch on iOS 27.0. CocoaPods is required by `npx expo prebuild --platform ios`.
 
 `STARTER_COMMIT` defaults to `031e210e8d7ef322a9c3100f5aed3f4b7c6e34e6`, the full hash of `031e210`. An override must be that same hash. The script stops if the checkout is any other commit. That hash is not in the patch. Leave `STARTER_WORKSPACE` and `STARTER_SCHEME` empty to use the single non-Pods workspace and the single shared scheme under `ios/`. Set them when that discovery is not unique.
 
@@ -53,14 +53,16 @@ From `e2e/`:
 node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid>
 ```
 
-That is the preflight. It does not paste the seed, does not start Maestro against the app, does not send, and writes no record. Exit 0 means the tree, the installed build, the simulator, Maestro, the sandbox version, and the account balance are ready. The account needs at least 1 USDT and 0.0002 ETH.
+That is the preflight. It does not paste the seed, does not start Maestro against the app, does not send, and writes no record. It requires the booted simulator to use iOS 26.5. Exit 0 means the tree, the installed build, the simulator, Maestro, the sandbox version, and the account balance are ready. The account needs at least 1 USDT and 0.0002 ETH.
 
 ```sh
 node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid> \
-  --send --confirm --follow <minutes> --screenshots <dir> --record <file> --lock <dir>
+  --send --confirm --follow <minutes> --screenshots <dir> --record <file>
 ```
 
 `--follow` is 1 to 240 minutes. `--screenshots` must be a directory owned by the current user with mode `0700`, and it must not already contain `sell-widget-open.png`, `send-review.png`, or `send-success.png`. `--record` must not exist yet and must not be the seed file. `--rpc` defaults to `https://ethereum-sepolia-rpc.publicnode.com`.
+
+A send takes a fixed lock directory in the system temporary directory before checking for another Maestro process and holds it through cleanup. A lock left after a crash must be deleted by hand. Preflight without a send takes no lock.
 
 Exit 0 is a pass. Exit 1 is a failed check; the record file then holds one JSONL line with `result` `fail` and `failedCheck`, unless the record cannot be written. A failed flow records the first failed Maestro step as `failedStep` with the IBAN masked; it is also printed when the flow failure stops the run. Exit 2 is usage. Exit 3 means the run did not start: the reason is printed and no record is written; this includes an occupied or uncreatable lock. No Maestro flow, tap, or send is repeated. The receipt is read for up to 60 seconds, fixed-block balance reads are repeated when a node is lagging, the backend record is read every 20 seconds until `--follow` ends, and the explorer page is reloaded for up to five minutes until it shows the hash and Success. The record counts backend reads in `backendReads`, RPC read retries in `rpcReadRetries`, and explorer reloads in `explorerReloads`. A second Maestro process on the machine makes the preflight exit 3, and makes the gap between the two flows exit 1 with `nothing sent`.
 
