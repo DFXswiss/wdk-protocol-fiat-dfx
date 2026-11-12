@@ -28,6 +28,7 @@ appId: io.tether.wdk.starter.reactnative
 - takeScreenshot: send-review
 - tapOn:
     id: "send-confirm"
+    retryTapIfNoChange: false
 - extendedWaitUntil:
     visible:
       id: "send-success-hash"
