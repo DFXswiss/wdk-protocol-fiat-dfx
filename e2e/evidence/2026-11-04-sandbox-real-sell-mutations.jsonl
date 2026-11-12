@@ -1,0 +1,179 @@
+{"mutation":"m4-iban-choice","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"m4-iban-choice","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"m4-iban-choice","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793830771780-347fe5","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":false}
+{"mutation":"m4-iban-choice","account":"eoa","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"m4-iban-choice","account":"eoa","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793830771780-347fe5-eoa-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"m4-iban-choice","account":"eoa","step":"paymentInfos","asset":"USDT","ok":false,"error":"No valid paymentInfos response with the deposit address visible"}
+{"mutation":"m4-iban-choice","stderr":"real-sell failed: No valid paymentInfos response with the deposit address visible"}
+{"mutation":"m1-backend-ext","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"m1-backend-ext","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"m1-backend-ext","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1959000000","eth":"18713733793903392","usdtNeed":"1000000","ethNeed":"2000000000000000"}
+{"mutation":"m1-backend-ext","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793830834644-2f2aa0","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"m1-backend-ext","account":"eoa","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"m1-backend-ext","account":"eoa","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793830834644-2f2aa0-eoa-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"m1-backend-ext","account":"eoa","step":"paymentInfos","asset":"USDT","ok":true,"id":34198,"depositAddress":"0x85b46CdB6895F6a6a3e258cB728C54fF1fe6B27b","currency":"CHF"}
+{"mutation":"m1-backend-ext","account":"eoa","step":"balances-before","asset":"USDT","ok":true,"usdt":"1959000000","eth":"18713733793903392","nonce":"209","deposit":"0"}
+{"mutation":"m1-backend-ext","account":"eoa","step":"send","asset":"USDT","ok":true,"hash":"0xbd8de744ccbd23173a9ee7c3eebbbcbbc92b69a089c46b96b9100bed8968def7"}
+{"mutation":"m1-backend-ext","account":"eoa","step":"receipt","asset":"USDT","ok":true,"hash":"0xbd8de744ccbd23173a9ee7c3eebbbcbbc92b69a089c46b96b9100bed8968def7","status":1,"block":"12065353","gasUsed":"140866","effectiveGasPrice":"1014"}
+{"mutation":"m1-backend-ext","account":"eoa","step":"balances-after","asset":"USDT","ok":true,"usdt":"1958000000","eth":"18713733651065268","nonce":"210"}
+{"mutation":"m1-backend-ext","account":"eoa","step":"backend","asset":"USDT","ok":false,"error":"Backend externalTransactionId does not match"}
+{"mutation":"m1-backend-ext","stderr":"real-sell failed: Backend externalTransactionId does not match"}
+{"mutation":"m2-usdt-balance","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"m2-usdt-balance","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"m2-usdt-balance","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1958000000","eth":"18713733651065268","usdtNeed":"1000000","ethNeed":"2000000000000000"}
+{"mutation":"m2-usdt-balance","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793830897536-b6ecce","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"m2-usdt-balance","account":"eoa","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"m2-usdt-balance","account":"eoa","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793830897536-b6ecce-eoa-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"m2-usdt-balance","account":"eoa","step":"paymentInfos","asset":"USDT","ok":true,"id":34200,"depositAddress":"0x85b46CdB6895F6a6a3e258cB728C54fF1fe6B27b","currency":"CHF"}
+{"mutation":"m2-usdt-balance","account":"eoa","step":"balances-before","asset":"USDT","ok":true,"usdt":"1958000000","eth":"18713733651065268","nonce":"210","deposit":"1000000"}
+{"mutation":"m2-usdt-balance","account":"eoa","step":"send","asset":"USDT","ok":true,"hash":"0x0be2314652cc8b5b5f266a429b8517be3fdbc567cc50bc73cc064311ac777e94"}
+{"mutation":"m2-usdt-balance","account":"eoa","step":"receipt","asset":"USDT","ok":true,"hash":"0x0be2314652cc8b5b5f266a429b8517be3fdbc567cc50bc73cc064311ac777e94","status":1,"block":"12065357","gasUsed":"42946","effectiveGasPrice":"1014"}
+{"mutation":"m2-usdt-balance","account":"eoa","step":"balances-after","asset":"USDT","ok":false,"error":"USDT balance is 1957000000; expected 1956999999"}
+{"mutation":"m2-usdt-balance","stderr":"real-sell failed: USDT balance is 1957000000; expected 1956999999"}
+{"mutation":"m3-module-status","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"m3-module-status","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"m3-module-status","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1957000000","eth":"18713733607518024","usdtNeed":"1000000","ethNeed":"2000000000000000"}
+{"mutation":"m3-module-status","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793830911322-e15cfb","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"m3-module-status","account":"eoa","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"m3-module-status","account":"eoa","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793830911322-e15cfb-eoa-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"m3-module-status","account":"eoa","step":"paymentInfos","asset":"USDT","ok":true,"id":34202,"depositAddress":"0x85b46CdB6895F6a6a3e258cB728C54fF1fe6B27b","currency":"CHF"}
+{"mutation":"m3-module-status","account":"eoa","step":"balances-before","asset":"USDT","ok":true,"usdt":"1957000000","eth":"18713733607518024","nonce":"211","deposit":"2000000"}
+{"mutation":"m3-module-status","account":"eoa","step":"send","asset":"USDT","ok":true,"hash":"0xa7e1cdf7d74d055e22d6aefef8a96da67b345568520e2b92ceed9ffb16da4201"}
+{"mutation":"m3-module-status","account":"eoa","step":"receipt","asset":"USDT","ok":true,"hash":"0xa7e1cdf7d74d055e22d6aefef8a96da67b345568520e2b92ceed9ffb16da4201","status":1,"block":"12065359","gasUsed":"42946","effectiveGasPrice":"1015"}
+{"mutation":"m3-module-status","account":"eoa","step":"balances-after","asset":"USDT","ok":true,"usdt":"1956000000","eth":"18713733563927834","nonce":"212"}
+{"mutation":"m3-module-status","account":"eoa","step":"backend","asset":"USDT","ok":true,"transaction":{"id":9974,"uid":"TCE2383F092109FFE","type":"Sell","state":"Created","inputTxId":"0xa7e1cdf7d74d055e22d6aefef8a96da67b345568520e2b92ceed9ffb16da4201","inputAmount":1,"inputAsset":"USDT","externalTransactionId":"wdk-real-sell-1793830911322-e15cfb-eoa-USDT"}}
+{"mutation":"m3-module-status","account":"eoa","step":"module","asset":"USDT","ok":false,"error":"Module externalTransactionId status is in_progress"}
+{"mutation":"m3-module-status","stderr":"real-sell failed: Module externalTransactionId status is in_progress"}
+{"mutation":"m5-receipt-status","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"m5-receipt-status","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"m5-receipt-status","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1956000000","eth":"18713733563927834","usdtNeed":"1000000","ethNeed":"2000000000000000"}
+{"mutation":"m5-receipt-status","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793831012263-d1b736","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"m5-receipt-status","account":"eoa","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"m5-receipt-status","account":"eoa","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793831012263-d1b736-eoa-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"m5-receipt-status","account":"eoa","step":"paymentInfos","asset":"USDT","ok":true,"id":34204,"depositAddress":"0x85b46CdB6895F6a6a3e258cB728C54fF1fe6B27b","currency":"CHF"}
+{"mutation":"m5-receipt-status","account":"eoa","step":"balances-before","asset":"USDT","ok":true,"usdt":"1956000000","eth":"18713733563927834","nonce":"212","deposit":"3000000"}
+{"mutation":"m5-receipt-status","account":"eoa","step":"send","asset":"USDT","ok":true,"hash":"0x9bdbed88024579478c7bf73e4201fe6bd0127d9779e2774e04663a6acb9b85aa"}
+{"mutation":"m5-receipt-status","account":"eoa","step":"receipt","asset":"USDT","ok":false,"error":"Receipt status is 1; expected 1"}
+{"mutation":"m5-receipt-status","stderr":"real-sell failed: Receipt status is 1; expected 1"}
+{"mutation":"m6-transfer-value","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"m6-transfer-value","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"m6-transfer-value","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1955000000","eth":"18713733520337644","usdtNeed":"1000000","ethNeed":"2000000000000000"}
+{"mutation":"m6-transfer-value","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793831030631-a0ae64","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"m6-transfer-value","account":"eoa","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"m6-transfer-value","account":"eoa","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793831030631-a0ae64-eoa-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"m6-transfer-value","account":"eoa","step":"paymentInfos","asset":"USDT","ok":true,"id":34206,"depositAddress":"0x85b46CdB6895F6a6a3e258cB728C54fF1fe6B27b","currency":"CHF"}
+{"mutation":"m6-transfer-value","account":"eoa","step":"balances-before","asset":"USDT","ok":true,"usdt":"1955000000","eth":"18713733520337644","nonce":"213","deposit":"3000000"}
+{"mutation":"m6-transfer-value","account":"eoa","step":"send","asset":"USDT","ok":true,"hash":"0xe46defa4a52be17397f07712de97c6620c0f653d7b348f70b332183826d5e697"}
+{"mutation":"m6-transfer-value","account":"eoa","step":"receipt","asset":"USDT","ok":false,"error":"USDT Transfer value is 1000000; expected 1000000"}
+{"mutation":"m6-transfer-value","stderr":"real-sell failed: USDT Transfer value is 1000000; expected 1000000"}
+{"mutation":"s1-userop-success","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"s1-userop-success","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"s1-userop-success","account":"smart","step":"safe-preflight","asset":null,"ok":true,"address":"0x9AC4d66C2e8A3B26e85A2d58784b0de3f79529A5","index":669655708,"deployed":false}
+{"mutation":"s1-userop-success","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1954000000","eth":"18713733476747454","usdtNeed":"1000000","ethNeed":"2500000000000000"}
+{"mutation":"s1-userop-success","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793831043007-38cbb7","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"s1-userop-success","account":"smart","step":"funding-send","asset":"USDT","ok":true,"hash":"0x9574fc671ed48c975eb511d393d1bd67564cbb3cfedd9d1dd256e549422386e9"}
+{"mutation":"s1-userop-success","account":"smart","step":"funding-receipt","asset":"USDT","ok":true,"hash":"0x9574fc671ed48c975eb511d393d1bd67564cbb3cfedd9d1dd256e549422386e9","status":1}
+{"mutation":"s1-userop-success","account":"smart","step":"funding-send","asset":"ETH","ok":true,"hash":"0x0721fe221d769b8e4c61ea271376fe18392ed18a2465ee3fc20adcee25b86925"}
+{"mutation":"s1-userop-success","account":"smart","step":"funding-receipt","asset":"ETH","ok":true,"hash":"0x0721fe221d769b8e4c61ea271376fe18392ed18a2465ee3fc20adcee25b86925","status":1}
+{"mutation":"s1-userop-success","account":"smart","step":"funding-balances","asset":null,"ok":true,"usdt":"1000000","eth":"500000000000000","deployed":false}
+{"mutation":"s1-userop-success","account":"smart","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"s1-userop-success","account":"smart","step":"safe-code","asset":"USDT","ok":true,"deployed":false}
+{"mutation":"s1-userop-success","account":"smart","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793831043007-38cbb7-smart-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"s1-userop-success","account":"smart","step":"user","asset":"USDT","ok":true,"status":200}
+{"mutation":"s1-userop-success","account":"smart","step":"paymentInfos","asset":"USDT","ok":true,"id":34208,"depositAddress":"0xEa91B3552F9886c1BE27c4d005838e4144F56009","currency":"EUR"}
+{"mutation":"s1-userop-success","account":"smart","step":"balances-before","asset":"USDT","ok":true,"usdt":"1000000","eth":"500000000000000","nonce":"0","deposit":"0"}
+{"mutation":"s1-userop-success","account":"smart","step":"send","asset":"USDT","ok":true,"hash":"0x4e310c0e60caf298af23239eae38226d7e8d6755a4070c3972f1d84bf21dc1a5"}
+{"mutation":"s1-userop-success","account":"smart","step":"receipt","asset":"USDT","ok":false,"error":"UserOperationEvent success is false"}
+{"mutation":"s1-userop-success","stderr":"real-sell failed: UserOperationEvent success is false"}
+{"mutation":"s2-eth-balance","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"s2-eth-balance","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"s2-eth-balance","account":"smart","step":"safe-preflight","asset":null,"ok":true,"address":"0xD27fA1a83fBF000efa1616A903750D848EE51280","index":357700692,"deployed":false}
+{"mutation":"s2-eth-balance","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1953000000","eth":"18213733126099464","usdtNeed":"1000000","ethNeed":"2500000000000000"}
+{"mutation":"s2-eth-balance","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793831078883-8702ba","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"s2-eth-balance","account":"smart","step":"funding-send","asset":"USDT","ok":true,"hash":"0x74ec0f7086743ad295895a655b8ac74b34b17becf8ab055f9682f74ecfa8c14c"}
+{"mutation":"s2-eth-balance","account":"smart","step":"funding-receipt","asset":"USDT","ok":true,"hash":"0x74ec0f7086743ad295895a655b8ac74b34b17becf8ab055f9682f74ecfa8c14c","status":1}
+{"mutation":"s2-eth-balance","account":"smart","step":"funding-send","asset":"ETH","ok":true,"hash":"0xbacf0502605a1f4913c2bc0f5e028525e04cec2ee57209a3e790d1c99c6a6777"}
+{"mutation":"s2-eth-balance","account":"smart","step":"funding-receipt","asset":"ETH","ok":true,"hash":"0xbacf0502605a1f4913c2bc0f5e028525e04cec2ee57209a3e790d1c99c6a6777","status":1}
+{"mutation":"s2-eth-balance","account":"smart","step":"funding-balances","asset":null,"ok":true,"usdt":"1000000","eth":"500000000000000","deployed":false}
+{"mutation":"s2-eth-balance","account":"smart","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"s2-eth-balance","account":"smart","step":"safe-code","asset":"USDT","ok":true,"deployed":false}
+{"mutation":"s2-eth-balance","account":"smart","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793831078883-8702ba-smart-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"s2-eth-balance","account":"smart","step":"user","asset":"USDT","ok":true,"status":200}
+{"mutation":"s2-eth-balance","account":"smart","step":"paymentInfos","asset":"USDT","ok":true,"id":34210,"depositAddress":"0x8263F557060e5EBC8Ce8Ea5235ddE7f2faCf27B1","currency":"EUR"}
+{"mutation":"s2-eth-balance","account":"smart","step":"balances-before","asset":"USDT","ok":true,"usdt":"1000000","eth":"500000000000000","nonce":"0","deposit":"0"}
+{"mutation":"s2-eth-balance","account":"smart","step":"send","asset":"USDT","ok":true,"hash":"0x4d1e1641dd7084612067c6f6ab7550410f0b25869d0b55120c58e73f43195a83"}
+{"mutation":"s2-eth-balance","account":"smart","step":"deposit-block-balances","asset":"USDT","ok":true,"previous":"0","current":"1000000"}
+{"mutation":"s2-eth-balance","account":"smart","step":"receipt","asset":"USDT","ok":true,"hash":"0x72e474891fb3a42b61db4a366676d6e2f08f6b7d63d3603d7708659a6b9d47bb","status":1,"block":"12065376","gasUsed":"1622536","effectiveGasPrice":"1119"}
+{"mutation":"s2-eth-balance","account":"smart","step":"balances-after","asset":"USDT","ok":false,"blockBefore":12065375,"blockAfter":12065376,"safeEthBefore":"500000000000000","safeEthAfter":"499997885503934","entryPointBefore":"0","entryPointAfter":"235757419","actualGasCost":"1878738647","ethAmount":"0","safeUsdtBefore":"1000000","safeUsdtAfter":"0"}
+{"mutation":"s2-eth-balance","account":"smart","step":"balances-after","asset":"USDT","ok":false,"error":"Safe ETH and EntryPoint balances do not match the amount and actual gas cost"}
+{"mutation":"s2-eth-balance","stderr":"real-sell failed: Safe ETH and EntryPoint balances do not match the amount and actual gas cost"}
+{"mutation":"s3-deposit-credit","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"s3-deposit-credit","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"s3-deposit-credit","account":"smart","step":"safe-preflight","asset":null,"ok":true,"address":"0x00750004965885f09759615DD2D304A4Ce4a46A8","index":1621450303,"deployed":false}
+{"mutation":"s3-deposit-credit","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1952000000","eth":"17713732774222692","usdtNeed":"1000000","ethNeed":"2500000000000000"}
+{"mutation":"s3-deposit-credit","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793831150908-2e56b8","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"s3-deposit-credit","account":"smart","step":"funding-send","asset":"USDT","ok":true,"hash":"0x9c5693ae2f5f3a02b771ef1c5506088e77c1a23bdd090240ea4c08f594355516"}
+{"mutation":"s3-deposit-credit","account":"smart","step":"funding-receipt","asset":"USDT","ok":true,"hash":"0x9c5693ae2f5f3a02b771ef1c5506088e77c1a23bdd090240ea4c08f594355516","status":1}
+{"mutation":"s3-deposit-credit","account":"smart","step":"funding-send","asset":"ETH","ok":true,"hash":"0xb46f1969b6e6477781dd472b5f78570a8b2b6378946174c81c0f2d4fa1ef948c"}
+{"mutation":"s3-deposit-credit","account":"smart","step":"funding-receipt","asset":"ETH","ok":true,"hash":"0xb46f1969b6e6477781dd472b5f78570a8b2b6378946174c81c0f2d4fa1ef948c","status":1}
+{"mutation":"s3-deposit-credit","account":"smart","step":"funding-balances","asset":null,"ok":true,"usdt":"1000000","eth":"500000000000000","deployed":false}
+{"mutation":"s3-deposit-credit","account":"smart","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"s3-deposit-credit","account":"smart","step":"safe-code","asset":"USDT","ok":true,"deployed":false}
+{"mutation":"s3-deposit-credit","account":"smart","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793831150908-2e56b8-smart-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"s3-deposit-credit","account":"smart","step":"user","asset":"USDT","ok":true,"status":200}
+{"mutation":"s3-deposit-credit","account":"smart","step":"paymentInfos","asset":"USDT","ok":true,"id":34212,"depositAddress":"0x4afbBC733F25C0eC4Bc9E099093F23BC9fFF48D6","currency":"EUR"}
+{"mutation":"s3-deposit-credit","account":"smart","step":"balances-before","asset":"USDT","ok":true,"usdt":"1000000","eth":"500000000000000","nonce":"0","deposit":"0"}
+{"mutation":"s3-deposit-credit","account":"smart","step":"send","asset":"USDT","ok":true,"hash":"0xac2abc7a8b6b32139960274a0cb970beefb1922ee62d6077f33180557702b7ab"}
+{"mutation":"s3-deposit-credit","account":"smart","step":"receipt","asset":"USDT","ok":false,"error":"Deposit balance did not increase by the exact amount in the receipt block"}
+{"mutation":"s3-deposit-credit","stderr":"real-sell failed: Deposit balance did not increase by the exact amount in the receipt block"}
+{"mutation":"s4-undeployed-signin","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"s4-undeployed-signin","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"s4-undeployed-signin","account":"smart","step":"safe-preflight","asset":null,"ok":true,"address":"0xCda4a0727f170B052C197bD137CDE87720620c64","index":1911019952,"deployed":false}
+{"mutation":"s4-undeployed-signin","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1951000000","eth":"17213732422217294","usdtNeed":"1000000","ethNeed":"2500000000000000"}
+{"mutation":"s4-undeployed-signin","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793831186865-0056bf","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"s4-undeployed-signin","account":"smart","step":"funding-send","asset":"USDT","ok":true,"hash":"0x7a1b57fa7433af90897ee1e1801d66c8089f5a406bb83788713211a6f8a008dd"}
+{"mutation":"s4-undeployed-signin","account":"smart","step":"funding-receipt","asset":"USDT","ok":true,"hash":"0x7a1b57fa7433af90897ee1e1801d66c8089f5a406bb83788713211a6f8a008dd","status":1}
+{"mutation":"s4-undeployed-signin","account":"smart","step":"funding-send","asset":"ETH","ok":true,"hash":"0xb7ee6c8074500c0f86ed1c56cd7fff83e9ffcf9f5a81a13db03777532d02c193"}
+{"mutation":"s4-undeployed-signin","account":"smart","step":"funding-receipt","asset":"ETH","ok":true,"hash":"0xb7ee6c8074500c0f86ed1c56cd7fff83e9ffcf9f5a81a13db03777532d02c193","status":1}
+{"mutation":"s4-undeployed-signin","account":"smart","step":"funding-balances","asset":null,"ok":true,"usdt":"1000000","eth":"500000000000000","deployed":false}
+{"mutation":"s4-undeployed-signin","account":"smart","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"s4-undeployed-signin","account":"smart","step":"safe-code","asset":"USDT","ok":true,"deployed":false}
+{"mutation":"s4-undeployed-signin","account":"smart","step":"sellUrl","asset":"USDT","ok":false,"error":"First Safe sell must authenticate before deployment"}
+{"mutation":"s4-undeployed-signin","stderr":"real-sell failed: First Safe sell must authenticate before deployment"}
+{"mutation":"s5-session-safe","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"s5-session-safe","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"s5-session-safe","account":"smart","step":"safe-preflight","asset":null,"ok":true,"address":"0xc3248BAa7C3d610CC6697D9BDdd7F8769DB1D955","index":1588890504,"deployed":false}
+{"mutation":"s5-session-safe","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1950000000","eth":"16713732070187440","usdtNeed":"1000000","ethNeed":"2500000000000000"}
+{"mutation":"s5-session-safe","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793831212028-85e609","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"s5-session-safe","account":"smart","step":"funding-send","asset":"USDT","ok":true,"hash":"0xe4b1abe11db8eb0668879d8e74b8c17192b756741b9c99e2613166c65ba88832"}
+{"mutation":"s5-session-safe","account":"smart","step":"funding-receipt","asset":"USDT","ok":true,"hash":"0xe4b1abe11db8eb0668879d8e74b8c17192b756741b9c99e2613166c65ba88832","status":1}
+{"mutation":"s5-session-safe","account":"smart","step":"funding-send","asset":"ETH","ok":true,"hash":"0x47eb85cab44bd92e6f7dbbe70b2b0b0c02505c48ca3d34bd4b028dec3fda216e"}
+{"mutation":"s5-session-safe","account":"smart","step":"funding-receipt","asset":"ETH","ok":true,"hash":"0x47eb85cab44bd92e6f7dbbe70b2b0b0c02505c48ca3d34bd4b028dec3fda216e","status":1}
+{"mutation":"s5-session-safe","account":"smart","step":"funding-balances","asset":null,"ok":true,"usdt":"1000000","eth":"500000000000000","deployed":false}
+{"mutation":"s5-session-safe","account":"smart","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"s5-session-safe","account":"smart","step":"safe-code","asset":"USDT","ok":true,"deployed":false}
+{"mutation":"s5-session-safe","account":"smart","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793831212028-85e609-smart-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"s5-session-safe","account":"smart","step":"user","asset":"USDT","ok":false,"error":"Session user does not contain the Safe address or did not return HTTP 200"}
+{"mutation":"s5-session-safe","stderr":"real-sell failed: Session user does not contain the Safe address or did not return HTTP 200"}
+{"mutation":"s6-safe-usdt","account":null,"step":"chain","asset":null,"ok":true,"chainId":11155111}
+{"mutation":"s6-safe-usdt","account":null,"step":"version","asset":null,"ok":true,"commit":"a1e5e7c998cf4649e205bb06086dffb09ee1f119","startedAt":"2026-11-04T19:33:47.841Z"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"safe-preflight","asset":null,"ok":true,"address":"0xe33840737Faab5395e0538780C8d74Ac3A5828fF","index":201248160,"deployed":false}
+{"mutation":"s6-safe-usdt","account":"eoa","step":"balance","asset":null,"ok":true,"usdt":"1949000000","eth":"16213731718157586","usdtNeed":"1000000","ethNeed":"2500000000000000"}
+{"mutation":"s6-safe-usdt","account":"eoa","step":"ready","asset":null,"ok":true,"runId":"1793831237173-8ababf","address":"0x4B33B90cFC38341Db2b9EC5cF3B737508801c617","send":true}
+{"mutation":"s6-safe-usdt","account":"smart","step":"funding-send","asset":"USDT","ok":true,"hash":"0x01f7e4b4f4f4b43a8655e1c6fab1a2f7e28b23bf188d209905564111b2f5e3a9"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"funding-receipt","asset":"USDT","ok":true,"hash":"0x01f7e4b4f4f4b43a8655e1c6fab1a2f7e28b23bf188d209905564111b2f5e3a9","status":1}
+{"mutation":"s6-safe-usdt","account":"smart","step":"funding-send","asset":"ETH","ok":true,"hash":"0x9e0c188ebfa96821d2c9861f6bd3368f9ec4df62ac1667bd7708a00b3afd6f87"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"funding-receipt","asset":"ETH","ok":true,"hash":"0x9e0c188ebfa96821d2c9861f6bd3368f9ec4df62ac1667bd7708a00b3afd6f87","status":1}
+{"mutation":"s6-safe-usdt","account":"smart","step":"funding-balances","asset":null,"ok":true,"usdt":"1000000","eth":"500000000000000","deployed":false}
+{"mutation":"s6-safe-usdt","account":"smart","step":"quoteSell","asset":"USDT","ok":true,"cryptoAmount":"1000000","fiatAmount":"87","fee":"2","rate":"0.87"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"safe-code","asset":"USDT","ok":true,"deployed":false}
+{"mutation":"s6-safe-usdt","account":"smart","step":"sellUrl","asset":"USDT","ok":true,"externalTransactionId":"wdk-real-sell-1793831237173-8ababf-smart-USDT","origin":"https://dev.app.dfx.swiss","path":"/sell","params":["session","lang","asset-in","asset-out","blockchain","amount-in","external-transaction-id"]}
+{"mutation":"s6-safe-usdt","account":"smart","step":"user","asset":"USDT","ok":true,"status":200}
+{"mutation":"s6-safe-usdt","account":"smart","step":"paymentInfos","asset":"USDT","ok":true,"id":34214,"depositAddress":"0xBE75FE9E756BB2B9773f1B6DBd873C382284CcCB","currency":"EUR"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"balances-before","asset":"USDT","ok":true,"usdt":"1000000","eth":"500000000000000","nonce":"0","deposit":"0"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"send","asset":"USDT","ok":true,"hash":"0x314ed7cfc3a58da258461f91fd677139973d40e2f007a0f63533534f165be184"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"deposit-block-balances","asset":"USDT","ok":true,"previous":"0","current":"1000000"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"receipt","asset":"USDT","ok":true,"hash":"0xa23e899678a71d022eafc178b57130d8f7c3ee1a6e48b1a92a3bff8ac3e990ee","status":1,"block":"12065386","gasUsed":"1622536","effectiveGasPrice":"1118"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"balances-after","asset":"USDT","ok":false,"blockBefore":12065385,"blockAfter":12065386,"safeEthBefore":"500000000000000","safeEthAfter":"499997887232876","entryPointBefore":"0","entryPointAfter":"235569690","actualGasCost":"1877197434","ethAmount":"0","safeUsdtBefore":"1000000","safeUsdtAfter":"0"}
+{"mutation":"s6-safe-usdt","account":"smart","step":"balances-after","asset":"USDT","ok":false,"error":"Safe USDT balance did not decrease by the amount in the receipt block"}
+{"mutation":"s6-safe-usdt","stderr":"real-sell failed: Safe USDT balance did not decrease by the amount in the receipt block"}

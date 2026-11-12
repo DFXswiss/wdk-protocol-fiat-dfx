@@ -1,0 +1,78 @@
+appId: io.tether.wdk.starter.reactnative
+---
+# Seed is already on the simulator clipboard. This flow never contains it
+# and takes no screenshot before the wallet tab is shown.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- tapOn: "Import Existing Wallet"
+- tapOn:
+    id: "import-seed"
+- longPressOn:
+    id: "import-seed"
+- tapOn: "Paste"
+# Enter dismisses the keyboard that was covering import-submit. A tap
+# through that keyboard typed into field 1.
+- waitForAnimationToEnd
+- pressKey: Enter
+- waitForAnimationToEnd
+- tapOn:
+    id: "import-submit"
+- extendedWaitUntil:
+    visible:
+      id: "password-input"
+    timeout: 60000
+- tapOn:
+    id: "password-input"
+- inputText: "starter-wallet"
+- tapOn:
+    id: "password-confirm"
+- inputText: "starter-wallet"
+- pressKey: Enter
+- waitForAnimationToEnd
+- tapOn:
+    id: "password-submit"
+- tapOn: "(?i)I prefer to backup manually"
+- extendedWaitUntil:
+    visible:
+      id: "sell-entry"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Couldn't load"
+    timeout: 60000
+- tapOn:
+    id: "sell-entry"
+# sell() already puts 1 USDT on the widget URL. The page opens on the
+# bank step. Do not tap a saved account in the list that opens next.
+- extendedWaitUntil:
+    visible: "Add or select your IBAN"
+    timeout: 90000
+- waitForAnimationToEnd
+# the widget is open inside the wallet and no bank account is shown yet; the payment-information step prints the payout IBAN next to the deposit address, so that step is not captured.
+- takeScreenshot: sell-widget-open
+- tapOn: "Add or select your IBAN"
+- scrollUntilVisible:
+    element: "XX XXXX XXXX XXXX XXXX X"
+    direction: DOWN
+- tapOn: "XX XXXX XXXX XXXX XXXX X"
+- inputText: ${IBAN}
+# Enter submits the bank form. There is no separate ADD BANK ACCOUNT tap.
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Payment Information"
+    timeout: 120000
+- scrollUntilVisible:
+    element: "Blockchain"
+    direction: DOWN
+    centerElement: true
+# The full deposit address is not in the hierarchy. The copy icon sits
+# to the right of the shortened address and copies the full address.
+- waitForAnimationToEnd
+- tapOn:
+    rightOf: "0x[a-fA-F0-9]{9}\\.\\.\\.[a-fA-F0-9]{10}"
+    width: 21
+    height: 21
+    tolerance: 6
+- waitForAnimationToEnd
+- tapOn:
+    id: "sell-done"
