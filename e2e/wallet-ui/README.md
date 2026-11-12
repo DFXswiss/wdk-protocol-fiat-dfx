@@ -80,8 +80,11 @@ Tapping Paste while the clipboard is empty crashes the app. That crash is upstre
 
 ## Recorded runs
 
-The table is filled after a run at the final head.
+Commits after the module head named in a row only add records: this table, `TESTING.md` and `e2e/evidence/`.
 
 | Date | Module head | Starter | Hash | Block | Backend | Result |
 | --- | --- | --- | --- | --- | --- | --- |
-| | | | | | | |
+| 2026-11-12 | `97f9e71` | `031e210` | [`0xee18075a60…`](https://eth-sepolia.blockscout.com/tx/0xee18075a60e268b19551da59cc800592ba2c1cb01e69dfe75bef1ab7131b6912) | 12119546 | `b71f7eb`, id 10047, `PayoutInProgress` | pass, exit 0 |
+| 2026-11-12 | `2feecb3` | `031e210` | [`0x60036918ad…`](https://eth-sepolia.blockscout.com/tx/0x60036918ad68fffb1cfa69044650ae54e1f97d62c3b8d938ff3099fadb00e7a9) | 12120895 | `7ae9b19`, id 10063, `PayoutInProgress` | pass, exit 0 |
+
+The records are in [../evidence/2026-11-12-wallet-ui-sale.jsonl](../evidence/2026-11-12-wallet-ui-sale.jsonl). On the same day each of fifteen checks in `run-sale.mjs` was changed once to a plausible wrong version and the run repeated: 15/15 runs exited 1 at the changed check (12 at `2feecb3`; 3 at `bb00b51`; 13 of them sent 1 USDT first), see [../evidence/2026-11-12-wallet-ui-sale-mutations.jsonl](../evidence/2026-11-12-wallet-ui-sale-mutations.jsonl). Two further runs ended red for other reasons, see [../evidence/2026-11-12-wallet-ui-sale-red.jsonl](../evidence/2026-11-12-wallet-ui-sale-red.jsonl).

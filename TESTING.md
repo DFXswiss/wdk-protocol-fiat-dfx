@@ -40,7 +40,7 @@ Proves the WDK starter wallet, patched as listed in `e2e/wallet-ui/README.md` an
 
 Does NOT prove a rejected confirmation, a smart account, a purchase, the bank payout, a physical device, an unpatched or released wallet, or stability of the sandbox (a booking can stay in `Processing`; the run is then red).
 
-Recorded: see the table in e2e/wallet-ui/README.md.
+Recorded: 2026-11-12, exit 0 at `97f9e71` and at `2feecb3`; 15/15 mutations of its checks detected. See the table in e2e/wallet-ui/README.md.
 
 ## How to run
 
@@ -76,6 +76,9 @@ Sell and buy commands, flags and exit codes are in [e2e/README.md](e2e/README.md
 | 2026-11-06 | `real-sell.mjs` | Sepolia sandbox | two IBAN-path mutations without `--send`; each exit 1; nothing sent | [e2e/evidence/2026-11-06-sandbox-real-sell-iban.jsonl](e2e/evidence/2026-11-06-sandbox-real-sell-iban.jsonl) |
 | 2026-11-07 | `real-sell.mjs` and `real-buy.mjs` | Sepolia sandbox for the three `real-sell.mjs` mutations; the `real-buy.mjs` mutation used the Sepolia test seed | three mutations of `real-sell.mjs` run against the Sepolia sandbox (one sent 1 USDT and exited 1 at the booking page, one exited 3 before anything was sent, and one exited 3 because the tree was dirty, where exit 2 was expected); one clean-tree mutation of `real-buy.mjs` that exited 3 after the quote and created no purchase URL; two IBAN-mask mutations that exited 1 without sending | [e2e/evidence/2026-11-07-sandbox-real-sell-v2.jsonl](e2e/evidence/2026-11-07-sandbox-real-sell-v2.jsonl) |
 | 2026-11-09 | `real-sell.mjs` | Sepolia sandbox | six runs ended red; two of them were on 2026-11-07 | [e2e/evidence/2026-11-09-sandbox-real-sell-pimlico.jsonl](e2e/evidence/2026-11-09-sandbox-real-sell-pimlico.jsonl) |
+| 2026-11-12 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | exit 0 twice (module heads `97f9e71` and `2feecb3`); each sale of 1 USDT confirmed by one tap in the starter wallet, receipt status 1, found by the sandbox itself and booked to `PayoutInProgress` | [e2e/evidence/2026-11-12-wallet-ui-sale.jsonl](e2e/evidence/2026-11-12-wallet-ui-sale.jsonl) |
+| 2026-11-12 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | 15/15 mutations detected: each run exited 1 at the changed check | [e2e/evidence/2026-11-12-wallet-ui-sale-mutations.jsonl](e2e/evidence/2026-11-12-wallet-ui-sale-mutations.jsonl) |
+| 2026-11-12 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | two runs ended red: a scroll timeout before anything was sent, and HTTP 502 from the sandbox during the wait for the booking | [e2e/evidence/2026-11-12-wallet-ui-sale-red.jsonl](e2e/evidence/2026-11-12-wallet-ui-sale-red.jsonl) |
 
 ## Not covered
 
