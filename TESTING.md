@@ -34,6 +34,14 @@ Proves, for a passing sell, that a deposit from this script was recognized by th
 
 Does NOT prove that a wallet user interface confirmed the transaction. WDK has no confirmation dialog, so a rejected wallet prompt is not covered. No purchase with `real-buy.mjs` is recorded.
 
+**Real sale confirmed in a wallet user interface.** Command: `cd e2e && node wallet-ui/run-sale.mjs …` (see [e2e/wallet-ui/README.md](e2e/wallet-ui/README.md) for the build and flags).
+
+Proves the WDK starter wallet, patched as listed in `e2e/wallet-ui/README.md` and running in the iOS simulator, opens the DFX sell page through this module, sends 1 USDT on Sepolia to the deposit address after one tap on its confirm button, and the sandbox finds that hash by itself and books the sale to `PayoutInProgress` or `Completed`; the receipt, Transfer log, three balance comparisons, the sandbox record and the module's `getTransactionDetail` are checked.
+
+Does NOT prove a rejected confirmation, a smart account, a purchase, the bank payout, a physical device, an unpatched or released wallet, or stability of the sandbox (a booking can stay in `Processing`; the run is then red).
+
+Recorded: see the table in e2e/wallet-ui/README.md.
+
 ## How to run
 
 ```sh

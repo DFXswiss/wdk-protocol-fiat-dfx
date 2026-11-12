@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { stripVTControlCharacters } from 'node:util'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
 import WDK from '@tetherto/wdk'
 import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
@@ -50,9 +51,10 @@ const RECORD_FIELDS = [
 class UsageError extends Error {}
 class NotRunError extends Error {}
 class CheckError extends Error {
-  constructor (failedCheck, message) {
+  constructor (failedCheck, message, failedStep) {
     super(message)
     this.failedCheck = failedCheck
+    this.failedStep = failedStep
   }
 }
 
@@ -73,6 +75,7 @@ const state = {
   fiat: null,
   session: '',
   saleIban: '',
+  failedStep: undefined,
   screenshots: [],
   evidence: {},
   secrets: [],
@@ -545,6 +548,12 @@ function confirmationCount (stdout) {
   return stdout.split(/\r?\n/).filter(line => /send-confirm/.test(line) && /COMPLETED/.test(line) && /Tap on/i.test(line)).length
 }
 
+function failedStep (stdout) {
+  const line = stripVTControlCharacters(stdout).split(/\r?\n/).find(line => /FAILED\s*$/.test(line))
+  if (!line) return 'no failed step line in the Maestro output'
+  return redact(line.trim().replace(/CH(?:[\s\u00a0]*\d){19}/g, 'CH[REDACTED]')).slice(0, 200)
+}
+
 function copyShots (fromDir, toDir) {
   const copied = []
   const visit = dir => {
@@ -578,11 +587,13 @@ async function runFlow (file, env) {
   args.push('--debug-output', debugDir, '--test-output-dir', outDir, file)
   try {
     const result = await runCapture('maestro', args, 'ignore')
+    if (result.code !== 0) state.failedStep = failedStep(result.stdout)
     let copied = []
     try {
       copied = copyShots(outDir, state.options.screenshots)
     } catch {
-      throw new CheckError('screenshots', `screenshot copy failed${state.evidence.depositAddress ? '' : '; nothing sent'}`)
+      const step = state.evidence.depositAddress && confirmationCount(result.stdout) === 1 ? undefined : state.failedStep
+      throw new CheckError('screenshots', `screenshot copy failed${state.evidence.depositAddress ? '' : '; nothing sent'}`, step)
     }
     state.screenshots.push(...copied)
     return { code: result.code, stdout: result.stdout }
@@ -1161,7 +1172,7 @@ async function sendAndCheck (prelude) {
   const flow1 = await runFlow(join(flowDir, 'sell-1-widget.yaml'), { IBAN: iban })
   const flow1Code = flow1.code
   flow1.stdout = ''
-  if (flow1Code !== 0) throw new CheckError('flow-1', 'nothing sent')
+  if (flow1Code !== 0) throw new CheckError('flow-1', 'nothing sent', state.failedStep)
   const pasted = await runCapture('xcrun', ['simctl', 'pbpaste', state.udid], 'ignore')
   if (pasted.code !== 0) throw new CheckError('clipboard', 'nothing sent')
   const depositRaw = oneLine(pasted.stdout)
@@ -1182,8 +1193,8 @@ async function sendAndCheck (prelude) {
   flow2.stdout = ''
   state.evidence.walletConfirmations = confirmations
   if (confirmations !== 1) {
-    if (confirmations === 0 && flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed before send-confirm')
-    throw new CheckError('wallet-confirmations', `completed send-confirm taps: ${confirmations}`)
+    if (confirmations === 0 && flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed before send-confirm', state.failedStep)
+    throw new CheckError('wallet-confirmations', `completed send-confirm taps: ${confirmations}`, state.failedStep)
   }
   const hash = await readSuccessHash()
   state.evidence.hash = hash
@@ -1248,6 +1259,7 @@ function measuredRecord () {
       if (state.screenshots.length || evidence.screenshots) body.screenshots = evidence.screenshots || state.screenshots
     } else if (evidence[key] !== undefined) body[key] = evidence[key]
   }
+  if (state.failedStep !== undefined) body.failedStep = state.failedStep
   return body
 }
 
@@ -1380,7 +1392,7 @@ try {
   const name = error instanceof CheckError ? `${error.failedCheck}: ` : ''
   if (error instanceof UsageError || error instanceof NotRunError) console.error(`wallet-ui: ${message}`)
   else if (error instanceof CheckError && error.failedCheck === 'clipboard' && state.evidence.clipboardCleared === false) console.error(`wallet-ui failed: ${message}`)
-  else console.error(`wallet-ui failed: ${name}${message}`)
+  else console.error(`wallet-ui failed: ${name}${message}${error?.failedStep ? `; step: ${error.failedStep}` : ''}`)
   if (error instanceof UsageError) process.exitCode = 2
   else if (error instanceof NotRunError) process.exitCode = 3
   else process.exitCode = 1
