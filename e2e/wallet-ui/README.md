@@ -72,6 +72,8 @@ The seed file is given to the simulator clipboard through a file descriptor. The
 
 The flows are `flow/sell-1-widget.yaml`, `flow/sell-2-send.yaml`, and `flow/cleanup.yaml`.
 
+The flows are inputs of `run-sale.mjs` and are not meant to be started on their own. A flow started directly with Maestro can send without the runner's switches, lock, checks, cleanup and record; such a run proves nothing and is not recorded.
+
 Only one Maestro run can use the machine. Two runs share one driver port.
 
 The app aborts at launch on the iOS 27.0 runtime. Use the iOS 26.5 runtime.

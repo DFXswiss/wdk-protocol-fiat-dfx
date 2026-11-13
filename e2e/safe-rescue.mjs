@@ -295,6 +295,8 @@ async function main () {
     const transferData = options.native ? '0x' : erc20Interface.encodeFunctionData('transfer', [options.to, balance])
     const safeTransactionTarget = options.native ? options.to : options.token
     const safeTransactionValue = options.native ? balance : 0n
+    // Safe accepts this pre-approved signature without approveHash when the caller is the owner;
+    // execTransaction is sent by the owner account.
     const signature = `0x${owner.slice(2).padStart(64, '0')}${'00'.repeat(32)}01`
     const execData = safeInterface.encodeFunctionData('execTransaction', [
       safeTransactionTarget, safeTransactionValue, transferData, 0, 0n, 0n, 0n, ZeroAddress, ZeroAddress, signature
