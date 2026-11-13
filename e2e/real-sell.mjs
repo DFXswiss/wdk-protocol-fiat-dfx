@@ -1563,10 +1563,10 @@ try {
   await main()
 } catch (error) {
   const message = redact(error?.message ?? error)
+  const code = error instanceof UsageError ? 2 : error instanceof NotRunError ? 3 : 1
+  try { emit({ step: 'error', ok: false, error: message, exitCode: code }) } catch { process.stdout.write(JSON.stringify({ step: 'error', error: 'Output failed', exitCode: code }) + '\n') }
   console.error(`real-sell failed: ${message}`)
-  if (error instanceof UsageError) process.exitCode = 2
-  else if (error instanceof NotRunError) process.exitCode = 3
-  else process.exitCode = 1
+  process.exitCode = code
 } finally {
   if (state.browser) await state.browser.close().catch(() => {})
   state.provider?.destroy()
