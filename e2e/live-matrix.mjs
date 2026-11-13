@@ -3,8 +3,11 @@
 
 // Live matrix against the DFX sandbox by default. It sends no on-chain transaction.
 // POST /v1/auth creates DFX users; production requires DFX_ENV=production.
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { closeSync, constants, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import WDK from '@tetherto/wdk'
 import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
 import WalletManagerEvmErc4337 from '@tetherto/wdk-wallet-evm-erc-4337'
@@ -16,6 +19,51 @@ import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
 
 const ENV = process.env.DFX_ENV === 'production' ? 'production' : 'sandbox'
 const API = ENV === 'production' ? 'https://api.dfx.swiss' : 'https://dev.api.dfx.swiss'
+const repoRoot = fileURLToPath(new URL('..', import.meta.url))
+
+function assertModuleCopy () {
+  const mismatch = () => new Error('installed module differs from the working tree; run npm ci in e2e')
+  const installed = resolve(repoRoot, 'e2e/node_modules/@dfx.swiss/wdk-protocol-fiat-dfx')
+  try {
+    const collect = base => {
+      const files = []
+      const visit = relative => {
+        const path = resolve(base, relative)
+        let current = resolve('/')
+        for (const part of path.split('/').filter(Boolean)) {
+          current = resolve(current, part)
+          if (lstatSync(current).isSymbolicLink()) throw mismatch()
+        }
+        const stat = lstatSync(path)
+        if (stat.isDirectory()) {
+          for (const name of readdirSync(path)) visit(`${relative}/${name}`)
+        } else if (stat.isFile()) files.push(relative)
+        else throw mismatch()
+      }
+      for (const name of ['package.json', 'index.js', 'bare.js']) {
+        if (!lstatSync(resolve(base, name)).isFile()) throw mismatch()
+        visit(name)
+      }
+      for (const name of ['src', 'types']) {
+        if (!lstatSync(resolve(base, name)).isDirectory()) throw mismatch()
+        visit(name)
+      }
+      return files.sort()
+    }
+    const source = collect(repoRoot)
+    const copy = collect(installed)
+    if (source.length !== copy.length || source.some((file, i) => file !== copy[i])) throw mismatch()
+    const digest = path => {
+      const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+      try { return createHash('sha256').update(readFileSync(fd)).digest('hex') } finally { closeSync(fd) }
+    }
+    for (const file of source) {
+      if (digest(resolve(repoRoot, file)) !== digest(resolve(installed, file))) throw mismatch()
+    }
+  } catch {
+    throw mismatch()
+  }
+}
 const OUT = new URL('./out/', import.meta.url)
 const masked = value => String(value).split(seed).join('[REDACTED]')
   .replace(/([?&]session=)[^&\s"<>]+/g, '$1[REDACTED]')
@@ -76,6 +124,7 @@ if (process.argv.length > 3 || (only !== undefined && !CASES.some(c => c.chain =
   console.error(`Usage: node live-matrix.mjs [${CASES.map(c => c.chain).join('|')}]`)
   process.exit(2)
 }
+assertModuleCopy()
 const require = createRequire(import.meta.url)
 const dfxWalletPath = createRequire(require.resolve('@dfx.swiss/wdk-protocol-fiat-dfx')).resolve('@tetherto/wdk-wallet')
 const wdkWalletPath = createRequire(require.resolve('@tetherto/wdk')).resolve('@tetherto/wdk-wallet')

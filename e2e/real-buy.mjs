@@ -258,8 +258,13 @@ function assertRecordPath (path, seedFile, otherPaths) {
 }
 
 async function writeRecord (path, record) {
-  const text = redact(JSON.stringify(record, null, 2))
-  JSON.parse(text)
+  const origin = new URL(record.widgetOrigin)
+  if (origin.origin !== record.widgetOrigin || origin.username || origin.password || origin.origin !== 'https://app.dfx.swiss') {
+    throw new Error('Invalid widget origin')
+  }
+  const redacted = JSON.parse(redact(JSON.stringify({ ...record, widgetOrigin: null }, null, 2)))
+  redacted.widgetOrigin = origin.origin
+  const text = JSON.stringify(redacted, null, 2)
   const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
   try {
     const stat = await file.stat()
