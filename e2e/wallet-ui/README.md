@@ -68,7 +68,7 @@ node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid> \
   --send --confirm --follow <minutes> --screenshots <dir> --record <file>
 ```
 
-`--follow` is 1 to 240 minutes. `--screenshots` must be a directory owned by the current user with mode `0700`, and it must not already contain `sell-widget-open.png`, `send-review.png`, or `send-success.png`. `--record` must not exist yet and must not be the seed file. `--rpc` defaults to `https://ethereum-sepolia-rpc.publicnode.com`.
+`--follow` is 1 to 240 minutes. `--screenshots` must be a directory owned by the current user with mode `0700`, and it must not already contain `sell-widget-open.png`, `send-review.png`, or `send-success.png`. `--record` must not exist yet, must not be the seed file, and must not be inside the `--screenshots` directory. `--rpc` defaults to `https://ethereum-sepolia-rpc.publicnode.com`.
 
 A send takes a fixed lock directory in the system temporary directory before checking for another Maestro process and normally holds it through cleanup. A second signal during cleanup attempts to release it before exiting. A lock left after a crash must be deleted by hand. Preflight without a send takes no lock.
 

@@ -314,16 +314,19 @@ function prepareScreenshots (dir) {
   }
 }
 
-function assertRecordPath (path, seedFile) {
+function assertRecordPath (path, seedFile, screenshots) {
   let recordPath
   let seedPath
+  let screenshotsPath
   try {
     recordPath = resolve(realpathSync(dirname(resolve(path))), basename(path))
     seedPath = resolve(realpathSync(dirname(resolve(seedFile))), basename(seedFile))
+    screenshotsPath = realpathSync(resolve(screenshots))
   } catch (error) {
-    throw new UsageError(`--record or --seed-file parent cannot be resolved (${error.code || 'failed'})`)
+    throw new UsageError(`--record or --seed-file parent or --screenshots cannot be resolved (${error.code || 'failed'})`)
   }
   if (recordPath === seedPath) throw new UsageError('--record must not name the seed file')
+  if (dirname(recordPath) === screenshotsPath) throw new UsageError('--record must not be inside --screenshots')
   try {
     lstatSync(path)
     throw new UsageError('--record must name a file that does not exist yet')
@@ -1563,7 +1566,7 @@ async function main () {
   if (options.screenshots) prepareScreenshots(options.screenshots)
   if (options.handbookShots) prepareScreenshots(options.handbookShots)
   if (options.send) {
-    assertRecordPath(options.record, options.seedFile)
+    assertRecordPath(options.record, options.seedFile, options.screenshots)
     for (const name of FLOW_SHOTS) {
       try {
         lstatSync(join(options.screenshots, name))
