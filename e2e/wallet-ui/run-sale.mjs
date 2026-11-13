@@ -9,7 +9,7 @@ import { createHash, randomInt } from 'node:crypto'
 import { closeSync, constants, copyFileSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, rmdirSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { stripVTControlCharacters } from 'node:util'
@@ -326,7 +326,8 @@ function assertRecordPath (path, seedFile, screenshots) {
     throw new UsageError(`--record or --seed-file parent or --screenshots cannot be resolved (${error.code || 'failed'})`)
   }
   if (recordPath === seedPath) throw new UsageError('--record must not name the seed file')
-  if (dirname(recordPath) === screenshotsPath) throw new UsageError('--record must not be inside --screenshots')
+  const rel = relative(screenshotsPath, recordPath)
+  if (rel !== '' && !isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + sep)) throw new UsageError('--record must not be inside --screenshots')
   try {
     lstatSync(path)
     throw new UsageError('--record must name a file that does not exist yet')
