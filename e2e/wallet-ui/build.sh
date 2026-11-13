@@ -12,11 +12,16 @@ STARTER_WORKSPACE="${STARTER_WORKSPACE:-}"
 STARTER_SCHEME="${STARTER_SCHEME:-}"
 BUNDLE_ID="io.tether.wdk.starter.reactnative"
 
-if [[ $# -ne 1 || -z "${1}" ]]; then
-  echo "usage: build.sh <simulator-udid>" >&2
+if [[ ( $# -ne 1 && $# -ne 3 ) || -z "${1:-}" || ( $# -eq 3 && "${2}" != "--variant" ) ]]; then
+  echo "usage: build.sh <simulator-udid> [--variant before|sale]" >&2
   exit 2
 fi
 UDID="$1"
+variant="${3:-sale}"
+if [[ "$variant" != "before" && "$variant" != "sale" ]]; then
+  echo "unknown variant" >&2
+  exit 2
+fi
 if [[ "$STARTER_COMMIT" != "$PINNED_STARTER_COMMIT" ]]; then
   echo "STARTER_COMMIT must equal the pinned commit" >&2
   exit 2
@@ -39,6 +44,9 @@ module_head="$(git -C "$MODULE" rev-parse HEAD)"
 git clone --quiet https://github.com/tetherto/wdk-starter-react-native.git "$STARTER"
 git -C "$STARTER" checkout --detach "$STARTER_COMMIT"
 git -C "$STARTER" apply --index "$ROOT/starter.patch"
+if [[ "$variant" == "before" ]]; then
+  git -C "$STARTER" apply --index "$ROOT/handbook-before.patch"
+fi
 cp "$STARTER/.env.example" "$STARTER/.env"
 provider=""
 while IFS= read -r line || [[ -n "$line" ]]; do
@@ -140,6 +148,11 @@ if [[ "$starter_head" != "$STARTER_COMMIT" ]]; then
 fi
 patch_sha="$(shasum -a 256 "$ROOT/starter.patch" | awk '{print $1}')"
 bundle_sha="$(shasum -a 256 "$bundle" | awk '{print $1}')"
+before_patch_field=""
+if [[ "$variant" == "before" ]]; then
+  before_patch_sha="$(shasum -a 256 "$ROOT/handbook-before.patch" | awk '{print $1}')"
+  before_patch_field="  \"beforePatchSha256\": \"${before_patch_sha}\","
+fi
 mkdir -p "$ROOT/out"
 rm -f "$ROOT/out/build.json"
 module_status="$(git -C "$MODULE" status --porcelain)"
@@ -156,6 +169,8 @@ cat > "$ROOT/out/build.json" <<EOF
   "moduleHead": "${module_head}",
   "moduleDirty": false,
   "starterCommit": "${starter_head}",
+  "variant": "${variant}",
+${before_patch_field}
   "patchSha256": "${patch_sha}",
   "mainJsbundleSha256": "${bundle_sha}"
 }

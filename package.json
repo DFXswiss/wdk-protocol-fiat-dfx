@@ -23,6 +23,9 @@
     "build:types": "tsc",
     "lint": "standard",
     "lint:fix": "standard --fix",
+    "handbook:build": "node scripts/handbook/build.mjs",
+    "handbook:check": "node scripts/handbook/build.mjs --check",
+    "handbook:redaction": "node scripts/handbook/redaction.mjs",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config jest.coverage.config.js --coverage --runInBand",
     "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config tests/integration/jest.config.js --runInBand"
