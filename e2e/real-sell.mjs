@@ -9,7 +9,7 @@
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { createHash, randomBytes, randomInt } from 'node:crypto'
-import { closeSync, constants, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmdirSync, writeSync } from 'node:fs'
+import { closeSync, constants, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmdirSync, writeFileSync, writeSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -493,6 +493,30 @@ async function readVersion (preflight) {
     throw new Error(message)
   }
   return { commit: body.commit, startedAt: body.startedAt == null ? '' : String(body.startedAt) }
+}
+
+function releaseLocks (onError) {
+  if (state.accountLockDir) {
+    try {
+      rmdirSync(state.accountLockDir)
+      state.accountLockDir = ''
+    } catch (error) { onError(error) }
+  }
+  if (state.lockHeld) {
+    try {
+      rmdirSync(state.lockDir)
+      state.lockHeld = false
+    } catch (error) { onError(error) }
+  }
+}
+
+function installSignalHandlers () {
+  const onSignal = signal => {
+    releaseLocks(() => console.error('real-sell failed: lock release failed'))
+    process.exit(signal === 'SIGINT' ? 130 : 143)
+  }
+  process.once('SIGINT', () => onSignal('SIGINT'))
+  process.once('SIGTERM', () => onSignal('SIGTERM'))
 }
 
 function takeLock (dir, account = false) {
@@ -1025,16 +1049,16 @@ function assertRecordPath (path, seedFile, outPath) {
 async function writeRecord (path, record) {
   const text = redact(JSON.stringify(record, null, 2))
   JSON.parse(text)
-  const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+  const file = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
   try {
-    const stat = await file.stat()
+    const stat = fstatSync(file)
     if (!stat.isFile() || stat.uid !== process.getuid() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) {
       throw new Error('--record is not a private regular file')
     }
-    await file.chmod(0o600)
-    await file.writeFile(`${text}\n`)
+    fchmodSync(file, 0o600)
+    writeFileSync(file, `${text}\n`)
   } finally {
-    await file.close()
+    closeSync(file)
   }
 }
 
@@ -1384,6 +1408,7 @@ async function runCase (spec, tools, evidence) {
 }
 
 async function main () {
+  installSignalHandlers()
   const options = parseArgs(process.argv.slice(2))
   rememberSecret(options.rpc)
   rememberSecret(options.bundler)
@@ -1546,22 +1571,8 @@ try {
   if (state.browser) await state.browser.close().catch(() => {})
   state.provider?.destroy()
   if (state.out) await state.out.close().catch(() => {})
-  if (state.accountLockDir) {
-    try {
-      rmdirSync(state.accountLockDir)
-      state.accountLockDir = ''
-    } catch (error) {
-      console.error(`real-sell failed: ${redact(error.message)}`)
-      if (!process.exitCode) process.exitCode = 1
-    }
-  }
-  if (state.lockHeld) {
-    try {
-      rmdirSync(state.lockDir)
-      state.lockHeld = false
-    } catch (error) {
-      console.error(`real-sell failed: ${redact(error.message)}`)
-      if (!process.exitCode) process.exitCode = 1
-    }
-  }
+  releaseLocks(error => {
+    console.error(`real-sell failed: ${redact(error.message)}`)
+    if (!process.exitCode) process.exitCode = 1
+  })
 }

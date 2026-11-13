@@ -5,7 +5,7 @@
 // Real run without a wallet user interface (hybrid): no wallet user interface confirms the transaction.
 import { execFileSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { closeSync, constants, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmdirSync, writeSync } from 'node:fs'
+import { closeSync, constants, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmdirSync, writeFileSync, writeSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, resolve } from 'node:path'
@@ -217,6 +217,24 @@ async function createPrivate (path) {
   } catch (error) { await file.close(); throw error }
 }
 
+function releaseLocks (onError) {
+  if (state.lockHeld) {
+    try {
+      rmdirSync(state.lockDir)
+      state.lockHeld = false
+    } catch (error) { onError(error) }
+  }
+}
+
+function installSignalHandlers () {
+  const onSignal = signal => {
+    releaseLocks(() => console.error('real-buy failed: lock release failed'))
+    process.exit(signal === 'SIGINT' ? 130 : 143)
+  }
+  process.once('SIGINT', () => onSignal('SIGINT'))
+  process.once('SIGTERM', () => onSignal('SIGTERM'))
+}
+
 function takeLock (dir) {
   try {
     mkdirSync(dir)
@@ -265,16 +283,16 @@ async function writeRecord (path, record) {
   const redacted = JSON.parse(redact(JSON.stringify({ ...record, widgetOrigin: null }, null, 2)))
   redacted.widgetOrigin = origin.origin
   const text = JSON.stringify(redacted, null, 2)
-  const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+  const file = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
   try {
-    const stat = await file.stat()
+    const stat = fstatSync(file)
     if (!stat.isFile() || stat.uid !== process.getuid() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) {
       throw new Error('--record is not a private regular file')
     }
-    await file.chmod(0o600)
-    await file.writeFile(`${text}\n`)
+    fchmodSync(file, 0o600)
+    writeFileSync(file, `${text}\n`)
   } finally {
-    await file.close()
+    closeSync(file)
   }
 }
 
@@ -376,6 +394,7 @@ function matchesRoundedAmount (amount, output) {
 }
 
 async function main () {
+  installSignalHandlers()
   const options = parseArgs(process.argv.slice(2))
   if (options.record) assertRecordPath(options.record, options.seedFile, [options.out, options.urlFile])
   if (options.lock) takeLock(options.lock)
@@ -535,13 +554,8 @@ try { await main() } catch (error) {
   try { state.wdk?.dispose() } catch { process.exitCode ||= 1 }
   state.provider?.destroy()
   if (state.out) await state.out.close().catch(() => { process.exitCode ||= 1 })
-  if (state.lockHeld) {
-    try {
-      rmdirSync(state.lockDir)
-      state.lockHeld = false
-    } catch {
-      console.error('real-buy failed: lock release failed')
-      if (!process.exitCode) process.exitCode = 1
-    }
-  }
+  releaseLocks(() => {
+    console.error('real-buy failed: lock release failed')
+    if (!process.exitCode) process.exitCode = 1
+  })
 }

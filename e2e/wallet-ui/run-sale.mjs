@@ -443,7 +443,7 @@ function foreignMaestro () {
       }
     }
   }
-  return rows.some(row => !own.has(row.pid) && /(^|\/|\s)maestro(\s|$)/.test(row.command))
+  return rows.some(row => !own.has(row.pid) && (/(^|\/|\s)maestro(\s|$)/.test(row.command) || /(^|\s)maestro\.cli\.AppKt(\s|$)/.test(row.command)))
 }
 
 function assertNoForeignMaestro (duringSend) {

@@ -427,6 +427,11 @@ async function main () {
     const safeAssetAfter = options.native ? safeEthAfter : await token.balanceOf(safe)
     const recipientAfter = await readAsset(options.to)
     const entryPointAfter = await entryPoint.balanceOf(safe)
+    const totalEthSpent = (safeEthBefore + entryPointBefore) - (safeEthAfter + entryPointAfter)
+    const expectedEthSpent = (options.native ? amount : 0n) + actualGasCost
+    if (totalEthSpent !== expectedEthSpent) {
+      throw new Error(`Safe and EntryPoint ETH spent ${formatEther(totalEthSpent)}; expected ${formatEther(expectedEthSpent)}`)
+    }
     const expectedRecipient = recipientBefore + amount
     if (recipientAfter !== expectedRecipient) {
       throw new Error(`Recipient balance is ${formatUnits(recipientAfter, decimals)}; expected ${formatUnits(expectedRecipient, decimals)}`)
