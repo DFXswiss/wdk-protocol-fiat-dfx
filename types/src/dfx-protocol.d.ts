@@ -1,6 +1,6 @@
 /** Configuration for DFX API and widget access. */
 export interface DfxProtocolConfig {
-    /** API and app environment. Only sandbox and local select those environments; otherwise production is used. */
+    /** API and app environment. Defaults to production; any value other than production, sandbox or local throws ValueError. */
     environment?: 'production' | 'sandbox' | 'local';
     /** Required in local only: HTTP(S) loopback origin for the API. */
     apiUrl?: string;
@@ -64,6 +64,7 @@ export default class DfxProtocol extends FiatProtocol {
      * @overload
      * @param {undefined} [account] - Omit to access only quotes and supported lists.
      * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+     * @throws {ValueError} If environment is not production, sandbox or local.
      * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
      * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
      * @throws {ValueError} If apiUrl is supplied outside local.
@@ -82,6 +83,7 @@ export default class DfxProtocol extends FiatProtocol {
      * @overload
      * @param {IWalletAccountReadOnly} readOnlyAccount - Read-only account; buy/sell throw AccountRequiredError and getTransactionDetail throws ProviderError.
      * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+     * @throws {ValueError} If environment is not production, sandbox or local.
      * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
      * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
      * @throws {ValueError} If apiUrl is supplied outside local.
@@ -100,6 +102,7 @@ export default class DfxProtocol extends FiatProtocol {
      * @overload
      * @param {IWalletAccount} signingAccount - Account used to sign DFX authentication messages.
      * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+     * @throws {ValueError} If environment is not production, sandbox or local.
      * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
      * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
      * @throws {ValueError} If apiUrl is supplied outside local.

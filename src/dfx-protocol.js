@@ -34,7 +34,7 @@ import { BLOCKCHAINS, ERC6492_NETWORKS, EVM_BLOCKCHAINS, EVM_CHAIN_IDS, FAILED_S
  * Configuration for DFX API and widget access.
  *
  * @typedef {Object} DfxProtocolConfig
- * @property {'production' | 'sandbox' | 'local'} [environment] - API and app environment. Only sandbox and local select those environments; otherwise production is used.
+ * @property {'production' | 'sandbox' | 'local'} [environment] - API and app environment. Defaults to production; any value other than production, sandbox or local throws ValueError.
  * @property {string} [apiUrl] - Required in local only: HTTP(S) loopback origin for the API.
  * @property {string} [appUrl] - Required in local only: HTTP(S) loopback origin for the widget.
  * @property {string} [wallet] - Partner identifier supplied by the integrating wallet developer. No default.
@@ -210,6 +210,7 @@ export default class DfxProtocol extends FiatProtocol {
    * @overload
    * @param {undefined} [account] - Omit to access only quotes and supported lists.
    * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+   * @throws {ValueError} If environment is not production, sandbox or local.
    * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
    * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
    * @throws {ValueError} If apiUrl is supplied outside local.
@@ -227,6 +228,7 @@ export default class DfxProtocol extends FiatProtocol {
    * @overload
    * @param {IWalletAccountReadOnly} readOnlyAccount - Read-only account; buy/sell throw AccountRequiredError and getTransactionDetail throws ProviderError.
    * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+   * @throws {ValueError} If environment is not production, sandbox or local.
    * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
    * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
    * @throws {ValueError} If apiUrl is supplied outside local.
@@ -244,6 +246,7 @@ export default class DfxProtocol extends FiatProtocol {
    * @overload
    * @param {IWalletAccount} signingAccount - Account used to sign DFX authentication messages.
    * @param {DfxProtocolConfig} [config] - API and widget configuration (default: `{}`).
+   * @throws {ValueError} If environment is not production, sandbox or local.
    * @throws {ValueError} If local apiUrl is missing or is not an HTTP(S) loopback origin.
    * @throws {ValueError} If local appUrl is missing or is not an HTTP(S) loopback origin.
    * @throws {ValueError} If apiUrl is supplied outside local.
@@ -257,13 +260,16 @@ export default class DfxProtocol extends FiatProtocol {
    */
   constructor (account, config = {}) {
     super(account)
+    const environment = config.environment === undefined ? 'production' : config.environment
+    if (environment !== 'production' && environment !== 'sandbox' && environment !== 'local') {
+      throw new ValueError("environment must be 'production', 'sandbox' or 'local'")
+    }
     const timeout = typeof config.timeout === 'bigint' ? Number(config.timeout) : config.timeout
     if (timeout !== undefined && (!Number.isFinite(timeout) || timeout <= 0)) {
       throw new ValueError('timeout must be a finite number greater than zero')
     }
     if (timeout > MAX_TIMEOUT_MS) throw new ValueError('timeout must not exceed 2147483647 milliseconds')
     for (const field of ['network', 'wallet', 'publicKey', 'language']) optionalString(config[field], field)
-    const environment = config.environment ?? 'production'
     let apiUrl, appUrl
     if (environment === 'local') {
       apiUrl = localOrigin(config.apiUrl, 'apiUrl')

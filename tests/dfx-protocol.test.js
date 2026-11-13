@@ -2040,7 +2040,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       failureSync(() => new DfxProtocol(undefined, config), ValueError, `${field} must be an HTTP(S) loopback origin (localhost, 127.0.0.1 or [::1])`)
     })
 
-    test.each(['production', 'sandbox', 'unknown', undefined].flatMap(environment =>
+    test.each(['production', 'sandbox', undefined].flatMap(environment =>
       ['apiUrl', 'appUrl'].map(field => [environment, field])
     ))('rejects %s environment with %s', (environment, field) => {
       failureSync(() => new DfxProtocol(undefined, { environment, [field]: 'http://localhost' }), ValueError, `${field} is only allowed in local`)
@@ -2050,10 +2050,17 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       expect(() => new DfxProtocol(undefined, { environment: 'local', apiUrl: origin, appUrl: origin })).not.toThrow()
     })
 
-    test('uses production for an unknown environment', async () => {
-      const { protocol } = setup({ environment: 'unknown' })
+    test.each(['unknown', 'Sandbox', ' sandbox', null, 42, ''])('rejects invalid environment %p without an HTTP call', environment => {
+      failureSync(() => new DfxProtocol(undefined, { environment, fetch: fetchMock }), ValueError, "environment must be 'production', 'sandbox' or 'local'")
+      expect(fetchMock.mock.calls).toEqual([])
+      expect(transportMock.mock.calls).toEqual([])
+    })
+
+    test.each([['missing', {}], ['undefined', { environment: undefined }]])('uses production when environment is %s', async (_label, config) => {
+      const { protocol } = setup(config)
       await protocol.getSupportedCountries()
       expectInteractions([httpRequest('/v1/country')])
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.dfx.swiss/v1/country')
     })
   })
 
