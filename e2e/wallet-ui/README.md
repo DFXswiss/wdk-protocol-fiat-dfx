@@ -53,7 +53,7 @@ From `e2e/`:
 node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid>
 ```
 
-That is the preflight. It does not paste the seed, does not start Maestro against the app, does not send, and writes no record. It requires the booted simulator to use iOS 26.5. Exit 0 means the tree, the installed build, the simulator, Maestro, the sandbox version, and the account balance are ready. The account needs at least 1 USDT and 0.0002 ETH. The build checks that the starter's configured Ethereum provider reports the Sepolia chain ID before building. The runner compares the installed module copy with the working tree before preflight.
+That is the preflight. It does not paste the seed, does not start Maestro against the app, does not send, and writes no record. It requires the booted simulator to use iOS 26.5 and Maestro 2.10. Exit 0 means the tree, the installed build, the simulator, Maestro, the sandbox version, and the account balance are ready. The account needs at least 1 USDT and 0.0002 ETH. The build checks that the starter's configured Ethereum provider reports the Sepolia chain ID before building. Preflight compares the installed module copy with the working tree right after it reads HEAD and checks that the tree is clean.
 
 ```sh
 node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid> \

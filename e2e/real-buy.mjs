@@ -148,7 +148,7 @@ function invocation () {
   const parts = [process.argv[0], process.argv[1]]
   for (let i = 2; i < process.argv.length; i++) {
     const name = process.argv[i]
-    if (name === '--seed-file' || name === '--url-file') { i++; continue }
+    if (name === '--seed-file' || name === '--url-file') { parts.push(name, name === '--seed-file' ? '<seed-file>' : '<url-file>'); i++; continue }
     if (name === '--rpc') { parts.push(name, new URL(process.argv[++i]).origin); continue }
     parts.push(name)
   }
@@ -412,6 +412,7 @@ async function main () {
   if (!options.confirm) return
   const head = git(['rev-parse', 'HEAD'])
   if (git(['status', '--porcelain']) !== '') throw new Error('the working tree is not clean, so the run would not belong to a commit')
+  assertModuleCopy()
   const runId = `${Date.now()}-${randomBytes(3).toString('hex')}`
   const token = new Contract(USDC, ['function balanceOf(address) view returns (uint256)'], state.provider)
   const block = await state.provider.getBlockNumber()
