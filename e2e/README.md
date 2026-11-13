@@ -32,6 +32,8 @@ Recorded sandbox: 178/186 steps on 2026-10-29 and again on 2026-11-05. The failu
 
 Read-only probe of Bitcoin, Lightning, Arkade and Firo. It sends no on-chain transaction. The sandbox is expected to list only Firo; production is expected to list none of the four. Unlisted assets must be rejected with `Missing decimals`. Exit code 1 on a mismatch.
 
+Before network access, the installed module copy is compared with the working tree; a mismatch exits 1 and requires `npm ci` in `e2e`.
+
 ```sh
 node native-quotes.mjs
 DFX_ENV=production node native-quotes.mjs
