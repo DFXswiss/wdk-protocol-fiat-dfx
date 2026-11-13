@@ -151,7 +151,11 @@ function maskSensitiveText (value, seed) {
   for (const secret of secrets.filter(Boolean).sort((a, b) => b.length - a.length)) {
     message = message.split(secret).join('[REDACTED]')
   }
-  return message.replace(/\b(?:0x)?[0-9a-fA-F]{64}\b/g, '[REDACTED KEY]')
+  return message.replace(/https?:\/\/[^\s<>"']+/gi, '[URL REDACTED]')
+    .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]+/g, '[TOKEN REDACTED]')
+    .replace(/Bearer\s+[^\s"',;]+/gi, 'Bearer [REDACTED]')
+    .replace(/((?:session|token|authorization)["']?\s*[:=]\s*["']?)[^\s"'&,;}]+/gi, '$1[REDACTED]')
+    .replace(/\b(?:0x)?[0-9a-fA-F]{64}\b/g, '[REDACTED KEY]')
 }
 
 function asBytes32 (value) {
