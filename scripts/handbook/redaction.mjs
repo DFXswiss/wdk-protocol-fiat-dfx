@@ -24,8 +24,9 @@ function command (name, args, qr = false) {
 function findings (text) {
   const found = []
   const patterns = [
-    ['address', /0x[0-9a-f]{40}\b/gi],
-    ['hex', /\b[0-9a-f]{32,}\b/gi],
+    ['address', /[0Oo]x[0-9a-fA-FIlOoS]{38,42}\b/gi],
+    ['hex', /\b[0-9a-fA-FIlOoS]{32,}\b/g],
+    ['token', /[0-9A-Za-z]{20,}/g],
     ['IBAN', /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b/gi],
     ['session', /session=[^\s]*/gi],
     ['JWT', /\beyJ[A-Za-z0-9_.-]*/g],

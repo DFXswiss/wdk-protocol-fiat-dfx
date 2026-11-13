@@ -440,7 +440,7 @@ function invocation () {
       continue
     }
     if (name === '--rpc' || name === '--bundler') {
-      parts.push(name, new URL(process.argv[i + 1]).origin)
+      parts.push(name, name === '--rpc' ? '<rpc>' : '<bundler>')
       i += 1
       continue
     }
