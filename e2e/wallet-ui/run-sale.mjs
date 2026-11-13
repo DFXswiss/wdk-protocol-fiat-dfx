@@ -106,6 +106,7 @@ class CheckError extends Error {
 const state = {
   clipboard: false,
   clipboardClearAttempted: false,
+  clipboardPromise: null,
   lockHeld: false,
   lockDir: '',
   udid: '',
@@ -122,6 +123,13 @@ const state = {
   saleIban: '',
   flow1Started: false,
   cleanupAttempted: false,
+  cleanupPromise: null,
+  releasePromise: null,
+  child: null,
+  interrupted: false,
+  signalExitCode: null,
+  signalPromise: null,
+  recordPromise: null,
   failedStep: undefined,
   screenshots: [],
   evidence: {},
@@ -189,6 +197,7 @@ function runCapture (command, args, stdinMode) {
     }
     try {
       child = spawn(command, args, { stdio: [stdin, 'pipe', 'pipe'] })
+      state.child = child
     } catch (error) {
       reject(error)
       return
@@ -197,8 +206,12 @@ function runCapture (command, args, stdinMode) {
     const out = []
     child.stdout.on('data', chunk => out.push(chunk))
     child.stderr.on('data', () => {})
-    child.on('error', error => finish(reject, error))
+    child.on('error', error => {
+      if (state.child === child) state.child = null
+      finish(reject, error)
+    })
     child.on('close', code => {
+      if (state.child === child) state.child = null
       finish(resolve, {
         code: code == null ? 1 : code,
         stdout: Buffer.concat(out).toString('utf8')
@@ -651,36 +664,44 @@ async function runFlow (file, env) {
   }
 }
 
-async function clearWalletState () {
-  if (!state.flow1Started || state.cleanupAttempted) return
-  state.cleanupAttempted = true
-  state.evidence.walletStateCleared = false
-  const previousStep = state.failedStep
-  try {
-    const result = await runFlow(join(flowDir, 'cleanup.yaml'), {})
-    if (result.code !== 0) throw new Error('cleanup flow failed')
-    state.evidence.walletStateCleared = true
-  } catch {
-    throw new CheckError('cleanup', 'wallet state could not be cleared')
-  } finally {
-    state.failedStep = previousStep
-  }
+function clearWalletState () {
+  if (state.cleanupPromise) return state.cleanupPromise
+  if (!state.flow1Started || state.cleanupAttempted) return Promise.resolve()
+  state.cleanupPromise = (async () => {
+    state.cleanupAttempted = true
+    state.evidence.walletStateCleared = false
+    const previousStep = state.failedStep
+    try {
+      const result = await runFlow(join(flowDir, 'cleanup.yaml'), {})
+      if (result.code !== 0) throw new Error('cleanup flow failed')
+      state.evidence.walletStateCleared = true
+    } catch {
+      throw new CheckError('cleanup', 'wallet state could not be cleared')
+    } finally {
+      state.failedStep = previousStep
+    }
+  })()
+  return state.cleanupPromise
 }
 
-async function clearClipboard () {
-  state.clipboardClearAttempted = true
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const result = await runCapture('xcrun', ['simctl', 'pbcopy', state.udid], 'empty')
-      if (result.code === 0) {
-        state.clipboard = false
-        state.evidence.clipboardCleared = true
-        return
-      }
-    } catch {}
-  }
-  state.evidence.clipboardCleared = false
-  throw new CheckError('clipboard', 'the simulator clipboard could not be cleared and may still hold the seed; clear it by hand')
+function clearClipboard () {
+  if (state.clipboardPromise) return state.clipboardPromise
+  state.clipboardPromise = (async () => {
+    state.clipboardClearAttempted = true
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const result = await runCapture('xcrun', ['simctl', 'pbcopy', state.udid], 'empty')
+        if (result.code === 0) {
+          state.clipboard = false
+          state.evidence.clipboardCleared = true
+          return
+        }
+      } catch {}
+    }
+    state.evidence.clipboardCleared = false
+    throw new CheckError('clipboard', 'the simulator clipboard could not be cleared and may still hold the seed; clear it by hand')
+  })()
+  return state.clipboardPromise
 }
 
 async function copySeed (seedFile) {
@@ -1233,11 +1254,13 @@ async function sendAndCheck (prelude) {
   const iban = inventedIban()
   state.saleIban = iban
   rememberIban(iban)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
   state.flow1Started = true
   const flow1 = await runFlow(join(flowDir, 'sell-1-widget.yaml'), { IBAN: iban, IBAN_PATTERN: `.*${[...iban].join(' ?')}.*` })
   const flow1Code = flow1.code
   flow1.stdout = ''
   if (flow1Code !== 0) throw new CheckError('flow-1', 'nothing sent', state.failedStep)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
   const pasted = await runCapture('xcrun', ['simctl', 'pbpaste', state.udid], 'ignore')
   if (pasted.code !== 0) throw new CheckError('clipboard', 'nothing sent')
   const depositRaw = oneLine(pasted.stdout)
@@ -1250,6 +1273,7 @@ async function sendAndCheck (prelude) {
   }
   state.evidence.depositAddress = depositAddress
   assertNoForeignMaestro(true)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
   const flow2 = await runFlow(join(flowDir, 'sell-2-send.yaml'), {
     DEP_HEAD: depositRaw.slice(0, 6),
     DEP_TAIL: depositRaw.slice(-4)
@@ -1263,6 +1287,7 @@ async function sendAndCheck (prelude) {
   }
   const hash = await readSuccessHash()
   state.evidence.hash = hash
+  if (flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed after send-confirm', state.failedStep)
   await checkChain(prelude, hash, depositAddress)
   const session = await sessionFor(prelude.seed, options.rpc)
   const sale = await followBackend(session, hash, options.follow)
@@ -1381,10 +1406,105 @@ async function writeFail (error) {
   body.result = 'fail'
   body.failedCheck = failedCheck
   try {
-    await writeRecord(body)
+    state.recordPromise = writeRecord(body)
+    await state.recordPromise
   } catch (writeError) {
     console.error(`wallet-ui failed: record: ${redact(writeError?.message ?? writeError)}`)
   }
+}
+
+function cleanupWarning (error) {
+  console.error(`wallet-ui cleanup warning: ${redact(error?.message ?? error).replace(/[\r\n]+/g, ' ')}`)
+}
+
+function releaseResources () {
+  if (state.releasePromise) return state.releasePromise
+  state.releasePromise = (async () => {
+    try {
+      if (state.browser) {
+        const browser = state.browser
+        state.browser = null
+        await browser.close()
+      }
+    } catch (error) { cleanupWarning(error) }
+    try {
+      if (state.provider) {
+        const provider = state.provider
+        state.provider = null
+        provider.destroy()
+      }
+    } catch (error) { cleanupWarning(error) }
+    try {
+      if (state.wdk) {
+        const wdk = state.wdk
+        state.wdk = null
+        await wdk.dispose?.()
+      }
+    } catch (error) { cleanupWarning(error) }
+    try {
+      if (state.lockHeld) {
+        rmdirSync(state.lockDir)
+        state.lockHeld = false
+      }
+    } catch (error) { cleanupWarning(error) }
+  })()
+  return state.releasePromise
+}
+
+async function stopChild (child) {
+  const closed = new Promise(resolve => child.once('close', resolve))
+  child.kill('SIGTERM')
+  let timer
+  const timedOut = await Promise.race([
+    closed.then(() => false),
+    new Promise(resolve => { timer = setTimeout(() => resolve(true), 10_000) })
+  ])
+  clearTimeout(timer)
+  if (timedOut) {
+    child.kill('SIGKILL')
+    const killTimedOut = await Promise.race([
+      closed.then(() => false),
+      new Promise(resolve => { timer = setTimeout(() => resolve(true), 5_000) })
+    ])
+    clearTimeout(timer)
+    if (killTimedOut) cleanupWarning('child process did not close after SIGKILL')
+  }
+}
+
+function installSignalHandlers () {
+  const onSignal = signal => {
+    const exitCode = signal === 'SIGINT' ? 130 : 143
+    if (state.interrupted) {
+      console.error('wallet-ui: interrupted during cleanup; erase the simulator before the next run')
+      try {
+        if (state.lockHeld) {
+          rmdirSync(state.lockDir)
+          state.lockHeld = false
+        }
+      } catch (error) { cleanupWarning(error) }
+      process.exit(state.signalExitCode)
+    }
+    state.interrupted = true
+    state.signalExitCode = exitCode
+    state.signalPromise = (async () => {
+      try {
+        if (state.cleanupPromise) await state.cleanupPromise
+        else if (state.child) await stopChild(state.child)
+      } catch (error) { cleanupWarning(error) }
+      try {
+        if (state.clipboard) await clearClipboard()
+      } catch (error) { cleanupWarning(error) }
+      try { await clearWalletState() } catch (error) { cleanupWarning(error) }
+      try {
+        if (state.recordPromise) await state.recordPromise.catch(() => {})
+        if (state.options?.record && state.flow1Started && !state.recordWritten) await writeFail(new CheckError('interrupted', `received ${signal}`))
+      } catch (error) { cleanupWarning(error) }
+      try { await releaseResources() } catch (error) { cleanupWarning(error) }
+      process.exit(exitCode)
+    })()
+  }
+  process.on('SIGINT', () => onSignal('SIGINT'))
+  process.on('SIGTERM', () => onSignal('SIGTERM'))
 }
 
 async function main () {
@@ -1404,8 +1524,12 @@ async function main () {
       throw new UsageError('--screenshots already contains a result from this flow')
     }
   }
-  if (options.send) takeLock(join(tmpdir(), 'wdk-wallet-ui-run.lock'))
+  if (options.send) {
+    installSignalHandlers()
+    takeLock(join(tmpdir(), 'wdk-wallet-ui-run.lock'))
+  }
   const prelude = await preflight(options)
+  if (state.interrupted) await state.signalPromise
   if (!options.send) {
     console.log('wallet-ui preflight ok')
     return
@@ -1434,9 +1558,15 @@ async function main () {
     const body = measuredRecord()
     body.result = 'pass'
     assertPass(body)
-    await writeRecord(body)
+    if (state.interrupted) await state.signalPromise
+    state.recordPromise = writeRecord(body)
+    await state.recordPromise
     console.log(`wallet-ui pass: ${body.hash}`)
   } catch (error) {
+    if (state.interrupted) {
+      await state.signalPromise
+      return
+    }
     if (state.clipboard && !state.clipboardClearAttempted) {
       try {
         await clearClipboard()
@@ -1448,6 +1578,10 @@ async function main () {
       await clearWalletState()
     } catch (cleanupError) {
       console.error(`wallet-ui failed: ${redact(cleanupError.message)}`)
+    }
+    if (state.interrupted) {
+      await state.signalPromise
+      return
     }
     if (error instanceof UsageError || error instanceof NotRunError) throw error
     if (state.evidence.dirty === false) {
@@ -1474,26 +1608,6 @@ try {
   else if (error instanceof NotRunError) process.exitCode = 3
   else process.exitCode = 1
 } finally {
-  if (state.browser) {
-    await state.browser.close().catch(() => {})
-    state.browser = null
-  }
-  try {
-    if (state.provider) state.provider.destroy()
-  } catch (error) {
-    console.error(`wallet-ui cleanup warning: ${redact(error?.message ?? error).replace(/[\r\n]+/g, ' ')}`)
-  }
-  try {
-    if (state.wdk) await state.wdk.dispose?.()
-  } catch (error) {
-    console.error(`wallet-ui cleanup warning: ${redact(error?.message ?? error).replace(/[\r\n]+/g, ' ')}`)
-  }
-  if (state.lockHeld) {
-    try {
-      rmdirSync(state.lockDir)
-      state.lockHeld = false
-    } catch (error) {
-      console.error(`wallet-ui cleanup warning: ${redact(error?.message ?? error).replace(/[\r\n]+/g, ' ')}`)
-    }
-  }
+  if (state.interrupted) await state.signalPromise
+  await releaseResources()
 }

@@ -204,7 +204,7 @@ selection argument; provider geography restrictions can still reject a request.
 `txId` defaults to DFX `uid`, even if it looks numeric. Pass
 `{ idType: 'externalTransactionId' }` to query `external-id` instead.
 The optional second argument has an `idType` of `'uid'` or
-`'externalTransactionId'`, defaulting to `'uid'`. Empty or whitespace-only UIDs
+`'externalTransactionId'`, defaulting to `'uid'`. Other values throw `ValueError`. Empty or whitespace-only UIDs
 and external IDs outside the documented character and length limits throw `ValueError`.
 Asset and fiat IDs
 resolve against their respective unfiltered catalogs, including inactive entries;

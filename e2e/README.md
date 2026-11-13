@@ -65,6 +65,8 @@ Without `--send` the script quotes and opens the widget, and sends nothing. `--s
 
 The deposit-address balance in the receipt block must exceed the balance in the previous block by the amount sent, for an EOA and for a Safe. A mismatch exits 1.
 
+The bundler quotes of a fresh Safe need its funded balance, so the prefund check runs after funding; if it fails, the funds stay in the Safe and `safe-rescue.mjs` returns them.
+
 Exit 2 is usage. Exit 3 is only a `NotRunError`: an unusable seed file, duplicate `@tetherto/wdk-wallet` copies, a module copy that differs from this tree (the digest differs, the file list differs, the installed copy is missing, or a symlink is rejected), an unreachable RPC, a preflight `/version` that is unreachable or without a usable answer, an unreachable bundler, a balance too small to send, or an unavailable fixed account lock. Any other failure exits 1, including a bundler HTTP status, a bundler that answers with the wrong chain or EntryPoint, a wrong chain id, a dirty tree, an unavailable optional lock, a git failure, an unavailable DFX protocol, a Safe that already has code, and any other exception.
 
 `--record` must not exist yet, must not be the seed file, and must not be `--out`. The file is created with owner-only permissions only after a passing send with a clean tree. Schema `dfx-real-run/v1`. The script does not write into the git directory.
