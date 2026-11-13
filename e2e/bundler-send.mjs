@@ -363,7 +363,7 @@ async function main () {
     const fee = quotedFeeOf(quote)
 
     console.log(`chainId: ${chainId}`)
-    console.log(`Bundler: ${new URL(options.bundler).origin}`)
+    console.log('Bundler: configured')
     console.log(`Account: ${options.accountIndex}`)
     console.log(`Safe: ${safe}`)
     console.log(`Safe deployed: ${deployed ? 'yes' : 'no'}`)

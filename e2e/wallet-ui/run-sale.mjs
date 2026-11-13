@@ -3,7 +3,7 @@
 
 // Sepolia sale of 1 USDT for EUR.
 // The WDK starter wallet on the iOS simulator confirms the send.
-// Without --send and --confirm, only the preflight runs and the app is not driven.
+// Without --send and --confirm, only the preflight or handbook capture runs.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash, randomInt } from 'node:crypto'
 import { closeSync, constants, copyFileSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, rmdirSync } from 'node:fs'
@@ -186,7 +186,7 @@ function git (args) {
 }
 
 function runCapture (command, args, stdinMode) {
-  const stdin = stdinMode === 'empty' ? 'pipe' : stdinMode === 'ignore' || stdinMode == null ? 'ignore' : stdinMode
+  const stdin = stdinMode === 'empty' || stdinMode === 'handbook-address' ? 'pipe' : stdinMode === 'ignore' || stdinMode == null ? 'ignore' : stdinMode
   return new Promise((resolve, reject) => {
     let child
     let settled = false
@@ -203,6 +203,7 @@ function runCapture (command, args, stdinMode) {
       return
     }
     if (stdinMode === 'empty') child.stdin.end()
+    if (stdinMode === 'handbook-address') child.stdin.end('0x000000000000000000000000000000000000dEaD')
     const out = []
     child.stdout.on('data', chunk => out.push(chunk))
     child.stderr.on('data', () => {})
@@ -255,6 +256,7 @@ function parseArgs (args) {
     ['--udid', 'udid'],
     ['--record', 'record'],
     ['--screenshots', 'screenshots'],
+    ['--handbook-shots', 'handbookShots'],
     ['--follow', 'follow'],
     ['--rpc', 'rpc']
   ])
@@ -277,6 +279,7 @@ function parseArgs (args) {
   }
   if (!options.seedFile) throw new UsageError('Required argument missing: --seed-file <path>')
   if (!options.udid) throw new UsageError('Required argument missing: --udid <id>')
+  if (options.handbookShots && (options.send || options.confirm || options.record || options.follow || options.screenshots)) throw new UsageError('--handbook-shots cannot be combined with sending, recording, following or --screenshots')
   if (options.send !== options.confirm) throw new UsageError('--send and --confirm are both required to send')
   if (options.follow != null) {
     if (!/^(?:[1-9]\d*)$/.test(options.follow) || Number(options.follow) > 240) {
@@ -545,6 +548,9 @@ async function preflight (options) {
   if (porcelain !== '') throw new NotRunError('not run: the module working tree is not clean')
   assertModuleCopy()
   const build = readBuild()
+  if (options.send && build.variant !== 'sale') throw new NotRunError('not run: sending requires a sale build')
+  if (options.handbookShots && !['before', 'sale'].includes(build.variant)) throw new NotRunError('not run: handbook capture requires a known build variant')
+  if (options.handbookShots && build.variant === 'before' && build.beforePatchSha256 !== sha256File(join(flowDir, '..', 'handbook-before.patch'))) throw new NotRunError('not run: before patch does not match build')
   if (build.moduleHead !== moduleHead) throw new NotRunError('not run: out/build.json moduleHead is not HEAD')
   let patchSha
   try {
@@ -630,9 +636,10 @@ function copyShots (fromDir, toDir) {
       if (entry.isDirectory()) {
         visit(path)
       } else if (entry.isFile() && entry.name.endsWith('.png') && path.includes('takeScreenshot')) {
-        const dest = join(toDir, entry.name)
+        const outputName = state.options.handbookShots ? `${state.handbookVariant}-${entry.name}` : entry.name
+        const dest = join(toDir, outputName)
         copyFileSync(path, dest, constants.COPYFILE_EXCL)
-        copied.push({ file: entry.name, sha256: sha256File(dest) })
+        copied.push({ file: outputName, sha256: sha256File(dest) })
       }
     }
   }
@@ -651,7 +658,7 @@ async function runFlow (file, env) {
     if (result.code !== 0) state.failedStep = failedStep(result.stdout)
     let copied = []
     try {
-      copied = copyShots(outDir, state.options.screenshots)
+      copied = copyShots(outDir, state.options.handbookShots || state.options.screenshots)
     } catch {
       const step = state.evidence.depositAddress && confirmationCount(result.stdout) === 1 ? undefined : state.failedStep
       throw new CheckError('screenshots', `screenshot copy failed${state.evidence.depositAddress ? '' : '; nothing sent'}`, step)
@@ -1339,6 +1346,48 @@ async function sendAndCheck (prelude) {
   state.evidence.screenshots = expectedShots.map(name => byName.get(name))
 }
 
+async function captureHandbook (prelude) {
+  state.handbookVariant = prelude.build.variant
+  for (const name of ['wallet', 'review']) {
+    const target = join(state.options.handbookShots, `${state.handbookVariant}-${name}.png`)
+    try {
+      lstatSync(target)
+      throw new UsageError('handbook screenshot already exists')
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
+  }
+  const flow = async name => {
+    const path = join(flowDir, name)
+    if (/send-confirm|sell-entry/.test(readFileSync(path, 'utf8'))) throw new CheckError('handbook-flow', 'forbidden action in handbook flow')
+    if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+    const result = await runFlow(path, {})
+    if (result.code !== 0) throw new CheckError('handbook-flow', 'nothing sent', state.failedStep)
+  }
+  try {
+    await copySeed(state.options.seedFile)
+    state.flow1Started = true
+    await flow('handbook-1-wallet.yaml')
+    await clearClipboard()
+    state.clipboardPromise = null
+    state.clipboardClearAttempted = false
+    state.clipboard = true
+    const copied = await runCapture('xcrun', ['simctl', 'pbcopy', state.udid], 'handbook-address')
+    if (copied.code !== 0) throw new CheckError('clipboard', 'nothing sent')
+    await flow('handbook-2-review.yaml')
+    await clearClipboard()
+    await clearWalletState()
+    const expected = ['wallet', 'review'].map(name => `${state.handbookVariant}-${name}.png`)
+    if (state.screenshots.length !== 2 || expected.some(name => !state.screenshots.some(shot => shot.file === name))) throw new CheckError('screenshots', 'handbook screenshots missing')
+    console.log('handbook screenshots captured; nothing sent')
+  } catch (error) {
+    if (state.interrupted) { await state.signalPromise; return }
+    if (state.clipboard && !state.clipboardClearAttempted) await clearClipboard()
+    await clearWalletState()
+    throw error
+  }
+}
+
 function measuredRecord () {
   const evidence = state.evidence
   const body = {}
@@ -1512,6 +1561,7 @@ async function main () {
   state.options = options
   state.udid = options.udid
   if (options.screenshots) prepareScreenshots(options.screenshots)
+  if (options.handbookShots) prepareScreenshots(options.handbookShots)
   if (options.send) {
     assertRecordPath(options.record, options.seedFile)
     for (const name of FLOW_SHOTS) {
@@ -1524,12 +1574,16 @@ async function main () {
       throw new UsageError('--screenshots already contains a result from this flow')
     }
   }
-  if (options.send) {
+  if (options.send || options.handbookShots) {
     installSignalHandlers()
     takeLock(join(tmpdir(), 'wdk-wallet-ui-run.lock'))
   }
   const prelude = await preflight(options)
   if (state.interrupted) await state.signalPromise
+  if (options.handbookShots) {
+    await captureHandbook(prelude)
+    return
+  }
   if (!options.send) {
     console.log('wallet-ui preflight ok')
     return

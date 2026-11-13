@@ -4,6 +4,8 @@ Recorded results below are taken from runs of this module. Counts are the ones t
 
 ## Layers
 
+The coverage test checks each handbook image against its current redaction record; OCR and QR scanning run separately with `npm run handbook:redaction`.
+
 **Unit tests.** Command: `npm test` (lint: `npm run lint`).
 
 Proves the public methods against injected HTTP responses, including status mapping and input validation.

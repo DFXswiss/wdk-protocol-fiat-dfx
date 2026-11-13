@@ -284,6 +284,7 @@ async function main () {
     if (block?.baseFeePerGas == null) throw new Error('Latest block does not provide baseFeePerGas')
     const priorityFeeWei = options.priorityFeeWei ?? BigInt(await provider.send('eth_maxPriorityFeePerGas', []))
     if (priorityFeeWei <= 0n) throw new Error('RPC returned a non-positive priority fee')
+    if (priorityFeeWei > 1_000_000_000n) throw new Error('Priority fee exceeds 1 gwei; specify --priority-fee-gwei')
     const maxFeePerGas = 2n * block.baseFeePerGas + priorityFeeWei
 
     let deployGas = 0n

@@ -19,7 +19,9 @@ Session tokens remain in instance memory and are included in the generated widge
 URL. Do not log, persist or share those URLs. The caller must bind the account to
 the correct constructor network and supply a trusted fetch implementation.
 
-An instance holds its DFX access token until the token expires. The backend
+An instance keeps its DFX access token in memory and reuses it until an
+authenticated detail request returns HTTP 401 or the instance is dropped; it
+does not track expiry itself. The backend
 default lifetime is 2 days. `getTransactionDetail` reuses that token. `buy` and
 `sell` sign in on every call. When the wallet locks, drop the reference to the
 instance. If the protocol is registered on the account, each `getFiatProtocol`

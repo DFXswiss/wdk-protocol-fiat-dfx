@@ -7,6 +7,8 @@ authenticated DFX purchase and sale widget URLs, supported asset/currency/countr
 lists, and normalized transaction status. The user completes payment and any KYC
 in the DFX widget; this module does not execute trades or hold funds.
 
+The [handbook](https://github.com/DFXswiss/wdk-protocol-fiat-dfx/blob/develop/handbook/README.md) shows the module in the WDK starter wallet.
+
 ## Compatibility
 
 Implements `IFiatProtocol` by extending `FiatProtocol` from

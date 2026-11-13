@@ -45,6 +45,14 @@ From `e2e/wallet-ui/`:
 
 The script clones the starter, checks out `STARTER_COMMIT`, applies `starter.patch`, copies `.env.example` to `.env`, writes `.npmrc`, and installs. The starter does not commit `ios/`. The script then runs `npx expo prebuild --clean --platform ios`, which creates that directory and needs CocoaPods, and only then looks up the workspace and scheme. It builds a Release simulator app with `IPHONEOS_DEPLOYMENT_TARGET=17.0`, terminates and uninstalls any copy already on the simulator, and installs the new app. Only the Sepolia provider in `.env` is used for this sale. Do not print `.env`. The script then writes `out/build.json` with the module head, the starter commit, the patch digest, and the digest of `main.jsbundle` in the installed app.
 
+Use `--variant before` after the simulator ID to apply `handbook-before.patch` after the starter patch. `--variant sale` is the default. The build record identifies the variant and, for `before`, the additional patch digest. Sending requires a `sale` build.
+
+## Handbook images
+
+The `--handbook-shots <dir>` mode imports the wallet, captures the wallet and a send review, and cleans up. It never confirms or sends a transaction. It cannot be combined with `--send`, `--confirm`, `--follow`, `--screenshots`, or `--record`. The output directory must be owned by the current user, have mode `0700`, and not be a symlink.
+
+To refresh the handbook, build with `--variant before`, run `node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid> --handbook-shots <dir>` from `e2e/`, then rebuild with `--variant sale` and repeat the capture. The builds require a clean module tree and a fresh starter checkout. A separately authorized sale run captures the widget and send-success images. Copy the four variant images into `handbook/screens/`, naming the sale images `after-wallet.png` and `after-review.png`; copy the sale run's widget and success images as `after-sell-widget.png` and `after-send-success.png`. From the repository root, run `npm run handbook:redaction` and then `npm run handbook:build`.
+
 ## Run
 
 From `e2e/`:
