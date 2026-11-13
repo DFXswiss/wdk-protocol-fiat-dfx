@@ -143,6 +143,7 @@ for (const c of CASES.filter(c => !only || c.chain === only)) {
     account = await wdk.getAccount(c.chain, 0)
     address = await account.getAddress()
     fiat = account.getFiatProtocol('dfx')
+    if (!(fiat instanceof DfxProtocol)) throw new Error('DFX protocol unavailable')
     return `${fiat instanceof DfxProtocol} address=${address}`
   })
   if (!ok) continue

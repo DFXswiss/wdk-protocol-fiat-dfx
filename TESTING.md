@@ -48,10 +48,10 @@ Recorded: 2026-11-12, exit 0 at `97f9e71` and at `2feecb3`; 15/15 mutations of i
 npm run lint && npm test
 npm run test:integration
 npm run test:coverage
-cd e2e && node signature-diff.mjs
-cd e2e && node native-quotes.mjs
-cd e2e && DFX_ENV=sandbox node live-matrix.mjs
-cd e2e && npx --yes bare@1.34.1 bare-smoke.mjs
+(cd e2e && node signature-diff.mjs)
+(cd e2e && node native-quotes.mjs)
+(cd e2e && DFX_ENV=sandbox node live-matrix.mjs)
+(cd e2e && npx --yes bare@1.34.1 bare-smoke.mjs)
 ```
 
 `signature-diff.mjs` reported 0 mismatches in 20,000 Solana and 5,000 Spark signatures, including a re-run on 2026-11-05. `native-quotes.mjs` expects the sandbox to list only Firo among Bitcoin, Lightning, Arkade and Firo, production to list none of them, and unlisted assets to be rejected with `Missing decimals` (re-run on 2026-11-05 matched that). `bare-smoke.mjs` reported 4/4 on 2026-10-20 (Bare runtime v1.35.0) and again 4/4 on 2026-11-05 (Bare runtime v1.36.0); `bare@1.34.1` both times: `bare.js` loads `DfxProtocol`, a stubbed sandbox sign-in posts the predicted Safe address and the ERC-6492 signature in `e2e/fixtures/bare-smoke-expected.json`, and the stubbed detail request answers 404. No network.
