@@ -1,8 +1,10 @@
 // Copyright 2026 DFX AG
 // SPDX-License-Identifier: Apache-2.0
 
-import { constants } from 'node:fs'
+import { constants, mkdirSync, rmdirSync } from 'node:fs'
 import { open } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   AbiCoder,
   Contract,
@@ -19,10 +21,12 @@ import {
   zeroPadValue
 } from 'ethers'
 import WalletManagerEvmErc4337 from '@tetherto/wdk-wallet-evm-erc-4337'
+import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
 
 const DEFAULT_TOKEN = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 
 class UsageError extends Error {}
+class NotRunError extends Error {}
 const CHAIN_ID = 8453n
 const ENTRY_POINT = '0x0000000071727De22E5E9d8BAf0edAc6f37da032'
 const USER_OPERATION_EVENT = 'UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)'
@@ -256,6 +260,19 @@ function userOperationLog (txReceipt, userOpHash, safe) {
 async function main () {
   let seed
   let provider
+  let lockDir = ''
+  const releaseLock = () => {
+    if (lockDir) {
+      rmdirSync(lockDir)
+      lockDir = ''
+    }
+  }
+  const onSignal = signal => {
+    try { releaseLock() } catch { console.error('bundler-send failed: lock cleanup failed') }
+    process.exit(signal === 'SIGINT' ? 130 : 143)
+  }
+  const onInterrupt = () => onSignal('SIGINT')
+  const onTerminate = () => onSignal('SIGTERM')
   const args = process.argv.slice(2)
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--rpc' || args[i] === '--bundler') rememberUrl(args[i + 1])
@@ -286,6 +303,15 @@ async function main () {
     const account = await manager.getAccount(options.accountIndex)
     const safe = getAddress(await account.getAddress())
     if (options.to.toLowerCase() === safe.toLowerCase()) throw new Error('--to must differ from the Safe')
+
+    if (options.send) {
+      if (options.confirm?.toLowerCase() !== safe.toLowerCase()) throw new Error('--send requires --confirm with the exact Safe address')
+      const owner = await new WalletManagerEvm(seed, { provider: options.rpc }).getAccount(0)
+      const path = join(tmpdir(), `wdk-real-sell-${(await owner.getAddress()).toLowerCase()}.lock`)
+      try { mkdirSync(path); lockDir = path } catch (error) { throw new NotRunError(`not run: cannot acquire account lock (${error.code || 'failed'})`) }
+      process.once('SIGINT', onInterrupt)
+      process.once('SIGTERM', onTerminate)
+    }
 
     const token = options.native ? undefined : new Contract(options.token, ERC20_ABI, provider)
     const decimals = options.native ? 18 : Number(await token.decimals())
@@ -444,10 +470,13 @@ async function main () {
       recipientBalanceAfter: recipientAfter.toString()
     }))
   } catch (error) {
-    console.error('bundler-send failed: ' + maskSensitiveText(error?.message ?? error, seed))
-    process.exitCode = error instanceof UsageError ? 2 : 1
+    console.error((error instanceof NotRunError ? '' : 'bundler-send failed: ') + maskSensitiveText(error?.message ?? error, seed))
+    process.exitCode = error instanceof UsageError ? 2 : error instanceof NotRunError ? 3 : 1
   } finally {
     provider?.destroy()
+    try { releaseLock() } catch { console.error('bundler-send failed: lock cleanup failed'); process.exitCode ||= 1 }
+    process.removeListener('SIGINT', onInterrupt)
+    process.removeListener('SIGTERM', onTerminate)
   }
 }
 

@@ -1,8 +1,10 @@
 // Copyright 2026 DFX AG
 // SPDX-License-Identifier: Apache-2.0
 
-import { constants } from 'node:fs'
+import { constants, mkdirSync, rmdirSync } from 'node:fs'
 import { open } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   AbiCoder,
   Contract,
@@ -25,6 +27,7 @@ import WalletManagerEvmErc4337, { WalletAccountReadOnlyEvmErc4337 } from '@tethe
 const DEFAULT_TOKEN = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 
 class UsageError extends Error {}
+class NotRunError extends Error {}
 const BASE_GAS_PRICE_ORACLE = '0x420000000000000000000000000000000000000F'
 const CHAIN_ID = 8453n
 const SAFE_CONFIG = {
@@ -186,6 +189,19 @@ function requireStatusOne (receipt, label) {
 async function main () {
   let seed
   let provider
+  let lockDir = ''
+  const releaseLock = () => {
+    if (lockDir) {
+      rmdirSync(lockDir)
+      lockDir = ''
+    }
+  }
+  const onSignal = signal => {
+    try { releaseLock() } catch { console.error('safe-rescue failed: lock cleanup failed') }
+    process.exit(signal === 'SIGINT' ? 130 : 143)
+  }
+  const onInterrupt = () => onSignal('SIGINT')
+  const onTerminate = () => onSignal('SIGTERM')
   const args = process.argv.slice(2)
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--rpc') rememberUrl(args[i + 1])
@@ -208,6 +224,13 @@ async function main () {
     const safeAccount = await safeManager.getAccount(0)
     const owner = getAddress(await ownerAccount.getAddress())
     const safe = getAddress(await safeAccount.getAddress())
+    if (options.send) {
+      if (options.confirm?.toLowerCase() !== safe.toLowerCase()) throw new Error('--send requires --confirm with the exact Safe address')
+      const path = join(tmpdir(), `wdk-real-sell-${owner.toLowerCase()}.lock`)
+      try { mkdirSync(path); lockDir = path } catch (error) { throw new NotRunError(`not run: cannot acquire account lock (${error.code || 'failed'})`) }
+      process.once('SIGINT', onInterrupt)
+      process.once('SIGTERM', onTerminate)
+    }
     const sendingSigner = getAddress(await ownerAccount.getAddress())
     const safeOwnerAccount = safeAccount._ownerAccount
     if (!safeOwnerAccount) throw new Error('WDK did not expose the ERC-4337 owner account for verification')
@@ -407,10 +430,13 @@ async function main () {
     console.log(`Unreported difference: ${formatEther(ownerEthSpent - actualGasCost)} ETH`)
     console.log(`Owner ETH spent: ${formatEther(ownerEthSpent)} ETH`)
   } catch (error) {
-    console.error(`safe-rescue failed: ${maskSensitiveText(error?.message ?? error, seed)}`)
-    process.exitCode = error instanceof UsageError ? 2 : 1
+    console.error((error instanceof NotRunError ? '' : 'safe-rescue failed: ') + maskSensitiveText(error?.message ?? error, seed))
+    process.exitCode = error instanceof UsageError ? 2 : error instanceof NotRunError ? 3 : 1
   } finally {
     provider?.destroy()
+    try { releaseLock() } catch { console.error('safe-rescue failed: lock cleanup failed'); process.exitCode ||= 1 }
+    process.removeListener('SIGINT', onInterrupt)
+    process.removeListener('SIGTERM', onTerminate)
   }
 }
 

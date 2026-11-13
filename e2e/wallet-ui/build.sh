@@ -39,6 +39,30 @@ git clone --quiet https://github.com/tetherto/wdk-starter-react-native.git "$STA
 git -C "$STARTER" checkout --detach "$STARTER_COMMIT"
 git -C "$STARTER" apply --index "$ROOT/starter.patch"
 cp "$STARTER/.env.example" "$STARTER/.env"
+provider=""
+while IFS= read -r line || [[ -n "$line" ]]; do
+  if [[ "$line" == EXPO_PUBLIC_EVM_ETHEREUM_PROVIDER=* ]]; then
+    if [[ -n "$provider" ]]; then
+      echo "multiple Ethereum providers in .env" >&2
+      exit 1
+    fi
+    provider="${line#*=}"
+  fi
+done < "$STARTER/.env"
+if [[ -z "$provider" ]]; then
+  echo "Ethereum provider missing in .env" >&2
+  exit 1
+fi
+if ! response="$(curl --silent --show-error --fail --max-time 20 -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$provider" 2>/dev/null)"; then
+  echo "Ethereum provider chain check failed" >&2
+  exit 1
+fi
+chain="$(printf '%s' "$response" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const v=JSON.parse(s).result;process.stdout.write(typeof v==="string" && /^0x[0-9a-f]+$/.test(v)?v:"invalid")}catch{process.stdout.write("invalid")}})')"
+if [[ "$chain" != "0xaa36a7" ]]; then
+  echo "Ethereum provider chain is $chain; expected 0xaa36a7" >&2
+  exit 1
+fi
+echo "Ethereum provider chain: $chain"
 printf 'install-links=true\n' > "$STARTER/.npmrc"
 (cd "$STARTER" && npm install)
 
