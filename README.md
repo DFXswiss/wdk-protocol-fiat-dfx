@@ -63,7 +63,7 @@ const { sellUrl } = await dfx.sell({
 const detail = await dfx.getTransactionDetail(transactionUid)
 ```
 
-The source checkout also contains [examples/buy.js](https://github.com/DFXswiss/wdk-protocol-fiat-dfx/blob/main/examples/buy.js), which runs a
+The source checkout also contains [examples/buy.js](https://github.com/DFXswiss/wdk-protocol-fiat-dfx/blob/develop/examples/buy.js), which runs a
 sandbox quote by default. Its account is explicitly a placeholder: substitute a
 real WDK account to generate an authenticated URL. No private keys are embedded.
 
@@ -468,11 +468,11 @@ quotes, authentication, widget URLs and transaction details. It sends no on-chai
 transaction. Sign-in uses `POST /v1/auth` and can create a DFX user. The 100%
 coverage gate is measured from the combined unit and local integration suites,
 not from that script. `e2e/real-sell.mjs` and `e2e/real-buy.mjs` are real runs
-without a wallet user interface (hybrid). See [TESTING.md](https://github.com/DFXswiss/wdk-protocol-fiat-dfx/blob/main/TESTING.md).
+without a wallet user interface (hybrid). See [TESTING.md](https://github.com/DFXswiss/wdk-protocol-fiat-dfx/blob/develop/TESTING.md).
 
 Pull requests into `develop` are the working line. `main` only accepts `develop`,
 through the release pull request. The jobs each pull request runs are listed in
-[CONTRIBUTING.md](https://github.com/DFXswiss/wdk-protocol-fiat-dfx/blob/main/CONTRIBUTING.md). Quality gates follow the A38 standard in
+[CONTRIBUTING.md](https://github.com/DFXswiss/wdk-protocol-fiat-dfx/blob/develop/CONTRIBUTING.md). Quality gates follow the A38 standard in
 [DFXswiss/agent docs/a38.md](https://github.com/DFXswiss/agent/blob/e63980625f5b778c5a93104b0bf5de7fb5e379a8/docs/a38.md).
 Two reviews are required before Ready. One review is enough only when the pull
 request opener is listed in one_review_authors in the trusted .github/pr-guard.json
