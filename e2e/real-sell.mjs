@@ -435,6 +435,7 @@ function invocation () {
   for (let i = 2; i < process.argv.length; i++) {
     const name = process.argv[i]
     if (name === '--seed-file') {
+      parts.push(name, '<seed-file>')
       i += 1
       continue
     }
@@ -1422,6 +1423,7 @@ async function main () {
   const started = await readVersion(true)
   const head = git(['rev-parse', 'HEAD'])
   if (options.send && git(['status', '--porcelain']) !== '') throw new Error('the working tree is not clean, so the run would not belong to a commit')
+  assertModuleCopy()
   emit({ step: 'version', asset: null, ok: true, commit: started.commit, startedAt: started.startedAt })
 
   const wdk = new WDK(seed)

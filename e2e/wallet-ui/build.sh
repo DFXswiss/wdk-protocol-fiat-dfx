@@ -34,6 +34,7 @@ if [[ -n "$(git -C "$MODULE" status --porcelain)" ]]; then
   echo "the module working tree is not clean" >&2
   exit 1
 fi
+module_head="$(git -C "$MODULE" rev-parse HEAD)"
 
 git clone --quiet https://github.com/tetherto/wdk-starter-react-native.git "$STARTER"
 git -C "$STARTER" checkout --detach "$STARTER_COMMIT"
@@ -131,7 +132,6 @@ if [[ ! -f "$bundle" ]]; then
   exit 1
 fi
 
-module_head="$(git -C "$MODULE" rev-parse HEAD)"
 # expo prebuild does not change HEAD. This still checks the checkout commit.
 starter_head="$(git -C "$STARTER" rev-parse HEAD)"
 if [[ "$starter_head" != "$STARTER_COMMIT" ]]; then
@@ -145,6 +145,10 @@ rm -f "$ROOT/out/build.json"
 module_status="$(git -C "$MODULE" status --porcelain)"
 if [[ -n "$module_status" ]]; then
   echo "the module tree changed during the build" >&2
+  exit 1
+fi
+if [[ "$(git -C "$MODULE" rev-parse HEAD)" != "$module_head" ]]; then
+  echo "the module HEAD changed during the build" >&2
   exit 1
 fi
 cat > "$ROOT/out/build.json" <<EOF

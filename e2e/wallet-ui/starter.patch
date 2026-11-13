@@ -158,10 +158,10 @@ index 0000000..ec2d8fa
 +}
 diff --git a/src/app/sell/index.tsx b/src/app/sell/index.tsx
 new file mode 100644
-index 0000000..a59db62
+index 0000000..9a87fb2
 --- /dev/null
 +++ b/src/app/sell/index.tsx
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,94 @@
 +import React, { useEffect, useRef, useState } from 'react';
 +import { View } from 'react-native';
 +import { useRouter } from 'expo-router';
@@ -241,11 +241,10 @@ index 0000000..a59db62
 +      <ScreenHeader title="Sell" onBack={done} />
 +      <View style={{ flex: 1 }}>
 +        {error ? (
-+          <Text testID="sell-error" variant="body" color="error">{error}</Text>
++          <Text variant="body" color="error">{error}</Text>
 +        ) : null}
 +        {sellUrl ? (
 +          <WebView
-+            testID="sell-webview"
 +            source={{ uri: sellUrl }}
 +            style={{ flex: 1 }}
 +          />

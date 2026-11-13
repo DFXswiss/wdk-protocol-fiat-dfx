@@ -530,6 +530,7 @@ async function preflight (options) {
     throw new NotRunError('not run: git failed')
   }
   if (porcelain !== '') throw new NotRunError('not run: the module working tree is not clean')
+  assertModuleCopy()
   const build = readBuild()
   if (build.moduleHead !== moduleHead) throw new NotRunError('not run: out/build.json moduleHead is not HEAD')
   let patchSha
@@ -550,6 +551,7 @@ async function preflight (options) {
     throw new NotRunError('not run: maestro is not callable')
   }
   if (!maestroVersion) throw new NotRunError('not run: maestro did not report a version')
+  if (!/^2\.10\.\d+$/.test(maestroVersion)) throw new NotRunError(`not run: maestro 2.10 is required, found ${maestroVersion}`)
   try {
     const simctl = captureSync('xcrun', ['--find', 'simctl'])
     if (simctl.code !== 0 || simctl.stdout.trim() === '') throw new Error()
@@ -1387,7 +1389,6 @@ async function writeFail (error) {
 
 async function main () {
   const options = parseArgs(process.argv.slice(2))
-  assertModuleCopy()
   state.options = options
   state.udid = options.udid
   if (options.screenshots) prepareScreenshots(options.screenshots)

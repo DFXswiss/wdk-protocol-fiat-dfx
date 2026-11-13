@@ -79,6 +79,8 @@ node real-sell.mjs --seed-file /path/to/seed.txt --send --confirm --follow 30 \
 
 Real Base purchase against production. The script quotes, and with `--confirm` writes a buy URL to `--url-file` and waits for the payout. The bank transfer is manual. No wallet user interface confirms the transaction. `--confirm` also requires `--screenshots` and `--record <file>`. `--lock <dir>` is optional. `--account` is `smart` or `eoa` (default `smart`). Only USDC. `--rpc` defaults to `https://mainnet.base.org`.
 
+`--screenshots` must be a non-symlink directory owned by the current user with mode `0700`; it is created if missing.
+
 `--seed-file` is required. `--index` defaults to 0 and accepts integers from 0 to 2147483647; `--asset` defaults to `USDC` and only accepts `USDC`. `--amount` defaults to 15 EUR and must be positive with at most two decimal places. `--wait-minutes` defaults to 240 and accepts integers from 1 to 10080. `--out <file>` optionally writes the log to a new file with owner-only permissions; `--explorer <origin>` defaults to `https://base.blockscout.com` and must be an HTTP or HTTPS origin without credentials. `--url-file` is required with `--confirm`.
 
 For either script, a `--follow` or `--wait-minutes` period that outlasts the widget session ends in failure because the reads do not renew that session.
