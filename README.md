@@ -78,7 +78,7 @@ no user-supplied environment variables and run in `npm run test:coverage`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `environment` | `'production'` | `'sandbox'` selects sandbox, `'local'` selects local; otherwise production is used |
+| `environment` | `'production'` | Accepts `'production'`, `'sandbox'` or `'local'`; any other value throws `ValueError` |
 | `apiUrl` | unset | Required only in local: HTTP(S) origin with host `localhost`, `127.0.0.1` or `[::1]`, without credentials, query or fragment; an optional `/` path is allowed |
 | `appUrl` | unset | Required only in local: HTTP(S) origin with host `localhost`, `127.0.0.1` or `[::1]`, without credentials, query or fragment; an optional `/` path is allowed |
 | `wallet` | unset | Partner identifier supplied by the integrating wallet developer; forwarded to both quotes and authentication |

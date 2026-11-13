@@ -8,6 +8,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- Reject unknown `environment` values with `ValueError` instead of selecting production.
 - All eight WDK fiat methods for the DFX production, sandbox and local environments.
 - Support a local DFX API and widget through `environment: 'local'` and required loopback origins, with the `[loc]_` sign-in challenge prefix.
 - Reject a DFX sign-in challenge unless it is exactly the environment prefix, the fixed DFX ownership sentence, and the address sent in the request. Production uses an empty prefix; sandbox uses `[dev]_`. A mismatch is rejected before the account signs and before `POST /v1/auth`.
