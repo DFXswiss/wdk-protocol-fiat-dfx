@@ -250,6 +250,7 @@ export default class DfxProtocol extends FiatProtocol {
      * @param {Object} [options] - Selects lookup by DFX transaction UID or wallet-assigned external transaction ID (default: `{}`).
      * @param {'uid' | 'externalTransactionId'} [options.idType] - Identifier type; defaults to uid.
      * @returns {Promise<FiatTransactionDetail>} Normalized transaction status and asset codes.
+     * @throws {ValueError} If idType is neither uid nor externalTransactionId.
      * @throws {ValueError} If the UID is empty or whitespace-only.
      * @throws {ValueError} If externalTransactionId is not 1–256 characters from A-Z, a-z, 0-9, dot, underscore, colon and hyphen.
      * @throws {ValueError} If the identifier is rejected by DFX.

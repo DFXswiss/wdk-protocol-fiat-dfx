@@ -1958,6 +1958,12 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       expectInteractions([])
     })
 
+    test.each(['foo', 'UID', null, 42])('rejects invalid idType before HTTP %#', async ID_TYPE => {
+      const { protocol } = setup()
+      await failure(protocol.getTransactionDetail('123', { idType: ID_TYPE }), ValueError, "idType must be 'uid' or 'externalTransactionId'")
+      expectInteractions([])
+    })
+
     test.each(EXTERNAL_IDS)('looks up allowed external ID %# unchanged', async (ID, EXPECTED_ID) => {
       const PATH = `/v1/transaction/detail/single?external-id=${EXPECTED_ID}`
       const { protocol } = setup({}, { [`GET ${PATH}`]: response(DUMMY_DETAIL) })

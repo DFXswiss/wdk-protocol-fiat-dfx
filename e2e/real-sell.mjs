@@ -1164,9 +1164,9 @@ async function checkSafePrefund (account, recipient, cases) {
         ? await account.quoteTransfer({ token: USDT, recipient, amount: spec.amount })
         : await account.quoteSendTransaction({ to: recipient, value: spec.amount })
       if (typeof quote?.fee !== 'bigint' || quote.fee < 0n) throw new Error('WDK quote fee was not a non-negative bigint')
-      if (quote.fee > prefund) prefund = quote.fee
+      prefund += quote.fee
     }
-    if (prefund > SAFE_GAS) throw new Error(`Safe gas reserve ${SAFE_GAS} wei is below the largest bundler prefund ${prefund} wei`)
+    if (prefund > SAFE_GAS) throw new Error(`Safe gas reserve ${SAFE_GAS} wei is below the summed bundler prefund ${prefund} wei`)
     emit({ step: 'safe-prefund', asset: null, ok: true, reserve: SAFE_GAS, prefund })
   } catch (error) {
     emit({ step: 'safe-prefund', asset: null, ok: false, reserve: SAFE_GAS, prefund })
