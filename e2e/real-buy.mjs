@@ -149,7 +149,7 @@ function invocation () {
   for (let i = 2; i < process.argv.length; i++) {
     const name = process.argv[i]
     if (name === '--seed-file' || name === '--url-file') { parts.push(name, name === '--seed-file' ? '<seed-file>' : '<url-file>'); i++; continue }
-    if (name === '--rpc') { parts.push(name, new URL(process.argv[++i]).origin); continue }
+    if (name === '--rpc') { parts.push(name, '<rpc>'); i++; continue }
     parts.push(name)
   }
   return parts.join(' ')
