@@ -61,7 +61,7 @@ From `e2e/`:
 node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid>
 ```
 
-That is the preflight. It does not paste the seed, does not start Maestro against the app, does not send, and writes no record. It requires the booted simulator to use iOS 26.5 and Maestro 2.10. Exit 0 means the tree, the installed build, the simulator, Maestro, the sandbox version, and the account balance are ready. The account needs at least 1 USDT and 0.0002 ETH. The build checks that the starter's configured Ethereum provider reports the Sepolia chain ID before building. Preflight compares the installed module copy with the working tree right after it reads HEAD and checks that the tree is clean.
+That is the preflight. It does not paste the seed, does not start Maestro against the app, does not send, and writes no record. It requires the booted simulator to use iOS 26.5 and Maestro 2.10. Exit 0 means the tree, the installed sale build, the simulator, Maestro, the sandbox version, and the account balance are ready. The account needs at least 1 USDT and 0.0002 ETH. The build checks that the starter's configured Ethereum provider reports the Sepolia chain ID before building. Preflight compares the installed module copy with the working tree right after it reads HEAD and checks that the tree is clean.
 
 ```sh
 node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid> \
@@ -80,7 +80,7 @@ The seed file is given to the simulator clipboard through a file descriptor. The
 
 ## Traps
 
-The flows are `flow/sell-1-widget.yaml`, `flow/sell-2-send.yaml`, and `flow/cleanup.yaml`.
+The send and cleanup flows are `flow/sell-1-widget.yaml`, `flow/sell-2-send.yaml`, and `flow/cleanup.yaml`. The handbook flows are `flow/handbook-1-wallet.yaml` and `flow/handbook-2-review.yaml`.
 
 The flows are inputs of `run-sale.mjs` and are not meant to be started on their own. A flow started directly with Maestro can send without the runner's switches, lock, checks, cleanup and record; such a run proves nothing and is not recorded.
 

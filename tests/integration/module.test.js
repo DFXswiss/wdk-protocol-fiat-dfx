@@ -260,7 +260,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
         }
       })
 
-      const late = protocol.getTransactionDetail(UID).catch(error => error)
+      const late = Promise.allSettled([protocol.getTransactionDetail(UID)])
       await delayed
       let renewed
       try {
@@ -268,12 +268,17 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       } finally {
         releaseDelayed()
       }
-      const error = await late
+      const [lateResult] = await late
       const cached = await protocol.getTransactionDetail(UID)
 
       expect(renewed).toEqual(EXPECTED_DETAIL)
-      if (attempt === 1) expect(error).toEqual(EXPECTED_DETAIL)
-      else await failure(Promise.reject(error), ProviderError, 'Unauthorized', 'UNAUTHORIZED')
+      if (attempt === 1) {
+        expect(lateResult.status).toBe('fulfilled')
+        expect(lateResult.value).toEqual(EXPECTED_DETAIL)
+      } else {
+        expect(lateResult.status).toBe('rejected')
+        await failure(Promise.reject(lateResult.reason), ProviderError, 'Unauthorized', 'UNAUTHORIZED')
+      }
       expect(cached).toEqual(EXPECTED_DETAIL)
       expect(tracked.messages).toEqual(Array.from({ length: attempt + 1 }, () => MESSAGE))
       const freshDetail = httpRequest(`/v1/transaction/detail/single?uid=${UID}`, 'GET', undefined, expectedToken, 'sandbox')
@@ -289,15 +294,16 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       await resetServer({ auth: 'unauthorized', completedDetail: true })
       const { protocol, requests, tracked } = await trackedProtocol()
 
-      const errors = await Promise.all([
-        protocol.getTransactionDetail(UID).catch(error => error),
-        protocol.getTransactionDetail(UID).catch(error => error)
+      const results = await Promise.allSettled([
+        protocol.getTransactionDetail(UID),
+        protocol.getTransactionDetail(UID)
       ])
       const next = await protocol.getTransactionDetail(UID)
       const cached = await protocol.getTransactionDetail(UID)
 
-      await failure(Promise.reject(errors[0]), ProviderError, 'Invalid signature', 'UNAUTHORIZED')
-      expect(errors[1]).toBe(errors[0])
+      expect(results.map(result => result.status)).toEqual(['rejected', 'rejected'])
+      await failure(Promise.reject(results[0].reason), ProviderError, 'Invalid signature', 'UNAUTHORIZED')
+      expect(results[1].reason).toBe(results[0].reason)
       expect(next).toEqual(EXPECTED_DETAIL)
       expect(cached).toEqual(EXPECTED_DETAIL)
       expect(tracked.messages).toEqual([MESSAGE, MESSAGE])
@@ -341,7 +347,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       const initial = await protocol.getTransactionDetail(UID)
       rejectedToken = `Bearer ${DUMMY_TOKEN}`
       hold = true
-      const late = protocol.getTransactionDetail(UID).catch(error => error)
+      const late = Promise.allSettled([protocol.getTransactionDetail(UID)])
       await held
       let second
       let third
@@ -353,13 +359,14 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       } finally {
         release()
       }
-      const error = await late
+      const [lateResult] = await late
       const next = await protocol.getTransactionDetail(UID)
 
       expect(initial).toEqual(EXPECTED_DETAIL)
       expect(second).toEqual(EXPECTED_DETAIL)
       expect(third).toEqual(EXPECTED_DETAIL)
-      await failure(Promise.reject(error), ProviderError, 'Expired detail session', 'UNAUTHORIZED')
+      expect(lateResult.status).toBe('rejected')
+      await failure(Promise.reject(lateResult.reason), ProviderError, 'Expired detail session', 'UNAUTHORIZED')
       expect(next).toEqual(EXPECTED_DETAIL)
       expect(tracked.messages).toEqual([MESSAGE, MESSAGE, MESSAGE, MESSAGE])
       expectRequests(requests, expectedRequests)
@@ -369,10 +376,11 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       await resetServer({ expireDetails: 2, completedDetail: true })
       const { protocol, requests, tracked } = await trackedProtocol()
 
-      const error = await protocol.getTransactionDetail(UID).catch(error => error)
+      const failedDetail = protocol.getTransactionDetail(UID)
+      await expect(failedDetail).rejects.toHaveProperty('constructor', ProviderError)
+      await expect(failedDetail).rejects.toMatchObject({ message: 'Unauthorized', reason: 'UNAUTHORIZED' })
       const result = await protocol.getTransactionDetail(UID)
 
-      await failure(Promise.reject(error), ProviderError, 'Unauthorized', 'UNAUTHORIZED')
       expect(result).toEqual(EXPECTED_DETAIL)
       expect(tracked.messages).toEqual([MESSAGE, MESSAGE, MESSAGE])
       expectRequests(requests, [
@@ -389,11 +397,14 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       const failedPath = `/v1/transaction/detail/single?uid=${unknown}`
       const { protocol, requests, tracked } = await trackedProtocol()
 
-      const error = await protocol.getTransactionDetail(unknown).catch(error => error)
-      const next = await protocol.getTransactionDetail(UID).catch(error => error)
-
-      await failure(Promise.reject(error), ProviderError, `Unrecorded DFX request: GET ${failedPath} body=null`, 'INTERNAL_SERVER_ERROR')
-      await failure(Promise.reject(next), NoSuchElementError, 'Transaction not found')
+      const failedDetail = protocol.getTransactionDetail(unknown)
+      await expect(failedDetail).rejects.toHaveProperty('constructor', ProviderError)
+      await expect(failedDetail).rejects.toMatchObject({ message: `Unrecorded DFX request: GET ${failedPath} body=null`, reason: 'INTERNAL_SERVER_ERROR' })
+      const next = protocol.getTransactionDetail(UID)
+      const error = await next.then(() => { throw new Error('expected a rejection') }, reason => reason)
+      expect(error?.constructor).toBe(NoSuchElementError)
+      expect(error?.message).toBe('Transaction not found')
+      expect(error?.reason).toBe(undefined)
       expect(tracked.messages).toEqual([MESSAGE, MESSAGE])
       expectRequests(requests, [
         CHALLENGE, AUTH, httpRequest(failedPath, 'GET', undefined, DUMMY_TOKEN, 'sandbox'),
@@ -421,11 +432,12 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       })
 
       const initial = await protocol.getTransactionDetail(UID)
-      const error = await protocol.buy(OPTIONS).catch(error => error)
+      const failedBuy = protocol.buy(OPTIONS)
+      await expect(failedBuy).rejects.toHaveProperty('constructor', ProviderError)
+      await expect(failedBuy).rejects.toMatchObject({ message: 'Widget login failed', reason: 'UNAUTHORIZED' })
       const result = await protocol.getTransactionDetail(UID)
 
       expect(initial).toEqual(EXPECTED_DETAIL)
-      await failure(Promise.reject(error), ProviderError, 'Widget login failed', 'UNAUTHORIZED')
       expect(result).toEqual(EXPECTED_DETAIL)
       expect(authResponses).toEqual([
         { status: 201, body: { accessToken: DUMMY_TOKEN } },
@@ -461,12 +473,16 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       })
 
       const initial = await protocol.getTransactionDetail(UID)
-      const widget = await protocol[method](OPTIONS).catch(error => error)
+      const widget = fail ? undefined : await protocol[method](OPTIONS)
+      if (fail) {
+        const failedWidget = protocol[method](OPTIONS)
+        await expect(failedWidget).rejects.toHaveProperty('constructor', ProviderError)
+        await expect(failedWidget).rejects.toMatchObject({ message: 'Widget login failed', reason: 'UNAUTHORIZED' })
+      }
       const cached = await protocol.getTransactionDetail(UID)
 
       expect(initial).toEqual(EXPECTED_DETAIL)
-      if (fail) await failure(Promise.reject(widget), ProviderError, 'Widget login failed', 'UNAUTHORIZED')
-      else expect(widget).toEqual(expectedWidget)
+      if (!fail) expect(widget).toEqual(expectedWidget)
       expect(cached).toEqual(EXPECTED_DETAIL)
       expect(tracked.messages).toEqual([MESSAGE, MESSAGE])
       expectRequests(requests, expectedRequests)

@@ -621,8 +621,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       const { protocol } = setup({ network: 'ethereum' })
       const accountMock = ACCOUNT_OPERATION === 'sign' ? signMock : getAddressMock
       accountMock.mockRejectedValue(DUMMY_CAUSE)
-      const error = await protocol[CASE_METHOD](CASE_METHOD === 'getTransactionDetail' ? '123' : OPTIONS).catch(error => error)
-      expect(error).toBe(DUMMY_CAUSE)
+      await expect(protocol[CASE_METHOD](CASE_METHOD === 'getTransactionDetail' ? '123' : OPTIONS)).rejects.toBe(DUMMY_CAUSE)
       expectInteractions([
         ...(CASE_METHOD === 'getTransactionDetail' ? [] : CATALOG_REQUESTS),
         ...(ACCOUNT_OPERATION === 'sign' ? [CHALLENGE_REQUEST] : [])
@@ -1654,14 +1653,14 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       const { protocol } = setup()
       signMock.mockRejectedValue(CAUSE)
 
-      const errors = await Promise.all([
-        protocol.getTransactionDetail('123').catch(error => error),
-        protocol.getTransactionDetail('123').catch(error => error)
+      const results = await Promise.allSettled([
+        protocol.getTransactionDetail('123'),
+        protocol.getTransactionDetail('123')
       ])
-
-      await failure(Promise.reject(errors[0]), ProviderError, 'DFX account authentication failed', 'UNAUTHORIZED')
-      expect(errors[0].cause).toBe(CAUSE)
-      expect(errors[1]).toBe(errors[0])
+      expect(results.map(result => result.status)).toEqual(['rejected', 'rejected'])
+      await failure(Promise.reject(results[0].reason), ProviderError, 'DFX account authentication failed', 'UNAUTHORIZED')
+      expect(results[0].reason.cause).toBe(CAUSE)
+      expect(results[1].reason).toBe(results[0].reason)
       expectInteractions(EXPECTED_REQUESTS, [[challengeMessage(DUMMY_ADDRESS)]], [[]])
     })
 

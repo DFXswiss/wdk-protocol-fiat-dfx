@@ -47,4 +47,4 @@ This screen comes from the starter wallet and appears after sending in the sale 
 - **Sell widget:** `run-sale.mjs --send --confirm --screenshots` during the real sale of 2026-11-13 at module commit 320d669 (Sepolia transaction 0x4a2f…e822), on the bank step before an IBAN was entered.
 - **Send success:** `run-sale.mjs --send --confirm --screenshots` during the same real sale, after the one tap on Confirm.
 
-Each image passed the [redaction check](redaction.json). The coverage test checks each image against its current redaction record; OCR and QR scanning run separately with `npm run handbook:redaction`.
+Each image passed the [redaction check](redaction.json). The coverage test checks images and the token allowlist against their records; CI also runs OCR and QR scanning against the per-image word allowlist.

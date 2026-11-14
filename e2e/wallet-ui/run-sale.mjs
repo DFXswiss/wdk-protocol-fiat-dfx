@@ -553,6 +553,7 @@ async function preflight (options) {
   assertModuleCopy()
   const build = readBuild()
   if (options.send && build.variant !== 'sale') throw new NotRunError('not run: sending requires a sale build')
+  if (!options.send && !options.handbookShots && build.variant !== 'sale') throw new NotRunError('not run: the installed build is not a sale build')
   if (options.handbookShots && !['before', 'sale'].includes(build.variant)) throw new NotRunError('not run: handbook capture requires a known build variant')
   if (options.handbookShots && build.variant === 'before' && build.beforePatchSha256 !== sha256File(join(flowDir, '..', 'handbook-before.patch'))) throw new NotRunError('not run: before patch does not match build')
   if (build.moduleHead !== moduleHead) throw new NotRunError('not run: out/build.json moduleHead is not HEAD')

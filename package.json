@@ -26,6 +26,7 @@
     "handbook:build": "node scripts/handbook/build.mjs",
     "handbook:check": "node scripts/handbook/build.mjs --check",
     "handbook:redaction": "node scripts/handbook/redaction.mjs",
+    "handbook:redaction:check": "node scripts/handbook/redaction.mjs --check",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config jest.coverage.config.js --coverage --runInBand",
     "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config tests/integration/jest.config.js --runInBand"
