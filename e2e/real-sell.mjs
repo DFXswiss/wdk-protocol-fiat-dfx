@@ -1570,9 +1570,11 @@ try {
 } finally {
   if (state.browser) await state.browser.close().catch(() => {})
   state.provider?.destroy()
-  if (state.out) await state.out.close().catch(() => {})
   releaseLocks(error => {
-    console.error(`real-sell failed: ${redact(error.message)}`)
+    const message = redact(error.message)
+    console.error(`real-sell failed: ${message}`)
     if (!process.exitCode) process.exitCode = 1
+    try { emit({ step: 'error', ok: false, error: message, exitCode: process.exitCode }) } catch {}
   })
+  if (state.out) await state.out.close().catch(() => {})
 }
