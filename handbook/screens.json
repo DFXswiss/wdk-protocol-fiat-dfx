@@ -1,0 +1,14 @@
+{
+  "screens": [
+    { "id": "wallet-tab", "title": "Wallet", "kind": "changed", "before": "before-wallet.png", "after": "after-wallet.png", "text": "The wallet tab shows balances and actions. The added Sell button opens the sell page; Send opens the send flow.", "source": "`run-sale.mjs --handbook-shots` on the `before` and `sale` builds of `e2e/wallet-ui/build.sh` at module commit e40665b, on 2026-11-13; nothing was sent." },
+    { "id": "send-review", "title": "Send review", "kind": "changed", "before": "before-review.png", "after": "after-review.png", "text": "The review shows a 1 USDT send on Ethereum (Sepolia), its recipient, network fee and total. Previously the fee was shown in USDT and included in the total; the updated review shows the fee in ETH and excludes it from the USDT total. Confirm sends the transaction.", "source": "`run-sale.mjs --handbook-shots` on the `before` and `sale` builds at module commit e40665b, on 2026-11-13, with recipient 0x000000000000000000000000000000000000dEaD; the flow stops at the review and nothing was sent." },
+    { "id": "sell-widget", "title": "Sell widget", "kind": "new", "after": "after-sell-widget.png", "text": "The Sell page opens the DFX widget with 1 USDT selected. On the bank step, the user can add or select an IBAN; Done returns to the wallet.", "source": "`run-sale.mjs --send --confirm --screenshots` during the real sale of 2026-11-13 at module commit 320d669 (Sepolia transaction 0x4a2f…e822), on the bank step before an IBAN was entered." },
+    { "id": "send-success", "title": "Send success", "kind": "flow", "after": "after-send-success.png", "text": "This screen comes from the starter wallet and appears after sending in the sale flow, showing a shortened transaction hash.", "source": "`run-sale.mjs --send --confirm --screenshots` during the same real sale, after the one tap on Confirm." }
+  ],
+  "gaps": [
+    { "screen": "Sell", "state": "Opening sell", "reason": "The loading state is transient and is replaced by the widget." },
+    { "screen": "Sell", "state": "Error", "reason": "A failed sell() call or missing sell URL produces an error; these states cannot be induced in the real run without falsification." },
+    { "screen": "Sell widget", "state": "IBAN entry and Payment Information", "reason": "These steps expose the payout IBAN alongside the deposit address." },
+    { "screen": "Send review", "state": "Other Ethereum tokens", "reason": "The fee display change also applies to other non-native Ethereum tokens; only USDT is captured." }
+  ]
+}

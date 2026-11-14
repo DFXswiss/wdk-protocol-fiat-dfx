@@ -1,0 +1,660 @@
+diff --git a/package.json b/package.json
+index a5830c1..9e432ac 100644
+--- a/package.json
++++ b/package.json
+@@ -14,6 +14,7 @@
+   },
+   "dependencies": {
+     "@buildonspark/spark-frost-bare-addon": "^0.0.12",
++    "@dfx.swiss/wdk-protocol-fiat-dfx": "file:../../..",
+     "@ledgerhq/ledger-bitcoin": "^0.3.1",
+     "@react-native-google-signin/google-signin": "^16.1.2",
+     "@react-navigation/native": "^7.3.3",
+@@ -21,6 +22,7 @@
+     "@tetherto/wdk": "^1.0.0-beta.5",
+     "@tetherto/wdk-backup-cloud": "1.0.0-beta.1",
+     "@tetherto/wdk-react-native-core": "1.0.0-beta.17",
++    "@tetherto/wdk-wallet-evm": "1.0.0-beta.17",
+     "@tetherto/wdk-wallet-evm-7702-gasless": "1.0.0-beta.5",
+     "@tetherto/wdk-utils": "^1.0.0-beta.7",
+     "@tetherto/wdk-wallet-btc": "^1.0.0-beta.8",
+diff --git a/src/app/(app)/(tabs)/wallet.tsx b/src/app/(app)/(tabs)/wallet.tsx
+index af4a294..b51aec3 100644
+--- a/src/app/(app)/(tabs)/wallet.tsx
++++ b/src/app/(app)/(tabs)/wallet.tsx
+@@ -7,6 +7,7 @@ import {
+   ArrowUpRight,
+   ArrowDownLeft,
+   ArrowLeftRight,
++  Banknote,
+   CreditCard,
+   RefreshCw,
+ } from 'lucide-react-native';
+@@ -144,12 +145,22 @@ export default function WalletHome() {
+ 
+         {/* Action row: Send / Receive / Swap / Buy */}
+         <View style={{ flexDirection: 'row', gap: 10, marginVertical: moderateScale(8) }}>
+-          <ActionButton icon={<ArrowUpRight size={moderateScale(20)} color={theme.colors.textPrimary} />} label="Send" onPress={() => router.push('/send')} />
++          <ActionButton testID="send-entry" icon={<ArrowUpRight size={moderateScale(20)} color={theme.colors.textPrimary} />} label="Send" onPress={() => router.push('/send')} />
+           <ActionButton icon={<ArrowDownLeft size={moderateScale(20)} color={theme.colors.textPrimary} />} label="Receive" onPress={() => router.push('/receive')} />
+           <ActionButton icon={<ArrowLeftRight size={moderateScale(20)} color={theme.colors.textSecondary} />} label="Swap" onPress={() => comingSoon('Swap')} disabled />
+           <ActionButton icon={<CreditCard size={moderateScale(20)} color={theme.colors.textSecondary} />} label="Buy" onPress={() => comingSoon('Buy')} disabled />
+         </View>
+ 
++        {/* Own row so the four existing actions keep their width. */}
++        <View style={{ marginTop: 10 }}>
++          <ActionButton
++            testID="sell-entry"
++            icon={<Banknote size={moderateScale(20)} color={theme.colors.textPrimary} />}
++            label="Sell"
++            onPress={() => router.push('/sell')}
++          />
++        </View>
++
+         {/* Tokens */}
+         <Text variant="label" style={{ marginBottom: 4, fontWeight:'bold', marginTop:10 }}>Tokens</Text>
+         <View>
+@@ -185,16 +196,19 @@ function ActionButton({
+   label,
+   onPress,
+   disabled,
++  testID,
+ }: {
+   icon: React.ReactNode;
+   label: string;
+   onPress: () => void;
+   disabled?: boolean;
++  testID?: string;
+ }) {
+   const theme = useTheme();
+   const { moderateScale } = useResponsive();
+   return (
+     <Pressable
++      testID={testID}
+       onPress={onPress}
+       style={{
+         flex: 1,
+diff --git a/src/app/(onboarding)/import.tsx b/src/app/(onboarding)/import.tsx
+index 032c326..1b131f3 100644
+--- a/src/app/(onboarding)/import.tsx
++++ b/src/app/(onboarding)/import.tsx
+@@ -56,7 +56,7 @@ export default function Import() {
+         <Pill label="24 words" active={wordCount === 24} onPress={() => setWordCount(24)} />
+       </View>
+ 
+-      <SeedWordInputGrid count={wordCount} words={words} onChangeWords={setWords} />
++      <SeedWordInputGrid count={wordCount} words={words} onChangeWords={setWords} testID="import-seed" />
+ 
+       {error ? (
+         <Text variant="small" color="error" style={{ marginBottom: 8 }}>{error}</Text>
+@@ -64,6 +64,7 @@ export default function Import() {
+ 
+       <View style={{ marginTop: 'auto' }}>
+         <Button
++          testID="import-submit"
+           label="Import wallet"
+           onPress={onImport}
+           loading={busy}
+diff --git a/src/app/(onboarding)/password.tsx b/src/app/(onboarding)/password.tsx
+index 5a86f1f..3c8a112 100644
+--- a/src/app/(onboarding)/password.tsx
++++ b/src/app/(onboarding)/password.tsx
+@@ -68,6 +68,7 @@ export default function Password() {
+       </Text>
+ 
+       <TextField
++        testID="password-input"
+         label="Password"
+         placeholder="Enter password"
+         secureTextEntry
+@@ -76,6 +77,7 @@ export default function Password() {
+         onChangeText={setPassword}
+       />
+       <TextField
++        testID="password-confirm"
+         label="Confirm password"
+         placeholder="Re-enter password"
+         secureTextEntry
+@@ -87,6 +89,7 @@ export default function Password() {
+ 
+       <View style={{ marginTop: 'auto' }}>
+         <Button
++          testID="password-submit"
+           label="Continue"
+           onPress={onContinue}
+           loading={busy}
+diff --git a/src/app/_layout.tsx b/src/app/_layout.tsx
+index ba3ee94..a443770 100644
+--- a/src/app/_layout.tsx
++++ b/src/app/_layout.tsx
+@@ -40,6 +40,7 @@ function RootStack() {
+       <Stack.Screen name="(app)" />
+       <Stack.Screen name="unlock" />
+       <Stack.Screen name="send" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
++      <Stack.Screen name="sell" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+       <Stack.Screen name="receive" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+       <Stack.Screen name="accounts" />
+       <Stack.Screen name="tx" />
+diff --git a/src/app/sell/_layout.tsx b/src/app/sell/_layout.tsx
+new file mode 100644
+index 0000000..ec2d8fa
+--- /dev/null
++++ b/src/app/sell/_layout.tsx
+@@ -0,0 +1,15 @@
++import { Stack } from 'expo-router';
++import { Toast } from '@/components';
++
++/**
++ * Same modal toast mount as send and receive. Sell is a full-screen modal,
++ * so a toast from the root layer would render behind it.
++ */
++export default function SellLayout() {
++  return (
++    <>
++      <Stack screenOptions={{ headerShown: false }} />
++      <Toast />
++    </>
++  );
++}
+diff --git a/src/app/sell/index.tsx b/src/app/sell/index.tsx
+new file mode 100644
+index 0000000..9a87fb2
+--- /dev/null
++++ b/src/app/sell/index.tsx
+@@ -0,0 +1,94 @@
++import React, { useEffect, useRef, useState } from 'react';
++import { View } from 'react-native';
++import { useRouter } from 'expo-router';
++import { WebView } from 'react-native-webview';
++import { useAccount, useProtocol } from '@tetherto/wdk-react-native-core';
++import { Screen, ScreenHeader, Text, Button, LoadingState } from '@/components';
++import { useAccounts } from '@/state/accounts';
++
++/**
++ * 1 USDT in base units (6 decimals). Passed as a number because the worklet
++ * bridge serializes bigint as a string, and the fiat module rejects a string
++ * amount. 1000000 is a safe integer.
++ */
++const ONE_USDT_BASE_UNITS = 1000000;
++
++type SellCaller = {
++  sell: (options: {
++    cryptoAsset: string;
++    fiatCurrency: string;
++    cryptoAmount: number;
++    config?: { network?: string };
++  }) => Promise<{ sellUrl?: string } | undefined>;
++};
++
++function sellErrorText(error: unknown): string {
++  let message = '';
++  if (error instanceof Error) message = error.message;
++  else if (typeof error === 'string') message = error;
++  else if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
++    message = error.message;
++  }
++  const trimmed = message.trim();
++  if (!trimmed || /session=/i.test(trimmed) || /https?:\/\//i.test(trimmed)) return 'Sell failed';
++  return trimmed;
++}
++
++export default function SellScreen() {
++  const router = useRouter();
++  const activeIndex = useAccounts((s) => s.activeIndex);
++  const wallet = useAccount({ network: 'ethereum', accountIndex: activeIndex });
++  const dfx = useProtocol<SellCaller>({
++    network: 'ethereum',
++    accountIndex: activeIndex,
++    protocolType: 'fiat',
++    protocolName: 'dfx',
++  });
++  const started = useRef(false);
++  const [sellUrl, setSellUrl] = useState<string | null>(null);
++  const [error, setError] = useState<string | null>(null);
++
++  useEffect(() => {
++    if (!wallet.address || started.current) return;
++    started.current = true;
++    dfx.sell({
++      cryptoAsset: 'USDT',
++      fiatCurrency: 'EUR',
++      cryptoAmount: ONE_USDT_BASE_UNITS,
++      config: { network: 'Sepolia' },
++    }).then((result) => {
++      const url = typeof result?.sellUrl === 'string' ? result.sellUrl : '';
++      if (!url) {
++        setError('Sell returned no URL');
++        return;
++      }
++      setSellUrl(url);
++    }).catch((caught: unknown) => {
++      setError(sellErrorText(caught));
++    });
++  }, [wallet.address, dfx]);
++
++  const done = () => {
++    router.dismissTo('/(app)/(tabs)/wallet');
++  };
++
++  return (
++    <Screen edges={['top', 'bottom']}>
++      <ScreenHeader title="Sell" onBack={done} />
++      <View style={{ flex: 1 }}>
++        {error ? (
++          <Text variant="body" color="error">{error}</Text>
++        ) : null}
++        {sellUrl ? (
++          <WebView
++            source={{ uri: sellUrl }}
++            style={{ flex: 1 }}
++          />
++        ) : !error ? (
++          <LoadingState message="Opening sell" />
++        ) : null}
++      </View>
++      <Button testID="sell-done" label="Done" onPress={done} />
++    </Screen>
++  );
++}
+diff --git a/src/app/send/amount.tsx b/src/app/send/amount.tsx
+index 9207831..da18c1c 100644
+--- a/src/app/send/amount.tsx
++++ b/src/app/send/amount.tsx
+@@ -179,6 +179,7 @@ export default function SendAmount() {
+           </Pressable>
+         </View>
+         <TextInput
++          testID="send-recipient"
+           value={recipient}
+           onChangeText={setRecipient}
+           placeholder="Paste or enter address"
+@@ -205,6 +206,7 @@ export default function SendAmount() {
+       <Card style={{ alignItems: 'center', padding: 16 }}>
+         <Text variant="small" style={{ marginBottom: 4 }}>Amount</Text>
+         <TextInput
++          testID="send-amount"
+           value={inputText}
+           onChangeText={onChangeAmount}
+           placeholder="0"
+@@ -258,7 +260,7 @@ export default function SendAmount() {
+       </Card>
+ 
+       <View style={{ marginTop: 'auto' }}>
+-        <Button label="Review" onPress={onReview} disabled={!canReview} />
++        <Button testID="send-continue" label="Review" onPress={onReview} disabled={!canReview} />
+       </View>
+     </Screen>
+   );
+diff --git a/src/app/send/index.tsx b/src/app/send/index.tsx
+index 8ac5024..0fdf83c 100644
+--- a/src/app/send/index.tsx
++++ b/src/app/send/index.tsx
+@@ -68,6 +68,7 @@ export default function SendPick() {
+           {filtered.map((b, i) => (
+             <Pressable
+               key={b.token.id}
++              testID={b.token.id === 'usdt-ethereum' ? 'send-asset-usdt-ethereum' : undefined}
+               onPress={() => router.push(`/send/amount?tokenId=${b.token.id}`)}
+               style={{
+                 flexDirection: 'row',
+diff --git a/src/app/send/review.tsx b/src/app/send/review.tsx
+index 8dc267e..fa94179 100644
+--- a/src/app/send/review.tsx
++++ b/src/app/send/review.tsx
+@@ -33,13 +33,11 @@ function formatCryptoAmount(value: string): string {
+  *
+  * Fee copy deliberately does NOT copy the prototype's "gasless · paid in
+  * USDT" wording verbatim — that models Tron GasFree's specific mechanism
+- * (a relay that charges a fee in the token itself). This app's EVM sends use
+- * EIP-7702 sponsorship (isSponsored: true), which is genuinely different:
+- * verified directly against the SDK's own fee-calculation source that the
+- * fee defaults to a literal 0 and is only ever recalculated when NOT
+- * sponsored. So Ethereum/Arbitrum/Polygon sends here are truly free, shown
+- * as "Free · sponsored" — Bitcoin shows its real, quoted network fee, since
+- * Bitcoin has no sponsorship at all.
++ * (a relay that charges a fee in the token itself). Arbitrum and Polygon
++ * use EIP-7702 sponsorship (isSponsored: true) and show "Free · sponsored".
++ * Ethereum is a plain account: a token send's quoted fee is wei, shown in
++ * ETH, and is not added to the token total. Bitcoin shows its quoted
++ * network fee in BTC, since Bitcoin has no sponsorship at all.
+  *
+  * Account resolution: uses the person's REAL active account
+  * (useAccounts().activeIndex) and the asset's real network — this directly
+@@ -103,13 +101,18 @@ export default function SendReview() {
+   const shortRecipient = `${recipient.slice(0, 6)}...${recipient.slice(-4)}`;
+   const fiatValue = price ? new BigNumber(amount).multipliedBy(price).toFixed(2) : null;
+ 
++  // Ethereum token fees are quoted in wei. There is no native ETH asset
++  // in the catalog (6-decimal USDT must not be used). 18 is ETH's decimals.
++  const feePaidInEth = !asset.isNative() && asset.getNetwork() === 'ethereum';
+   const feeDisplay = !fee
+     ? '—'
+     : fee.isSponsored
+       ? 'Free'
+-      : `${formatCryptoAmount(new BigNumber(fee.fee).shiftedBy(-asset.getDecimals()).toFixed(asset.getDecimals()))} ${asset.getSymbol()}`;
++      : feePaidInEth
++        ? `${formatCryptoAmount(new BigNumber(fee.fee).shiftedBy(-18).toFixed(18))} ETH`
++        : `${formatCryptoAmount(new BigNumber(fee.fee).shiftedBy(-asset.getDecimals()).toFixed(asset.getDecimals()))} ${asset.getSymbol()}`;
+ 
+-  const total = fee && !fee.isSponsored
++  const total = fee && !fee.isSponsored && !feePaidInEth
+     ? new BigNumber(amount).plus(new BigNumber(fee.fee).shiftedBy(-asset.getDecimals())).toFixed(asset.getDecimals())
+     : amount;
+ 
+@@ -211,7 +214,7 @@ export default function SendReview() {
+       ) : null}
+ 
+       <View style={{ marginTop: 'auto' }}>
+-        <Button label="Confirm" onPress={onConfirm} loading={isSending} disabled={isQuoting || isSending} />
++        <Button testID="send-confirm" label="Confirm" onPress={onConfirm} loading={isSending} disabled={isQuoting || isSending} />
+       </View>
+     </Screen>
+   );
+diff --git a/src/app/send/success.tsx b/src/app/send/success.tsx
+index fa67092..e683828 100644
+--- a/src/app/send/success.tsx
++++ b/src/app/send/success.tsx
+@@ -79,6 +79,8 @@ export default function SendSuccess() {
+ 
+         {txHash ? (
+           <Pressable
++            testID="send-success-hash"
++            accessibilityLabel={txHash}
+             onPress={openExplorer}
+             style={{
+               flexDirection: 'row',
+@@ -91,7 +93,7 @@ export default function SendSuccess() {
+               backgroundColor: theme.colors.brandTint,
+             }}
+           >
+-            <Text variant="mono" mono color="textPrimary">{shortHash}</Text>
++            <Text variant="mono" mono color="textPrimary" accessibilityLabel={txHash}>{shortHash}</Text>
+             <ExternalLink size={moderateScale(14)} color={theme.colors.brand} />
+           </Pressable>
+         ) : null}
+diff --git a/src/components/Button.tsx b/src/components/Button.tsx
+index 7df45a6..3325ac5 100644
+--- a/src/components/Button.tsx
++++ b/src/components/Button.tsx
+@@ -11,9 +11,10 @@ interface ButtonProps {
+   disabled?: boolean;
+   loading?: boolean;
+   icon?: React.ReactNode;
++  testID?: string;
+ }
+ 
+-export function Button({ label, onPress, variant = 'primary', disabled, loading, icon }: ButtonProps) {
++export function Button({ label, onPress, variant = 'primary', disabled, loading, icon, testID }: ButtonProps) {
+   const theme = useTheme();
+   const { moderateScale } = useResponsive();
+ 
+@@ -31,6 +32,7 @@ export function Button({ label, onPress, variant = 'primary', disabled, loading,
+ 
+   return (
+     <Pressable
++      testID={testID}
+       accessibilityRole="button"
+       disabled={disabled || loading}
+       onPress={onPress}
+diff --git a/src/components/SeedWordInputGrid.tsx b/src/components/SeedWordInputGrid.tsx
+index 011d4f8..9643f7b 100644
+--- a/src/components/SeedWordInputGrid.tsx
++++ b/src/components/SeedWordInputGrid.tsx
+@@ -7,6 +7,8 @@ interface SeedWordInputGridProps {
+   count: 12 | 24;
+   words: string[];
+   onChangeWords: (words: string[]) => void;
++  /** Applied to the first word field, which accepts a pasted full phrase. */
++  testID?: string;
+ }
+ 
+ /**
+@@ -29,7 +31,7 @@ interface SeedWordInputGridProps {
+  *    box across the grid. Checking for the trailing space specifically is
+  *    what distinguishes "still typing this word" from "just finished it."
+  */
+-export function SeedWordInputGrid({ count, words, onChangeWords }: SeedWordInputGridProps) {
++export function SeedWordInputGrid({ count, words, onChangeWords, testID }: SeedWordInputGridProps) {
+   const theme = useTheme();
+   const { moderateScale } = useResponsive();
+   const inputRefs = useRef<Array<TextInput | null>>([]);
+@@ -75,6 +77,7 @@ export function SeedWordInputGrid({ count, words, onChangeWords }: SeedWordInput
+       {Array.from({ length: count }).map((_, i) => (
+         <TextInput
+           key={i}
++          testID={i === 0 ? testID : undefined}
+           ref={(el) => { inputRefs.current[i] = el; }}
+           value={words[i] ?? ''}
+           onChangeText={(text) => handleChange(i, text)}
+diff --git a/src/wdk/networks.ts b/src/wdk/networks.ts
+index 5fdb982..e92727d 100644
+--- a/src/wdk/networks.ts
++++ b/src/wdk/networks.ts
+@@ -1,5 +1,6 @@
+ import type { WdkConfigs } from '@tetherto/wdk-react-native-core';
+ import type { BtcWalletConfig } from '@tetherto/wdk-wallet-btc';
++import type { EvmWalletConfig } from '@tetherto/wdk-wallet-evm';
+ import type { Evm7702GaslessWalletConfig } from '@tetherto/wdk-wallet-evm-7702-gasless';
+ import { AppAsset, type AppAssetConfig } from './AppAsset';
+ import type { AssetIconSource } from '@/theme/assetIcons';
+@@ -94,11 +95,14 @@ export interface NetworkDefinition {
+    * own default.
+    */
+   btcNetwork?: BtcWalletConfig['network'];
+-  /** EVM networks only. */
++  /**
++   * EVM networks only. A plain account sets `provider` and leaves the
++   * bundler and paymaster unset. A gasless account sets all three.
++   */
+   evm?: {
+     provider: string | undefined;
+-    bundlerUrl: string | undefined;
+-    paymasterUrl: string | undefined;
++    bundlerUrl?: string | undefined;
++    paymasterUrl?: string | undefined;
+   };
+ 
+   // ── Display ──────────────────────────────────────────────────────────
+@@ -183,8 +187,6 @@ export const NETWORKS = [
+     kind: 'evm',
+     evm: {
+       provider: process.env.EXPO_PUBLIC_EVM_ETHEREUM_PROVIDER,
+-      bundlerUrl: process.env.EXPO_PUBLIC_EVM_ETHEREUM_BUNDLER_URL,
+-      paymasterUrl: process.env.EXPO_PUBLIC_EVM_ETHEREUM_PAYMASTER_URL,
+     },
+     displayNameBase: 'Ethereum',
+     networkLabel: process.env.EXPO_PUBLIC_EVM_ETHEREUM_NETWORK_LABEL,
+@@ -208,9 +210,9 @@ export const NETWORKS = [
+       {
+         id: 'usdt-ethereum',
+         isNative: false,
+-        // Candide's Sepolia test USDT. Swap to real mainnet USDT
++        // DFX sandbox Sepolia USDT. Swap to real mainnet USDT
+         // (0xdAC17F958D2ee523a2206206994597C13D831ec7) if repointing.
+-        address: '0xd077A400968890Eacc75cdc901F0356c943e4fDb',
++        address: '0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0',
+         symbol: 'USDT',
+         name: 'Tether USD (Sepolia testnet)',
+         decimals: 6,
+@@ -363,9 +365,10 @@ export const ASSET_MAP = new Map<string, AppAsset>(ASSETS.map((a) => [a.getId(),
+ 
+ /**
+  * The one example delegation address the WDK docs give (for
+- * "SimpleAccount"), reused across all EVM networks — an assumption based
+- * on CREATE2 deployments commonly landing at the same address per chain,
+- * not independently confirmed per chain.
++ * "SimpleAccount"), reused across the gasless EVM networks — an assumption
++ * based on CREATE2 deployments commonly landing at the same address per
++ * chain, not independently confirmed per chain. The plain Ethereum account
++ * does not use it.
+  */
+ const EVM_DELEGATION_ADDRESS =
+   process.env.EXPO_PUBLIC_EVM_DELEGATION_ADDRESS || '0xe6Cae83BdE06E4c305530e199D7217f42808555B';
+@@ -376,6 +379,19 @@ const EVM_DELEGATION_ADDRESS =
+  * what keeps RULE 1 intact while still sharing one builder across every
+  * EVM network.
+  */
++function buildPlainEvmConfig(network: string, provider: string | undefined): EvmWalletConfig {
++  if (!provider) {
++    console.warn(
++      `[wdk/networks] "${network}" is missing its provider — ` +
++        `balances and sends on this network will not work until ` +
++        `EXPO_PUBLIC_EVM_ETHEREUM_PROVIDER is set in .env.`,
++    );
++  }
++  return {
++    provider: provider || '',
++  };
++}
++
+ function buildEvmConfig(
+   network: string,
+   evm: NonNullable<NetworkDefinition['evm']>,
+@@ -422,19 +438,37 @@ function buildBitcoinConfig(
+   };
+ }
+ 
+-export const wdkConfigs: WdkConfigs<BtcWalletConfig | Evm7702GaslessWalletConfig> = {
++export const wdkConfigs: WdkConfigs<
++  BtcWalletConfig | Evm7702GaslessWalletConfig | EvmWalletConfig
++> = {
+   networks: Object.fromEntries(
+     NETWORKS.map((n) => [
+       n.network,
+       {
+         blockchain: n.network,
+         config:
+-          n.kind === 'evm'
+-            ? buildEvmConfig(n.network, n.evm!)
+-            : buildBitcoinConfig(n.btcNetwork, n.provider),
++          n.network === 'ethereum'
++            ? buildPlainEvmConfig(n.network, n.evm?.provider)
++            : n.kind === 'evm'
++              ? buildEvmConfig(n.network, n.evm!)
++              : buildBitcoinConfig(n.btcNetwork, n.provider),
+       },
+     ]),
+   ),
+-} as WdkConfigs<BtcWalletConfig | Evm7702GaslessWalletConfig>;
++  // `blockchain` is the wallet key from wdk.config.js. `config.network` is
++  // the DFX chain name, which is Sepolia while this wallet key stays ethereum.
++  // environment 'sandbox' is the module value that selects the dev hosts.
++  // The string 'dev' is not an environment and would select production.
++  protocols: {
++    dfx: {
++      protocolName: 'dfx',
++      blockchain: 'ethereum',
++      config: {
++        environment: 'sandbox',
++        network: 'Sepolia',
++      },
++    },
++  },
++} as WdkConfigs<BtcWalletConfig | Evm7702GaslessWalletConfig | EvmWalletConfig>;
+ 
+ export default wdkConfigs;
+\ No newline at end of file
+diff --git a/src/wdk/useSend.ts b/src/wdk/useSend.ts
+index 170923a..83990b1 100644
+--- a/src/wdk/useSend.ts
++++ b/src/wdk/useSend.ts
+@@ -116,14 +116,15 @@ export async function sendAsset(account: any, { assetId, to, amount }: SendParam
+ }
+ 
+ /**
+- * Estimates the fee for a send BEFORE the person confirms. For our EVM
+- * config (isSponsored: true), fee is genuinely always 0 — verified
+- * directly in the SDK's own fee-calculation source (defaults to a literal
+- * 0n, only recalculated `if (!isSponsored)`), for BOTH native sends and
+- * token transfers alike, since isSponsored is a wallet-level config, not
+- * specific to one or the other. So there's nothing to call for those —
+- * returned immediately. Bitcoin uses the same generic estimateFee() method
+- * `send` itself uses, not a chain-specific quote call.
++ * Estimates the fee for a send BEFORE the person confirms.
++ *
++ * Arbitrum and Polygon stay on the gasless wallet, so their fee is 0 and
++ * sponsored. Ethereum is a plain account: its fee is the account's quote
++ * for the same transfer `sendAsset` will send. Bitcoin keeps estimateFee.
++ *
++ * The returned fee for an Ethereum token transfer is wei, not token base
++ * units. The review screen formats it with 18 decimals and ETH, without
++ * adding it to the token total.
+  */
+ export async function quoteSendFee(
+   account: any,
+@@ -134,7 +135,8 @@ export async function quoteSendFee(
+   const asset = ASSET_MAP.get(assetId);
+   if (!asset) return { fee: null, isSponsored: false };
+ 
+-  if (asset.getNetwork() !== 'bitcoin') {
++  const network = asset.getNetwork();
++  if (network !== 'bitcoin' && network !== 'ethereum') {
+     return { fee: '0', isSponsored: true };
+   }
+ 
+@@ -149,8 +151,24 @@ export async function quoteSendFee(
+       return { fee: null, isSponsored: false };
+     }
+     const amountInBaseUnit = parsed.shiftedBy(asset.getDecimals()).toFixed(0);
+-    const result = await account.estimateFee({ to, asset, amount: amountInBaseUnit });
+-    if (result && result.success === false) return { fee: null, isSponsored: false };
++
++    if (network === 'bitcoin' || asset.isNative()) {
++      const result = await account.estimateFee({ to, asset, amount: amountInBaseUnit });
++      if (result && result.success === false) return { fee: null, isSponsored: false };
++      if (result?.fee == null || result.fee === '') return { fee: null, isSponsored: false };
++      return { fee: String(result.fee), isSponsored: false };
++    }
++
++    const tokenAddress = asset.getContractAddress();
++    if (!tokenAddress) return { fee: null, isSponsored: false };
++    const result = await account.extension().quoteTransfer({
++      token: tokenAddress,
++      recipient: to,
++      amount: BigInt(amountInBaseUnit),
++    });
++    if (result == null || result.fee == null || result.fee === '') {
++      return { fee: null, isSponsored: false };
++    }
+     return { fee: String(result.fee), isSponsored: false };
+   } catch {
+     return { fee: null, isSponsored: false };
+diff --git a/wdk.config.js b/wdk.config.js
+index 9121105..ae3bcf4 100644
+--- a/wdk.config.js
++++ b/wdk.config.js
+@@ -14,7 +14,7 @@ module.exports = {
+     // Sepolia via .env — there is deliberately no separate 'sepolia' network
+     // key anymore, since that would be redundant.
+     ethereum: {
+-      package: '@tetherto/wdk-wallet-evm-7702-gasless'
++      package: '@tetherto/wdk-wallet-evm'
+     },
+     arbitrum: {
+       package: '@tetherto/wdk-wallet-evm-7702-gasless'
+@@ -24,6 +24,25 @@ module.exports = {
+     }
+     // tron: still on hold — see config.ts's comment.
+   },
++  protocols: {
++    dfx: {
++      package: '@dfx.swiss/wdk-protocol-fiat-dfx'
++    }
++  },
++  // Restrict only the fiat surface. Account methods stay unrestricted so
++  // send can still call transfer. The bundler shape is protocol type, then
++  // protocol name, then methods (wdk-worklet-bundler config types).
++  allowedMethods: {
++    ethereum: {
++      protocols: {
++        fiat: {
++          dfx: {
++            methods: ['quoteSell', 'sell']
++          }
++        }
++      }
++    }
++  },
+   preloadModules: [
+     '@buildonspark/spark-frost-bare-addon'
+   ]

@@ -1,0 +1,24 @@
+appId: io.tether.wdk.starter.reactnative
+---
+- tapOn:
+    id: "send-entry"
+- tapOn:
+    id: "send-asset-usdt-ethereum"
+- tapOn:
+    id: "send-recipient"
+- longPressOn:
+    id: "send-recipient"
+- tapOn: "Paste"
+- tapOn:
+    id: "send-amount"
+- inputText: "1"
+- tapOn: "Send USDT"
+- tapOn:
+    id: "send-continue"
+- extendedWaitUntil:
+    visible: "Confirm"
+    timeout: 60000
+- assertVisible: "1 USDT"
+- assertVisible: "Ethereum \\(Sepolia\\)"
+- takeScreenshot: review
+- back
