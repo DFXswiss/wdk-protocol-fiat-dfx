@@ -1,12 +1,13 @@
 {
   "tesseract": "tesseract 5.5.4",
   "zbarimg": "0.23.95",
-  "checkedAt": "2026-11-13T11:50:45.686Z",
+  "checkedAt": "2026-11-14T07:37:51.923Z",
   "images": [
     {
       "file": "after-review.png",
       "sha256": "ccb4f1bcb373a7c5e7d092bcf32473278edec5ec226d0d01eaa9f09ee5d52063",
       "ocrSha256": "7b5c5b72045239a2912a8a1705f8dd410ebb47e65adacec74051a793413dad3c",
+      "allowSha256": "3c784c90c51e43a0ea9c89253fdce927ad11098b51b28a40c63f15d38cc7ba4b",
       "qrCodes": 0,
       "result": "pass"
     },
@@ -14,6 +15,7 @@
       "file": "after-sell-widget.png",
       "sha256": "e0da38153880c1b95bde144c8986e022919eafd9ef2bac3361e3c0e239ff8e3a",
       "ocrSha256": "0cae4e7731b77871cf5f27daf7ebfc81e4b4a879849c536df79d82a93fea2dce",
+      "allowSha256": "3c784c90c51e43a0ea9c89253fdce927ad11098b51b28a40c63f15d38cc7ba4b",
       "qrCodes": 0,
       "result": "pass"
     },
@@ -21,6 +23,7 @@
       "file": "after-send-success.png",
       "sha256": "3c595c605a9a9b6bd8db1292489aac682543aaed523aa9b3b23bbcabaceff849",
       "ocrSha256": "a62ca3c35d52e157a846720d18267b034b90b357a2fb34c3cefe23e0dbac9aa7",
+      "allowSha256": "3c784c90c51e43a0ea9c89253fdce927ad11098b51b28a40c63f15d38cc7ba4b",
       "qrCodes": 0,
       "result": "pass"
     },
@@ -28,6 +31,7 @@
       "file": "after-wallet.png",
       "sha256": "0d172176b31e1299aa3e00b327cfc290bd1650a5c0a2c7a4215193f34501fc9a",
       "ocrSha256": "8e1f2e9a7130f5fe5b81f4e1330bedf17237c227520e86a713c2b9987509d537",
+      "allowSha256": "3c784c90c51e43a0ea9c89253fdce927ad11098b51b28a40c63f15d38cc7ba4b",
       "qrCodes": 0,
       "result": "pass"
     },
@@ -35,6 +39,7 @@
       "file": "before-review.png",
       "sha256": "a66c298404861ae90fe0a751d8a94f70ce0b78e6a72a9ef376b42adf0133848c",
       "ocrSha256": "cf895b0b5d1c35287bc804fca3e16ee662fc4372f4d61f43de3b74f5b30c69d2",
+      "allowSha256": "3c784c90c51e43a0ea9c89253fdce927ad11098b51b28a40c63f15d38cc7ba4b",
       "qrCodes": 0,
       "result": "pass"
     },
@@ -42,6 +47,7 @@
       "file": "before-wallet.png",
       "sha256": "a262a11b550bed3ef833fa24e47c4347b2b87d1d2da20954222f3443bb45e3ec",
       "ocrSha256": "56d10bcff6240f178ca797afffe375578360be6a35ced53ffa9d35728ce48812",
+      "allowSha256": "3c784c90c51e43a0ea9c89253fdce927ad11098b51b28a40c63f15d38cc7ba4b",
       "qrCodes": 0,
       "result": "pass"
     }

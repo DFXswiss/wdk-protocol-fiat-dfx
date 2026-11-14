@@ -42,7 +42,7 @@ export function renderHandbook (metadata) {
   for (const gap of metadata.gaps) lines.push(`- **${gap.screen} — ${gap.state}:** ${gap.reason}`)
   lines.push('', '## How the images were made', '')
   for (const screen of metadata.screens) lines.push(`- **${screen.title}:** ${screen.source}`)
-  lines.push('', 'Each image passed the [redaction check](redaction.json). The coverage test checks each image against its current redaction record; OCR and QR scanning run separately with `npm run handbook:redaction`.', '')
+  lines.push('', 'Each image passed the [redaction check](redaction.json). The coverage test checks images and the token allowlist against their records; CI also runs OCR and QR scanning against the per-image word allowlist.', '')
   return lines.join('\n')
 }
 

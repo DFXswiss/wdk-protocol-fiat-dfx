@@ -1,4 +1,4 @@
-# Module PR CI: lint, types, tests, and audit.
+# Module PR CI: lint, types, tests, audit, and handbook redaction.
 #
 # This repository is public. GitHub-hosted runners execute the suite.
 # Drafts run these jobs. Ready does not start CI. Never listen to
@@ -41,6 +41,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  handbook-redaction:
+    name: Handbook redaction
+    # OCR output depends on the tesseract version used to review the allowlist; change the image deliberately.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: need
+        env:
+          GITHUB_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.base_ref || github.base_ref }}
+        run: bash .github/scripts/need-module.sh >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        if: steps.need.outputs.module == 'true'
+        with:
+          node-version: '22.22.0'
+          cache: npm
+      - if: steps.need.outputs.module == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng zbar-tools
+      - if: steps.need.outputs.module == 'true'
+        run: npm ci
+      - name: Report scanner versions
+        if: steps.need.outputs.module == 'true'
+        run: |
+          tesseract --version
+          zbarimg --version
+      - if: steps.need.outputs.module == 'true'
+        run: npm run handbook:redaction:check
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
