@@ -4,7 +4,7 @@
 # Drafts run these jobs. Ready does not start CI. Never listen to
 # ready_for_review here.
 #
-# Until package.json exists on the base and the head, each job records
+# While neither the base nor the head has package.json, each job records
 # that the module is not here yet and succeeds. Removing package.json
 # after it has landed fails the job. A job-level if is not used: a
 # skipped required check would count as passing.
