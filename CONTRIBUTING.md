@@ -8,6 +8,9 @@ Until `package.json` exists on the base and the head, pull request CI and the lo
 - `npm ci` and `npm run build:types`
 - `npm ci` and `npm run test:coverage`
 - `npm ci` and `npm audit --audit-level=critical`
+- `npm ci` and `npm run handbook:redaction:check`
+
+The handbook redaction job requires `tesseract` and `zbarimg` and fails if either tool is missing.
 
 Use Node 22.
 
