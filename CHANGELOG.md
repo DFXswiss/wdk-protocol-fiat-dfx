@@ -24,7 +24,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Authentication HTTP 401, and HTTP 400 with exactly `Invalid signature`, map to `UNAUTHORIZED`. Other authentication HTTP 400 responses stay internal provider errors. Non-empty error-message arrays join with `'; '` when every element is a non-empty string.
 - Trust declared argument and account return types; retain value rules and external API response validation. Account-error allowlists require exact constructors. Transaction details pass through only ProviderRequiredError and ProviderError from account operations. Injected and ambient fetch are bound to the global receiver.
 - Timeouts must be finite, positive and at most 2147483647 ms, including bigint values. Empty or whitespace-only string options and per-operation networks are rejected.
-- Depend on `@tetherto/wdk-wallet` `^1.0.0-beta.17`. Node.js 22 or newer is required. CI runs the lint, type, coverage and audit jobs listed in CONTRIBUTING.md.
+- Depend on `@tetherto/wdk-wallet` `^1.0.0-beta.17`. Node.js 22 or newer is required. CI runs the lint, type, coverage, audit and handbook redaction jobs listed in CONTRIBUTING.md.
 - Local replay integration tests cover catalogs, quotes and authenticated URLs and details with deterministic WDK EVM accounts. The coverage gate includes unit and integration execution and requires 100% statements, branches, functions and lines.
 - Configuration, security, compatibility and sandbox example documentation. Probes under `e2e/` can create sandbox users when they sign in.
 
