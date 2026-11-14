@@ -75,6 +75,24 @@
           ]
         }
       }
+    },
+    {
+      "id": "handbook-redaction",
+      "name": "Handbook redaction",
+      "timeout_s": 900,
+      "workflow": ".github/workflows/module-pr.yaml",
+      "job": "handbook-redaction",
+      "executor": {
+        "adapter": "commands",
+        "config": {
+          "env": {
+            "CI": "true"
+          },
+          "steps": [
+            ["bash", ".github/scripts/a38-module-job.sh", "handbook-redaction"]
+          ]
+        }
+      }
     }
   ],
   "exclusions": [
