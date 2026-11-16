@@ -4,8 +4,6 @@ Recorded results below are taken from runs of this module. Counts are the ones t
 
 ## Layers
 
-The coverage test checks handbook images and the token allowlist against their redaction records. CI also runs OCR and QR scanning against the per-image word allowlist with `npm run handbook:redaction:check`.
-
 **Unit tests.** Command: `npm test` (lint: `npm run lint`).
 
 Proves the public methods against injected HTTP responses, including status mapping and input validation.

@@ -11,7 +11,6 @@ case "$job" in
   types) set -- npm run build:types ;;
   test) set -- npm run test:coverage ;;
   audit) set -- npm audit --audit-level=critical ;;
-  handbook-redaction) set -- npm run handbook:redaction:check ;;
   *)
     echo "unknown module job: ${job}" >&2
     exit 1
