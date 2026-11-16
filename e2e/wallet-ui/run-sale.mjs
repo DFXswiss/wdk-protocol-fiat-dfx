@@ -57,6 +57,8 @@ const ASSET_TABLE = {
   }
 }
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+// EIP-7708 system address. It emits the one Transfer log of a native ETH send.
+const NATIVE_TRANSFER_ADDRESS = getAddress('0xfffffffffffffffffffffffffffffffffffffffe')
 const ERC20_ABI = ['function balanceOf(address) view returns (uint256)']
 const WALLET_INTERFACE = 'wdk-starter-react-native in the iOS simulator, driven by Maestro'
 const IBAN_LABEL = 'CH 00000 (invented per run)'
@@ -1029,8 +1031,29 @@ async function checkEthChain (prelude, hash, depositAddress) {
   const tx = await readTransaction(prelude.provider, hash)
   const value = quantity(tx.value, 'transfer-value')
   if (value !== ETH_AMOUNT) throw new CheckError('transfer-value', 'value is not 100000000000000')
-  if (!Array.isArray(raw.logs) || raw.logs.length !== 0) {
-    throw new CheckError('receipt-logs', `found ${Array.isArray(raw.logs) ? raw.logs.length : 'no'} logs`)
+  // EIP-7708 writes one Transfer log from the system address for a native ETH
+  // transfer. Measured on Sepolia: the log address is the system address,
+  // topics[0] is the Transfer topic, and data is the value in wei. The
+  // deposit address in that receipt had no code.
+  const logs = Array.isArray(raw.logs) ? raw.logs : null
+  if (!logs || logs.length !== 1) {
+    throw new CheckError('receipt-logs', `found ${logs ? logs.length : 'no'} logs`)
+  }
+  let logAddress = null
+  try {
+    logAddress = getAddress(logs[0].address)
+  } catch {
+    logAddress = null
+  }
+  const topic0 = String(logs[0].topics?.[0] ?? '').toLowerCase()
+  if (logAddress !== NATIVE_TRANSFER_ADDRESS || topic0 !== TRANSFER_TOPIC) {
+    throw new CheckError('receipt-logs', 'log is not the native transfer')
+  }
+  const transferFrom = addressFromTopic(logs[0].topics?.[1], 'transfer')
+  const transferTo = addressFromTopic(logs[0].topics?.[2], 'transfer')
+  const transferValue = quantity(logs[0].data, 'transfer')
+  if (transferFrom !== prelude.account || transferTo !== depositAddress || transferValue !== ETH_AMOUNT) {
+    throw new CheckError('transfer', 'native Transfer is not 100000000000000 wei from the account to the deposit address')
   }
   const block = Number(quantity(raw.blockNumber, 'receipt'))
   if (!Number.isSafeInteger(block) || block < 1) throw new CheckError('receipt', 'block number is not usable')

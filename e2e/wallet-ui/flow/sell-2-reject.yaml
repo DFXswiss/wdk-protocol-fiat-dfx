@@ -28,10 +28,11 @@ appId: io.tether.wdk.starter.reactnative
 - assertVisible: "${DEP_HEAD}\\.\\.\\.${DEP_TAIL}"
 - takeScreenshot: send-review
 - tapOn: "Go back"
+# send-continue is already in the tree during the back animation.
 - extendedWaitUntil:
-    visible:
-      id: "send-continue"
+    notVisible:
+      id: "send-confirm"
     timeout: 30000
-- assertNotVisible:
-    id: "send-confirm"
+- assertVisible:
+    id: "send-continue"
 - takeScreenshot: send-rejected
