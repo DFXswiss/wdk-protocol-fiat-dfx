@@ -453,7 +453,7 @@ async function main () {
     state.widgetOrigin = url.origin
     session = url.searchParams.get('session')
     if (session) secrets.push(session, encodeURIComponent(session))
-    if (url.origin !== 'https://app.dfx.swiss' || url.pathname !== '/buy' || url.searchParams.get('external-transaction-id') !== externalId || !session) throw new Error('Buy URL failed validation')
+    if (url.origin !== 'https://app.dfx.swiss' || url.pathname !== '/buy' || url.searchParams.get('external-transaction-id') !== externalId || !session || url.searchParams.get('asset-in') !== 'EUR' || url.searchParams.get('asset-out') !== options.asset || url.searchParams.get('blockchain') !== 'Base' || Number(url.searchParams.get('amount-in')) !== Number(options.amount)) throw new Error('Buy URL failed validation')
     await urlFile.writeFile(result.buyUrl + '\n')
     await urlFile.sync()
   } finally { await urlFile.close() }
@@ -488,7 +488,7 @@ async function main () {
   }
   if (lastModule !== 'completed') throw new Error('Purchase timed out')
   if (expired) throw new Error('Original session expired before backend evidence could be verified')
-  if (!backend || backend.type !== 'Buy' || backend.state !== 'Completed' || backend.outputAsset !== options.asset || backend.outputBlockchain !== 'Base' || backend.externalTransactionId !== externalId || typeof backend.uid !== 'string' || !backend.uid || typeof backend.outputTxId !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(backend.outputTxId)) throw new Error('Backend purchase evidence does not match')
+  if (!backend || backend.type !== 'Buy' || backend.state !== 'Completed' || backend.inputAsset !== 'EUR' || Number(backend.inputAmount) !== Number(options.amount) || backend.outputAsset !== options.asset || backend.outputBlockchain !== 'Base' || backend.externalTransactionId !== externalId || typeof backend.uid !== 'string' || !backend.uid || typeof backend.outputTxId !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(backend.outputTxId)) throw new Error('Backend purchase evidence does not match')
   const receipt = await state.provider.getTransactionReceipt(backend.outputTxId)
   if (!receipt || receipt.status !== 1 || receipt.hash.toLowerCase() !== backend.outputTxId.toLowerCase() || receipt.blockNumber <= block) throw new Error('Payout receipt missing, failed or predates baseline')
   const toTopic = zeroPadValue(address, 32).toLowerCase()
