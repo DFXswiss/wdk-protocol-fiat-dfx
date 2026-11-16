@@ -40,7 +40,7 @@ Proves the WDK starter wallet, patched as listed in `e2e/wallet-ui/README.md` an
 
 Does NOT prove a smart account, a purchase, the bank payout, a physical device, an unpatched or released wallet, or stability of the sandbox (a booking can stay in `Processing`; the run is then red).
 
-Recorded: 2026-11-12, exit 0 at `97f9e71` and at `2feecb3`; 15/15 mutations of its checks detected. See the table in e2e/wallet-ui/README.md.
+Recorded: 2026-11-12, USDT sale exit 0 at `97f9e71` and at `2feecb3`; 15/15 mutations of its checks detected. 2026-11-16, at `6150990`: ETH sale, rejected USDT transfer and USDT sale each exit 0; 19/19 mutations of the checks added for the ETH sale and `--reject` detected. See the table in e2e/wallet-ui/README.md.
 
 ## How to run
 
@@ -79,6 +79,9 @@ Sell and buy commands, flags and exit codes are in [e2e/README.md](e2e/README.md
 | 2026-11-12 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | exit 0 twice (module heads `97f9e71` and `2feecb3`); each sale of 1 USDT confirmed by one tap in the starter wallet, receipt status 1, found by the sandbox itself and booked to `PayoutInProgress` | [e2e/evidence/2026-11-12-wallet-ui-sale.jsonl](e2e/evidence/2026-11-12-wallet-ui-sale.jsonl) |
 | 2026-11-12 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | 15/15 mutations detected: each run exited 1 at the changed check | [e2e/evidence/2026-11-12-wallet-ui-sale-mutations.jsonl](e2e/evidence/2026-11-12-wallet-ui-sale-mutations.jsonl) |
 | 2026-11-12 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | two runs ended red: a scroll timeout before anything was sent, and HTTP 502 from the sandbox during the wait for the booking | [e2e/evidence/2026-11-12-wallet-ui-sale-red.jsonl](e2e/evidence/2026-11-12-wallet-ui-sale-red.jsonl) |
+| 2026-11-16 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | exit 0 four times: a rejected USDT transfer at `9375cd1`; at `6150990` a sale of 0.0001 ETH (id 10089), a rejected USDT transfer and a sale of 1 USDT (id 10090). Each sale was confirmed by one tap and booked to `PayoutInProgress`; each rejected transfer left the review screen with no confirm tap, the nonce and balances unchanged and no new sale | [e2e/evidence/2026-11-16-wallet-ui-runs.jsonl](e2e/evidence/2026-11-16-wallet-ui-runs.jsonl) |
+| 2026-11-16 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | 19/19 mutations of the ETH-sale and `--reject` checks detected: each run exited 1 at the changed check | [e2e/evidence/2026-11-16-wallet-ui-mutations.jsonl](e2e/evidence/2026-11-16-wallet-ui-mutations.jsonl) |
+| 2026-11-16 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | two runs ended red: the ETH sale at `9375cd1` (its check required a receipt without logs; the native transfer carries one EIP-7708 log), and a mutant run in which the sell page did not show the bank step before anything was sent | [e2e/evidence/2026-11-16-wallet-ui-red.jsonl](e2e/evidence/2026-11-16-wallet-ui-red.jsonl) |
 
 ## Not covered
 
