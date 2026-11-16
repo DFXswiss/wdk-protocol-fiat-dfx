@@ -1,0 +1,2211 @@
+{
+  "source": "Computed independently from fixtures/sandbox.json (Python, not the module): tradable = buyable or sellable; assets without API decimals omitted; fiat minor units per ISO 4217 (EUR 2, AED 2, CHF 2).",
+  "assets": [
+    {
+      "code": "XPL",
+      "networkCode": "plasma",
+      "decimals": 18,
+      "name": "Plasma"
+    },
+    {
+      "code": "USDT",
+      "networkCode": "ethereum",
+      "decimals": 6,
+      "name": "Tether"
+    },
+    {
+      "code": "USDT",
+      "networkCode": "plasma",
+      "decimals": 6,
+      "name": "Tether"
+    },
+    {
+      "code": "LINK",
+      "networkCode": "arbitrum",
+      "decimals": 18,
+      "name": "Chainlink"
+    },
+    {
+      "code": "MANA",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Decentraland"
+    },
+    {
+      "code": "USDT",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Binance-wrapp. USDT"
+    },
+    {
+      "code": "SNX",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Synthetix Network "
+    },
+    {
+      "code": "MKR",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Maker"
+    },
+    {
+      "code": "UNI",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Uniswap"
+    },
+    {
+      "code": "UNI",
+      "networkCode": "arbitrum",
+      "decimals": 18,
+      "name": "Uniswap"
+    },
+    {
+      "code": "UNI",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Uniswap"
+    },
+    {
+      "code": "POL",
+      "networkCode": "polygon",
+      "decimals": 18,
+      "name": "Polygon"
+    },
+    {
+      "code": "GRT",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "The Graph"
+    },
+    {
+      "code": "MANA",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Decentraland"
+    },
+    {
+      "code": "GMX",
+      "networkCode": "arbitrum",
+      "decimals": 18,
+      "name": "GMX"
+    },
+    {
+      "code": "AAVE",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Aave"
+    },
+    {
+      "code": "DAI",
+      "networkCode": "arbitrum",
+      "decimals": 18,
+      "name": "Dai"
+    },
+    {
+      "code": "AAVE",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Aave"
+    },
+    {
+      "code": "SAND",
+      "networkCode": "polygon",
+      "decimals": 18,
+      "name": "The Sandbox"
+    },
+    {
+      "code": "SAND",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "The Sandbox"
+    },
+    {
+      "code": "1INCH",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "1Inch"
+    },
+    {
+      "code": "MKR",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Maker"
+    },
+    {
+      "code": "APE",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "ApeCoin"
+    },
+    {
+      "code": "APE",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "ApeCoin"
+    },
+    {
+      "code": "WBTC",
+      "networkCode": "polygon",
+      "decimals": 8,
+      "name": "Wrapped BTC"
+    },
+    {
+      "code": "POL",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Polygon"
+    },
+    {
+      "code": "CRV",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Curve DAO "
+    },
+    {
+      "code": "USDT",
+      "networkCode": "optimism",
+      "decimals": 6,
+      "name": "Tether"
+    },
+    {
+      "code": "ZANO",
+      "networkCode": "zano",
+      "decimals": 12,
+      "name": "Zano"
+    },
+    {
+      "code": "DAI",
+      "networkCode": "polygon",
+      "decimals": 18,
+      "name": "Dai"
+    },
+    {
+      "code": "SUSHI",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Sushi"
+    },
+    {
+      "code": "GRT",
+      "networkCode": "arbitrum",
+      "decimals": 18,
+      "name": "The Graph"
+    },
+    {
+      "code": "COMP",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Compound"
+    },
+    {
+      "code": "nDEPS",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "dEURO Protocol Share"
+    },
+    {
+      "code": "DEPS",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "dEURO Protocol Share"
+    },
+    {
+      "code": "WBTC",
+      "networkCode": "ethereum",
+      "decimals": 8,
+      "name": "Wrapped BTC"
+    },
+    {
+      "code": "XMR",
+      "networkCode": "monero",
+      "decimals": 12,
+      "name": "Monero"
+    },
+    {
+      "code": "kBTC",
+      "networkCode": "ethereum",
+      "decimals": 8,
+      "name": "Kraken Wrapped Bitcoin"
+    },
+    {
+      "code": "WBTC",
+      "networkCode": "arbitrum",
+      "decimals": 8,
+      "name": "Wrapped BTC"
+    },
+    {
+      "code": "ONDO",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Ondo Finance"
+    },
+    {
+      "code": "BTC",
+      "networkCode": "spark",
+      "decimals": 8,
+      "name": "Bitcoin"
+    },
+    {
+      "code": "ckBTC",
+      "networkCode": "internetcomputer",
+      "decimals": 8,
+      "name": "Chain-key Bitcoin"
+    },
+    {
+      "code": "DEPS",
+      "networkCode": "base",
+      "decimals": 18,
+      "name": "dEURO Protocol Share"
+    },
+    {
+      "code": "fUSD",
+      "networkCode": "zano",
+      "decimals": 4,
+      "name": "Freedom Dollar"
+    },
+    {
+      "code": "xDAI",
+      "networkCode": "gnosis",
+      "decimals": 18,
+      "name": "Gnosis"
+    },
+    {
+      "code": "SNX",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Synthetix Network "
+    },
+    {
+      "code": "dEURO",
+      "networkCode": "railgun",
+      "decimals": 18,
+      "name": "Decentralized EURO"
+    },
+    {
+      "code": "DAI",
+      "networkCode": "railgun",
+      "decimals": 18,
+      "name": "Dai"
+    },
+    {
+      "code": "ETH",
+      "networkCode": "base",
+      "decimals": 18,
+      "name": "Ether"
+    },
+    {
+      "code": "BAT",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Basic Attention"
+    },
+    {
+      "code": "ARB",
+      "networkCode": "arbitrum",
+      "decimals": 18,
+      "name": "Arbitrum"
+    },
+    {
+      "code": "dEURO",
+      "networkCode": "base",
+      "decimals": 18,
+      "name": "Decentralized EURO"
+    },
+    {
+      "code": "SOL",
+      "networkCode": "solana",
+      "decimals": 9,
+      "name": "Solana"
+    },
+    {
+      "code": "WBTC",
+      "networkCode": "railgun",
+      "decimals": 8,
+      "name": "Wrapped BTC"
+    },
+    {
+      "code": "SUSHI",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Sushi"
+    },
+    {
+      "code": "COMP",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Compound"
+    },
+    {
+      "code": "VCHF",
+      "networkCode": "internetcomputer",
+      "decimals": 8,
+      "name": "VNX Swiss Franc"
+    },
+    {
+      "code": "CHZ",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Chiliz"
+    },
+    {
+      "code": "dEURO",
+      "networkCode": "polygon",
+      "decimals": 18,
+      "name": "Decentralized EURO"
+    },
+    {
+      "code": "dEURO",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Decentralized EURO"
+    },
+    {
+      "code": "USDT",
+      "networkCode": "sepolia",
+      "decimals": 6,
+      "name": "Tether"
+    },
+    {
+      "code": "ARB",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Arbitrum"
+    },
+    {
+      "code": "ADA",
+      "networkCode": "cardano",
+      "decimals": 6,
+      "name": "Cardano"
+    },
+    {
+      "code": "FIRO",
+      "networkCode": "firo",
+      "decimals": 8,
+      "name": "Firo"
+    },
+    {
+      "code": "RPL",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Rocket Pool"
+    },
+    {
+      "code": "AXS",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Axie Infinity"
+    },
+    {
+      "code": "LINK",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Chainlink"
+    },
+    {
+      "code": "dEURO",
+      "networkCode": "optimism",
+      "decimals": 18,
+      "name": "Decentralized EURO"
+    },
+    {
+      "code": "USDT",
+      "networkCode": "arbitrum",
+      "decimals": 6,
+      "name": "Tether"
+    },
+    {
+      "code": "BTCB",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Binance-wrapped BTC"
+    },
+    {
+      "code": "EURS",
+      "networkCode": "polygon",
+      "decimals": 2,
+      "name": "STASIS EURS"
+    },
+    {
+      "code": "DEPS",
+      "networkCode": "polygon",
+      "decimals": 18,
+      "name": "dEURO Protocol Share"
+    },
+    {
+      "code": "WFPS",
+      "networkCode": "polygon",
+      "decimals": 18,
+      "name": "Frankencoin Pool Share"
+    },
+    {
+      "code": "USDC",
+      "networkCode": "optimism",
+      "decimals": 6,
+      "name": "USD Coin"
+    },
+    {
+      "code": "DGC",
+      "networkCode": "polygon",
+      "decimals": 8,
+      "name": "Denario Gold Coin"
+    },
+    {
+      "code": "BAT",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Basic Attention"
+    },
+    {
+      "code": "WBTC",
+      "networkCode": "optimism",
+      "decimals": 8,
+      "name": "Wrapped BTC"
+    },
+    {
+      "code": "dEURO",
+      "networkCode": "arbitrum",
+      "decimals": 18,
+      "name": "Decentralized EURO"
+    },
+    {
+      "code": "ICP",
+      "networkCode": "internetcomputer",
+      "decimals": 8,
+      "name": "Internet Computer"
+    },
+    {
+      "code": "DSC",
+      "networkCode": "polygon",
+      "decimals": 8,
+      "name": "Denario Silver Coin"
+    },
+    {
+      "code": "FPS",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Frankencoin Pool Share"
+    },
+    {
+      "code": "WFPS",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Wrapped Frankencoin Pool Share"
+    },
+    {
+      "code": "SAND",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "The Sandbox"
+    },
+    {
+      "code": "USDT",
+      "networkCode": "solana",
+      "decimals": 6,
+      "name": "Tether"
+    },
+    {
+      "code": "USDT",
+      "networkCode": "tron",
+      "decimals": 6,
+      "name": "Tether"
+    },
+    {
+      "code": "DAI",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Dai"
+    },
+    {
+      "code": "QNT",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Quant"
+    },
+    {
+      "code": "BNB",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Binance Coin"
+    },
+    {
+      "code": "USDC.e",
+      "networkCode": "arbitrum",
+      "decimals": 6,
+      "name": "Bridged USDC"
+    },
+    {
+      "code": "LINK",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Chainlink"
+    },
+    {
+      "code": "ZCHF",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Frankencoin"
+    },
+    {
+      "code": "USDT",
+      "networkCode": "polygon",
+      "decimals": 6,
+      "name": "Tether"
+    },
+    {
+      "code": "ZCHF",
+      "networkCode": "railgun",
+      "decimals": 18,
+      "name": "Frankencoin"
+    },
+    {
+      "code": "1INCH",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "1Inch"
+    },
+    {
+      "code": "USDT",
+      "networkCode": "railgun",
+      "decimals": 6,
+      "name": "Tether"
+    },
+    {
+      "code": "AXS",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Axie Infinity"
+    },
+    {
+      "code": "USDC.e",
+      "networkCode": "polygon",
+      "decimals": 6,
+      "name": "Bridged USDC"
+    },
+    {
+      "code": "ZCHF",
+      "networkCode": "polygon",
+      "decimals": 18,
+      "name": "Frankencoin"
+    },
+    {
+      "code": "AAVE",
+      "networkCode": "arbitrum",
+      "decimals": 18,
+      "name": "Aave"
+    },
+    {
+      "code": "DAI",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Dai"
+    },
+    {
+      "code": "DAI",
+      "networkCode": "base",
+      "decimals": 18,
+      "name": "Dai"
+    },
+    {
+      "code": "USDbC",
+      "networkCode": "base",
+      "decimals": 6,
+      "name": "Bridged USDC"
+    },
+    {
+      "code": "USDC",
+      "networkCode": "arbitrum",
+      "decimals": 6,
+      "name": "USD Coin"
+    },
+    {
+      "code": "USDC",
+      "networkCode": "base",
+      "decimals": 6,
+      "name": "USDC"
+    },
+    {
+      "code": "USDC",
+      "networkCode": "ethereum",
+      "decimals": 6,
+      "name": "USD Coin"
+    },
+    {
+      "code": "USDC",
+      "networkCode": "polygon",
+      "decimals": 6,
+      "name": "USD Coin"
+    },
+    {
+      "code": "USDC",
+      "networkCode": "solana",
+      "decimals": 6,
+      "name": "USD Coin"
+    },
+    {
+      "code": "BBTC",
+      "networkCode": "ethereum",
+      "decimals": 8,
+      "name": "Binance Wrapped BTC"
+    },
+    {
+      "code": "USDC",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Binance-Peg USD Coin"
+    },
+    {
+      "code": "ETH",
+      "networkCode": "ethereum",
+      "decimals": 18,
+      "name": "Ether"
+    },
+    {
+      "code": "ETH",
+      "networkCode": "binancesmartchain",
+      "decimals": 18,
+      "name": "Binance-wrapped ETH"
+    },
+    {
+      "code": "ETH",
+      "networkCode": "sepolia",
+      "decimals": 18,
+      "name": "Ether"
+    },
+    {
+      "code": "ETH",
+      "networkCode": "optimism",
+      "decimals": 18,
+      "name": "Ether"
+    },
+    {
+      "code": "WETH",
+      "networkCode": "railgun",
+      "decimals": 18,
+      "name": "Wrapped Ether"
+    },
+    {
+      "code": "ETH",
+      "networkCode": "arbitrum",
+      "decimals": 18,
+      "name": "Ether"
+    }
+  ],
+  "currencies": [
+    {
+      "code": "EUR",
+      "decimals": 2
+    },
+    {
+      "code": "AED",
+      "decimals": 2
+    },
+    {
+      "code": "CHF",
+      "decimals": 2
+    }
+  ],
+  "countries": [
+    {
+      "code": "AD",
+      "name": "Andorra",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AE",
+      "name": "United Arab Emirates",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AF",
+      "name": "Afghanistan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AG",
+      "name": "Antigua and Barbuda",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AI",
+      "name": "Anguilla",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AL",
+      "name": "Albania",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AM",
+      "name": "Armenia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AO",
+      "name": "Angola",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AR",
+      "name": "Argentina",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AS",
+      "name": "American Samoa",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AW",
+      "name": "Aruba",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BZ",
+      "name": "Belize",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CC",
+      "name": "Cocos (Keeling) Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CD",
+      "name": "Democratic Republic of the Congo",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CF",
+      "name": "Central African Republic",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CG",
+      "name": "Republic of the Congo",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CI",
+      "name": "Cote d'Ivoire",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CK",
+      "name": "Cook Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CL",
+      "name": "Chile",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CM",
+      "name": "Cameroon",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CN",
+      "name": "China",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CO",
+      "name": "Colombia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CR",
+      "name": "Costa Rica",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CV",
+      "name": "Cape Verde",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CW",
+      "name": "Curaçao",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CX",
+      "name": "Christmas Island",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "DJ",
+      "name": "Djibouti",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "DM",
+      "name": "Dominica",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "DO",
+      "name": "Dominican Republic",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "DZ",
+      "name": "Algeria",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "EC",
+      "name": "Ecuador",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "EG",
+      "name": "Egypt",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "EH",
+      "name": "Western Sahara",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "ER",
+      "name": "Eritrea",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "ET",
+      "name": "Ethiopia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "FJ",
+      "name": "Fiji",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "FK",
+      "name": "Falkland Islands (Islas Malvinas)",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GQ",
+      "name": "Equatorial Guinea",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GT",
+      "name": "Guatemala",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GU",
+      "name": "Guam",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GW",
+      "name": "Guinea-Bissau",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GY",
+      "name": "Guyana",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "HK",
+      "name": "Hong Kong",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "HN",
+      "name": "Honduras",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "HT",
+      "name": "Haiti",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "ID",
+      "name": "Indonesia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "IL",
+      "name": "Israel",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "IM",
+      "name": "Isle of Man",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "IN",
+      "name": "India",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AX",
+      "name": "Åland Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "FM",
+      "name": "Federated States of Micronesia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "FO",
+      "name": "Faroe Islands",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "GA",
+      "name": "Gabon",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GD",
+      "name": "Grenada",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GE",
+      "name": "Georgia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GG",
+      "name": "Guernsey",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "GH",
+      "name": "Ghana",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GI",
+      "name": "Gibraltar",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GL",
+      "name": "Greenland",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "GM",
+      "name": "The Gambia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GN",
+      "name": "Guinea",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "IO",
+      "name": "British Indian Ocean Territory",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "IQ",
+      "name": "Iraq",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "JE",
+      "name": "Jersey",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "JM",
+      "name": "Jamaica",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "JO",
+      "name": "Jordan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KE",
+      "name": "Kenya",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KG",
+      "name": "Kyrgyzstan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KH",
+      "name": "Cambodia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KI",
+      "name": "Kiribati",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KM",
+      "name": "Comoros",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KN",
+      "name": "Saint Kitts and Nevis",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KR",
+      "name": "South Korea",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KW",
+      "name": "Kuwait",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KY",
+      "name": "Cayman Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KZ",
+      "name": "Kazakhstan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "LA",
+      "name": "Laos",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "LB",
+      "name": "Lebanon",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "LC",
+      "name": "Saint Lucia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "LK",
+      "name": "Sri Lanka",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "LR",
+      "name": "Liberia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "LS",
+      "name": "Lesotho",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "LY",
+      "name": "Libya",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MA",
+      "name": "Morocco",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MC",
+      "name": "Monaco",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "MD",
+      "name": "Moldova",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "ME",
+      "name": "Montenegro",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MF",
+      "name": "Saint Martin",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MG",
+      "name": "Madagascar",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MH",
+      "name": "Marshall Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MK",
+      "name": "North Macedonia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "ML",
+      "name": "Mali",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MX",
+      "name": "Mexico",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MY",
+      "name": "Malaysia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MZ",
+      "name": "Mozambique",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NA",
+      "name": "Namibia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NC",
+      "name": "New Caledonia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NE",
+      "name": "Niger",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GF",
+      "name": "French Guiana",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GP",
+      "name": "Guadeloupe",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MN",
+      "name": "Mongolia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MO",
+      "name": "Macau",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MP",
+      "name": "Northern Mariana Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MR",
+      "name": "Mauritania",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MS",
+      "name": "Montserrat",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MU",
+      "name": "Mauritius",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MV",
+      "name": "Maldives",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MW",
+      "name": "Malawi",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NF",
+      "name": "Norfolk Island",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NG",
+      "name": "Nigeria",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NI",
+      "name": "Nicaragua",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NP",
+      "name": "Nepal",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NR",
+      "name": "Nauru",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NU",
+      "name": "Niue",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "OM",
+      "name": "Oman",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PA",
+      "name": "Panama",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PE",
+      "name": "Peru",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PF",
+      "name": "French Polynesia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PG",
+      "name": "Papua New Guinea",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PK",
+      "name": "Pakistan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PM",
+      "name": "Saint Pierre and Miquelon",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PR",
+      "name": "Puerto Rico",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PS",
+      "name": "Palestinian Territory",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PW",
+      "name": "Palau",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PY",
+      "name": "Paraguay",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "QA",
+      "name": "Qatar",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "RS",
+      "name": "Serbia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "RW",
+      "name": "Rwanda",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SA",
+      "name": "Saudi Arabia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SB",
+      "name": "Solomon Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SC",
+      "name": "Seychelles",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SD",
+      "name": "Sudan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SG",
+      "name": "Singapore",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SH",
+      "name": "Saint Helena",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SJ",
+      "name": "Svalbard",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SL",
+      "name": "Sierra Leone",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SM",
+      "name": "San Marino",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "SN",
+      "name": "Senegal",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SO",
+      "name": "Somalia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SR",
+      "name": "Suriname",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SS",
+      "name": "South Sudan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "ST",
+      "name": "Sao Tome and Principe",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SV",
+      "name": "El Salvador",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SX",
+      "name": "Sint Maarten",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SY",
+      "name": "Syria",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "SZ",
+      "name": "Eswatini",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TC",
+      "name": "Turks and Caicos Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TD",
+      "name": "Chad",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TG",
+      "name": "Togo",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TH",
+      "name": "Thailand",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TJ",
+      "name": "Tajikistan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TO",
+      "name": "Tonga",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MQ",
+      "name": "Martinique",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TK",
+      "name": "Tokelau",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TL",
+      "name": "Timor-Leste",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TM",
+      "name": "Turkmenistan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TN",
+      "name": "Tunisia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TR",
+      "name": "Turkey",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TT",
+      "name": "Trinidad and Tobago",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TV",
+      "name": "Tuvalu",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TW",
+      "name": "Taiwan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TZ",
+      "name": "Tanzania",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "UG",
+      "name": "Uganda",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "UY",
+      "name": "Uruguay",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "UZ",
+      "name": "Uzbekistan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "VA",
+      "name": "Holy See (Vatican City)",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "VC",
+      "name": "Saint Vincent and the Grenadines",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "VG",
+      "name": "British Virgin Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "VI",
+      "name": "Virgin Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "VN",
+      "name": "Vietnam",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "VU",
+      "name": "Vanuatu",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "WF",
+      "name": "Wallis and Futuna",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "WS",
+      "name": "Western Samoa",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "XK",
+      "name": "Republic of Kosovo",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "YE",
+      "name": "Yemen",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "ZA",
+      "name": "South Africa",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "ZM",
+      "name": "Zambia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "ZW",
+      "name": "Zimbabwe",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AQ",
+      "name": "Antarctica",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BV",
+      "name": "Bouvet Island",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "GS",
+      "name": "South Georgia and South Sandwich Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "HM",
+      "name": "Heard and McDonald Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "PN",
+      "name": "Pitcairn Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "TF",
+      "name": "French Southern Territories",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "UM",
+      "name": "U.S. Outlying Islands",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AZ",
+      "name": "Azerbaijan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BA",
+      "name": "Bosnia and Herzegovina",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BB",
+      "name": "Barbados",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BD",
+      "name": "Bangladesh",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BF",
+      "name": "Burkina Faso",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BH",
+      "name": "Bahrain",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BI",
+      "name": "Burundi",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BJ",
+      "name": "Benin",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BL",
+      "name": "Saint Barthélemy",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BM",
+      "name": "Bermuda",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BN",
+      "name": "Brunei",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BO",
+      "name": "Bolivia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BQ",
+      "name": "Bonaire",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BR",
+      "name": "Brazil",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BS",
+      "name": "The Bahamas",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BT",
+      "name": "Bhutan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BW",
+      "name": "Botswana",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "RE",
+      "name": "Reunion",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MT",
+      "name": "Malta",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "UA",
+      "name": "Ukraine",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "YT",
+      "name": "Mayotte",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "BE",
+      "name": "Belgium",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "BG",
+      "name": "Bulgaria",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "CY",
+      "name": "Cyprus",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "CZ",
+      "name": "Czech Republic",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "DK",
+      "name": "Denmark",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "EE",
+      "name": "Estonia",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "ES",
+      "name": "Spain",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "FI",
+      "name": "Finland",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "FR",
+      "name": "France",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "GB",
+      "name": "United Kingdom",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "GR",
+      "name": "Greece",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "HR",
+      "name": "Croatia",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "HU",
+      "name": "Hungary",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "IE",
+      "name": "Ireland",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "IS",
+      "name": "Iceland",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "IT",
+      "name": "Italy",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "LT",
+      "name": "Lithuania",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "LU",
+      "name": "Luxembourg",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "LV",
+      "name": "Latvia",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "NL",
+      "name": "Netherlands",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "NO",
+      "name": "Norway",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "PL",
+      "name": "Poland",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "PT",
+      "name": "Portugal",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "RO",
+      "name": "Romania",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "SE",
+      "name": "Sweden",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "SI",
+      "name": "Slovenia",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "SK",
+      "name": "Slovakia",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "BY",
+      "name": "Belarus",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CU",
+      "name": "Cuba",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "IR",
+      "name": "Iran",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "KP",
+      "name": "North Korea",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "MM",
+      "name": "Myanmar (Burma)",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "RU",
+      "name": "Russia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "VE",
+      "name": "Venezuela",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "AT",
+      "name": "Austria",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "CH",
+      "name": "Switzerland",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "DE",
+      "name": "Germany",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "LI",
+      "name": "Liechtenstein",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "PH",
+      "name": "Philippines",
+      "isBuyAllowed": true,
+      "isSellAllowed": true
+    },
+    {
+      "code": "AU",
+      "name": "Australia",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "CA",
+      "name": "Canada",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "JP",
+      "name": "Japan",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "NZ",
+      "name": "New Zealand",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    },
+    {
+      "code": "US",
+      "name": "United States",
+      "isBuyAllowed": false,
+      "isSellAllowed": false
+    }
+  ]
+}

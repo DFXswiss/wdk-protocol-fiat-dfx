@@ -1,0 +1,9 @@
+appId: io.tether.wdk.starter.reactnative
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible: "Import Existing Wallet"
+    timeout: 60000
+- stopApp
