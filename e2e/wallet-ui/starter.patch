@@ -539,7 +539,7 @@ index 5fdb982..e92727d 100644
 +  // `blockchain` is the wallet key from wdk.config.js. `config.network` is
 +  // the DFX chain name, which is Sepolia while this wallet key stays ethereum.
 +  // environment 'sandbox' is the module value that selects the dev hosts.
-+  // The string 'dev' is not an environment and would select production.
++  // The string 'dev' is not an environment; the module rejects it with a ValueError.
 +  protocols: {
 +    dfx: {
 +      protocolName: 'dfx',
