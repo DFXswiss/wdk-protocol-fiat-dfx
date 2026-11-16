@@ -90,6 +90,7 @@ For either script, a `--follow` or `--wait-minutes` period that outlasts the wid
 The file given by `--url-file` must not exist yet, contains the buy URL with a session, is created with owner-only permissions, and should be deleted after the purchase. `--record` must also name a new file and is created with owner-only permissions after a passing run.
 
 The balance after the payout, at the receipt block, must exceed the balance at the previous block by the payout transfer amount.
+The buy URL must carry EUR, the asset, Base and the amount, and the completed backend record must show `inputAsset` EUR and `inputAmount` equal to `--amount`.
 
 Exit 2 is usage. Exit 3 is only a `NotRunError`: an unusable seed file, duplicate `@tetherto/wdk-wallet` copies, a module copy that differs from this tree (the digest differs, the file list differs, the installed copy is missing, or a symlink is rejected), an unreachable RPC, a preflight `/version` that is unreachable or without a usable answer, or a `--url-file` that cannot be created. A held lock, a dirty tree, a chain id that is not Base, an unavailable DFX protocol, a git failure, and any other exception exit 1. Exit 130 or 143 means SIGINT or SIGTERM: the script releases its lock and exits. The record is written in one synchronous step, so a signal leaves either no record or a complete one.
 
