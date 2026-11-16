@@ -130,7 +130,7 @@ node safe-rescue.mjs --rpc https://mainnet.base.org --to 0x000000000000000000000
 
 ## wallet-ui/
 
-`wallet-ui/` is a Sepolia sale of 1 USDT for EUR in which the WDK starter wallet on the iOS simulator confirms the send and the sandbox must book that hash to `PayoutInProgress` or `Completed`.
+`wallet-ui/` drives the patched WDK starter wallet on the iOS simulator. A confirmed run sells 1 USDT or 0.0001 ETH for EUR on Sepolia, and the sandbox must book that hash to `PayoutInProgress` or `Completed`. A rejected run leaves the review screen: no confirm tap, nonce and balances unchanged, and no new sale of that asset.
 
 It is the end-to-end run in this directory; the other scripts do not ask a wallet user interface to confirm.
 

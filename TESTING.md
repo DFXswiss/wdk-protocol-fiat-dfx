@@ -32,13 +32,13 @@ Recorded sandbox: 178/186 steps (2026-10-29, and the same count on 2026-11-05). 
 
 Proves, for a passing sell, that a deposit from this script was recognized by the sandbox and that balances moved by the amount sent. A passing buy compares the payout transfer with the balance change in the receipt block.
 
-Does NOT prove that a wallet user interface confirmed the transaction. WDK has no confirmation dialog, so a rejected wallet prompt is not covered. No purchase with `real-buy.mjs` is recorded.
+Does NOT prove that a wallet user interface confirmed the transaction. These scripts have no confirmation dialog. No purchase with `real-buy.mjs` is recorded.
 
 **Real sale confirmed in a wallet user interface.** Command: `cd e2e && node wallet-ui/run-sale.mjs …` (see [e2e/wallet-ui/README.md](e2e/wallet-ui/README.md) for the build and flags).
 
-Proves the WDK starter wallet, patched as listed in `e2e/wallet-ui/README.md` and running in the iOS simulator, opens the DFX sell page through this module, sends 1 USDT on Sepolia to the deposit address after one tap on its confirm button, and the sandbox finds that hash by itself and books the sale to `PayoutInProgress` or `Completed`; the receipt, Transfer log, three balance comparisons, the sandbox record and the module's `getTransactionDetail` are checked.
+Proves the WDK starter wallet, patched as listed in `e2e/wallet-ui/README.md` and running in the iOS simulator, opens the DFX sell page through this module. A confirmed run sends 1 USDT or 0.0001 ETH on Sepolia to the deposit address after one tap on its confirm button, and the sandbox finds that hash by itself and books the sale to `PayoutInProgress` or `Completed`; the receipt, the transfer, the balance comparisons, the sandbox record and the module's `getTransactionDetail` are checked. A rejected run opens that review screen and leaves it: no confirm tap, the nonce and the balances stay as they were, and the sandbox list gains no new sale of that asset.
 
-Does NOT prove a rejected confirmation, a smart account, a purchase, the bank payout, a physical device, an unpatched or released wallet, or stability of the sandbox (a booking can stay in `Processing`; the run is then red).
+Does NOT prove a smart account, a purchase, the bank payout, a physical device, an unpatched or released wallet, or stability of the sandbox (a booking can stay in `Processing`; the run is then red).
 
 Recorded: 2026-11-12, exit 0 at `97f9e71` and at `2feecb3`; 15/15 mutations of its checks detected. See the table in e2e/wallet-ui/README.md.
 
@@ -82,6 +82,6 @@ Sell and buy commands, flags and exit codes are in [e2e/README.md](e2e/README.md
 
 ## Not covered
 
-The scripts directly under `e2e/` have no wallet user interface and are hybrid. `e2e/wallet-ui/` is the run in which a wallet user interface confirms the transaction. Its limits (simulator, patched starter wallet, automation taps, one EOA sale of 1 USDT) are listed in `e2e/wallet-ui/README.md`.
+The scripts directly under `e2e/` have no wallet user interface and are hybrid. `e2e/wallet-ui/` is the run in which a wallet user interface confirms a sale or leaves the review screen. Its limits (simulator, patched starter wallet, automation taps, one EOA, 1 USDT or 0.0001 ETH) are listed in `e2e/wallet-ui/README.md`.
 
-The live matrix sends no on-chain transaction. Recorded responses are not the live API. No purchase with `real-buy.mjs` is recorded. A rejected wallet prompt is not covered. These runs do not show a production sale or the bank payout of a sandbox sale.
+The live matrix sends no on-chain transaction. Recorded responses are not the live API. No purchase with `real-buy.mjs` is recorded. The scripts directly under `e2e/` do not cover a rejected wallet prompt. `e2e/wallet-ui/` does, with `--reject`. These runs do not show a production sale or the bank payout of a sandbox sale.

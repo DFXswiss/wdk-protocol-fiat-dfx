@@ -1,5 +1,5 @@
 diff --git a/package.json b/package.json
-index a5830c1..9e432ac 100644
+index a5830c1..f4ea8dd 100644
 --- a/package.json
 +++ b/package.json
 @@ -14,6 +14,7 @@
@@ -19,7 +19,7 @@ index a5830c1..9e432ac 100644
      "@tetherto/wdk-utils": "^1.0.0-beta.7",
      "@tetherto/wdk-wallet-btc": "^1.0.0-beta.8",
 diff --git a/src/app/(app)/(tabs)/wallet.tsx b/src/app/(app)/(tabs)/wallet.tsx
-index af4a294..b51aec3 100644
+index af4a294..0432d28 100644
 --- a/src/app/(app)/(tabs)/wallet.tsx
 +++ b/src/app/(app)/(tabs)/wallet.tsx
 @@ -7,6 +7,7 @@ import {
@@ -30,7 +30,7 @@ index af4a294..b51aec3 100644
    CreditCard,
    RefreshCw,
  } from 'lucide-react-native';
-@@ -144,12 +145,22 @@ export default function WalletHome() {
+@@ -144,12 +145,28 @@ export default function WalletHome() {
  
          {/* Action row: Send / Receive / Swap / Buy */}
          <View style={{ flexDirection: 'row', gap: 10, marginVertical: moderateScale(8) }}>
@@ -42,19 +42,25 @@ index af4a294..b51aec3 100644
          </View>
  
 +        {/* Own row so the four existing actions keep their width. */}
-+        <View style={{ marginTop: 10 }}>
++        <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
 +          <ActionButton
 +            testID="sell-entry"
 +            icon={<Banknote size={moderateScale(20)} color={theme.colors.textPrimary} />}
 +            label="Sell"
 +            onPress={() => router.push('/sell')}
 +          />
++          <ActionButton
++            testID="sell-eth-entry"
++            icon={<Banknote size={moderateScale(20)} color={theme.colors.textPrimary} />}
++            label="Sell ETH"
++            onPress={() => router.push('/sell?asset=ETH')}
++          />
 +        </View>
 +
          {/* Tokens */}
          <Text variant="label" style={{ marginBottom: 4, fontWeight:'bold', marginTop:10 }}>Tokens</Text>
          <View>
-@@ -185,16 +196,19 @@ function ActionButton({
+@@ -185,16 +202,19 @@ function ActionButton({
    label,
    onPress,
    disabled,
@@ -158,24 +164,25 @@ index 0000000..ec2d8fa
 +}
 diff --git a/src/app/sell/index.tsx b/src/app/sell/index.tsx
 new file mode 100644
-index 0000000..9a87fb2
+index 0000000..a08e4b4
 --- /dev/null
 +++ b/src/app/sell/index.tsx
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,97 @@
 +import React, { useEffect, useRef, useState } from 'react';
 +import { View } from 'react-native';
-+import { useRouter } from 'expo-router';
++import { useRouter, useLocalSearchParams } from 'expo-router';
 +import { WebView } from 'react-native-webview';
 +import { useAccount, useProtocol } from '@tetherto/wdk-react-native-core';
 +import { Screen, ScreenHeader, Text, Button, LoadingState } from '@/components';
 +import { useAccounts } from '@/state/accounts';
 +
 +/**
-+ * 1 USDT in base units (6 decimals). Passed as a number because the worklet
-+ * bridge serializes bigint as a string, and the fiat module rejects a string
-+ * amount. 1000000 is a safe integer.
++ * Amounts are numbers because the worklet bridge serializes bigint as a
++ * string, and the fiat module rejects a string amount. Both values are
++ * safe integers: 1 USDT in 6-decimal base units, and 0.0001 ETH in wei.
 + */
 +const ONE_USDT_BASE_UNITS = 1000000;
++const ETH_BASE_UNITS = 100000000000000;
 +
 +type SellCaller = {
 +  sell: (options: {
@@ -200,6 +207,8 @@ index 0000000..9a87fb2
 +
 +export default function SellScreen() {
 +  const router = useRouter();
++  const assetParam = useLocalSearchParams<{ asset?: string | string[] }>().asset;
++  const sellEth = assetParam === 'ETH';
 +  const activeIndex = useAccounts((s) => s.activeIndex);
 +  const wallet = useAccount({ network: 'ethereum', accountIndex: activeIndex });
 +  const dfx = useProtocol<SellCaller>({
@@ -216,9 +225,9 @@ index 0000000..9a87fb2
 +    if (!wallet.address || started.current) return;
 +    started.current = true;
 +    dfx.sell({
-+      cryptoAsset: 'USDT',
++      cryptoAsset: sellEth ? 'ETH' : 'USDT',
 +      fiatCurrency: 'EUR',
-+      cryptoAmount: ONE_USDT_BASE_UNITS,
++      cryptoAmount: sellEth ? ETH_BASE_UNITS : ONE_USDT_BASE_UNITS,
 +      config: { network: 'Sepolia' },
 +    }).then((result) => {
 +      const url = typeof result?.sellUrl === 'string' ? result.sellUrl : '';
@@ -230,7 +239,7 @@ index 0000000..9a87fb2
 +    }).catch((caught: unknown) => {
 +      setError(sellErrorText(caught));
 +    });
-+  }, [wallet.address, dfx]);
++  }, [wallet.address, dfx, sellEth]);
 +
 +  const done = () => {
 +    router.dismissTo('/(app)/(tabs)/wallet');
@@ -286,22 +295,35 @@ index 9207831..da18c1c 100644
      </Screen>
    );
 diff --git a/src/app/send/index.tsx b/src/app/send/index.tsx
-index 8ac5024..0fdf83c 100644
+index 8ac5024..7ed30d1 100644
 --- a/src/app/send/index.tsx
 +++ b/src/app/send/index.tsx
-@@ -68,6 +68,7 @@ export default function SendPick() {
+@@ -19,6 +19,12 @@ import { networkDisplayName } from '@/wdk/chains';
+  * reintroducing Receive's more detailed "· ERC-20 · gasless" wording —
+  * consistency with Home, since this screen is effectively its sibling.
+  */
++function sendAssetTestId(id: string): string | undefined {
++  if (id === 'usdt-ethereum') return 'send-asset-usdt-ethereum';
++  if (id === 'eth-ethereum') return 'send-asset-eth-ethereum';
++  return undefined;
++}
++
+ export default function SendPick() {
+   const router = useRouter();
+   const theme = useTheme();
+@@ -68,6 +74,7 @@ export default function SendPick() {
            {filtered.map((b, i) => (
              <Pressable
                key={b.token.id}
-+              testID={b.token.id === 'usdt-ethereum' ? 'send-asset-usdt-ethereum' : undefined}
++              testID={sendAssetTestId(b.token.id)}
                onPress={() => router.push(`/send/amount?tokenId=${b.token.id}`)}
                style={{
                  flexDirection: 'row',
 diff --git a/src/app/send/review.tsx b/src/app/send/review.tsx
-index 8dc267e..fa94179 100644
+index 8dc267e..6df1d31 100644
 --- a/src/app/send/review.tsx
 +++ b/src/app/send/review.tsx
-@@ -33,13 +33,11 @@ function formatCryptoAmount(value: string): string {
+@@ -33,13 +33,12 @@ function formatCryptoAmount(value: string): string {
   *
   * Fee copy deliberately does NOT copy the prototype's "gasless · paid in
   * USDT" wording verbatim — that models Tron GasFree's specific mechanism
@@ -315,17 +337,20 @@ index 8dc267e..fa94179 100644
 + * (a relay that charges a fee in the token itself). Arbitrum and Polygon
 + * use EIP-7702 sponsorship (isSponsored: true) and show "Free · sponsored".
 + * Ethereum is a plain account: a token send's quoted fee is wei, shown in
-+ * ETH, and is not added to the token total. Bitcoin shows its quoted
-+ * network fee in BTC, since Bitcoin has no sponsorship at all.
++ * ETH, and is not added to the token total. A native ETH send's fee is in
++ * ETH and is part of the total. Bitcoin shows its quoted network fee in
++ * BTC, since Bitcoin has no sponsorship at all.
   *
   * Account resolution: uses the person's REAL active account
   * (useAccounts().activeIndex) and the asset's real network — this directly
-@@ -103,13 +101,18 @@ export default function SendReview() {
+@@ -103,13 +102,20 @@ export default function SendReview() {
    const shortRecipient = `${recipient.slice(0, 6)}...${recipient.slice(-4)}`;
    const fiatValue = price ? new BigNumber(amount).multipliedBy(price).toFixed(2) : null;
  
-+  // Ethereum token fees are quoted in wei. There is no native ETH asset
-+  // in the catalog (6-decimal USDT must not be used). 18 is ETH's decimals.
++  // Ethereum token fees are quoted in wei. Native ETH is in the catalog;
++  // its fee is already in that asset's 18 decimals and is added to total.
++  // feePaidInEth stays true only for tokens, so a 6-decimal token is not
++  // used to format the fee. 18 below is ETH's decimals for that token fee.
 +  const feePaidInEth = !asset.isNative() && asset.getNetwork() === 'ethereum';
    const feeDisplay = !fee
      ? '—'
@@ -341,7 +366,7 @@ index 8dc267e..fa94179 100644
      ? new BigNumber(amount).plus(new BigNumber(fee.fee).shiftedBy(-asset.getDecimals())).toFixed(asset.getDecimals())
      : amount;
  
-@@ -211,7 +214,7 @@ export default function SendReview() {
+@@ -211,7 +217,7 @@ export default function SendReview() {
        ) : null}
  
        <View style={{ marginTop: 'auto' }}>
@@ -427,7 +452,7 @@ index 011d4f8..9643f7b 100644
            value={words[i] ?? ''}
            onChangeText={(text) => handleChange(i, text)}
 diff --git a/src/wdk/networks.ts b/src/wdk/networks.ts
-index 5fdb982..e92727d 100644
+index 5fdb982..deafe6f 100644
 --- a/src/wdk/networks.ts
 +++ b/src/wdk/networks.ts
 @@ -1,5 +1,6 @@
@@ -464,7 +489,26 @@ index 5fdb982..e92727d 100644
      },
      displayNameBase: 'Ethereum',
      networkLabel: process.env.EXPO_PUBLIC_EVM_ETHEREUM_NETWORK_LABEL,
-@@ -208,9 +210,9 @@ export const NETWORKS = [
+@@ -201,16 +203,24 @@ export const NETWORKS = [
+     // chains. Change alongside the two lines above if repointing.
+     indexerBlockchain: 'sepolia',
+     assets: [
+-      // Native ETH is deliberately absent, not an oversight: the indexer's
+-      // token type is exactly "usdt" | "xaut" | "btc" — there's no "eth",
+-      // so an ETH deposit would update the balance but never appear in
+-      // Activity, which reads as a broken app rather than an API limit.
++      // ETH is here for the DFX ETH sale. The indexer's token type is still
++      // exactly "usdt" | "xaut" | "btc" — there is no "eth" — so an ETH
++      // transfer updates the balance and does not appear in Activity.
++      {
++        id: 'eth-ethereum',
++        isNative: true,
++        address: null,
++        symbol: 'ETH',
++        name: 'Ether (Sepolia testnet)',
++        decimals: 18,
++        color: '#627EEA',
++      },
        {
          id: 'usdt-ethereum',
          isNative: false,
@@ -476,7 +520,7 @@ index 5fdb982..e92727d 100644
          symbol: 'USDT',
          name: 'Tether USD (Sepolia testnet)',
          decimals: 6,
-@@ -363,9 +365,10 @@ export const ASSET_MAP = new Map<string, AppAsset>(ASSETS.map((a) => [a.getId(),
+@@ -363,9 +373,10 @@ export const ASSET_MAP = new Map<string, AppAsset>(ASSETS.map((a) => [a.getId(),
  
  /**
   * The one example delegation address the WDK docs give (for
@@ -490,7 +534,7 @@ index 5fdb982..e92727d 100644
   */
  const EVM_DELEGATION_ADDRESS =
    process.env.EXPO_PUBLIC_EVM_DELEGATION_ADDRESS || '0xe6Cae83BdE06E4c305530e199D7217f42808555B';
-@@ -376,6 +379,19 @@ const EVM_DELEGATION_ADDRESS =
+@@ -376,6 +387,19 @@ const EVM_DELEGATION_ADDRESS =
   * what keeps RULE 1 intact while still sharing one builder across every
   * EVM network.
   */
@@ -510,7 +554,7 @@ index 5fdb982..e92727d 100644
  function buildEvmConfig(
    network: string,
    evm: NonNullable<NetworkDefinition['evm']>,
-@@ -422,19 +438,37 @@ function buildBitcoinConfig(
+@@ -422,19 +446,37 @@ function buildBitcoinConfig(
    };
  }
  
@@ -555,10 +599,10 @@ index 5fdb982..e92727d 100644
  export default wdkConfigs;
 \ No newline at end of file
 diff --git a/src/wdk/useSend.ts b/src/wdk/useSend.ts
-index 170923a..83990b1 100644
+index 170923a..84e6a9d 100644
 --- a/src/wdk/useSend.ts
 +++ b/src/wdk/useSend.ts
-@@ -116,14 +116,15 @@ export async function sendAsset(account: any, { assetId, to, amount }: SendParam
+@@ -116,14 +116,19 @@ export async function sendAsset(account: any, { assetId, to, amount }: SendParam
  }
  
  /**
@@ -574,7 +618,11 @@ index 170923a..83990b1 100644
 + *
 + * Arbitrum and Polygon stay on the gasless wallet, so their fee is 0 and
 + * sponsored. Ethereum is a plain account: its fee is the account's quote
-+ * for the same transfer `sendAsset` will send. Bitcoin keeps estimateFee.
++ * for the same transfer `sendAsset` will send. Bitcoin and native ETH use
++ * estimateFee on the hook return. For a native asset that method calls
++ * quoteSendTransaction({ to, value }) and returns fee in wei. ETH has 18
++ * decimals, so that wei fee is already in the asset unit and the review
++ * screen adds it to the total.
 + *
 + * The returned fee for an Ethereum token transfer is wei, not token base
 + * units. The review screen formats it with 18 decimals and ETH, without
@@ -582,7 +630,7 @@ index 170923a..83990b1 100644
   */
  export async function quoteSendFee(
    account: any,
-@@ -134,7 +135,8 @@ export async function quoteSendFee(
+@@ -134,7 +139,8 @@ export async function quoteSendFee(
    const asset = ASSET_MAP.get(assetId);
    if (!asset) return { fee: null, isSponsored: false };
  
@@ -592,7 +640,7 @@ index 170923a..83990b1 100644
      return { fee: '0', isSponsored: true };
    }
  
-@@ -149,8 +151,24 @@ export async function quoteSendFee(
+@@ -149,8 +155,24 @@ export async function quoteSendFee(
        return { fee: null, isSponsored: false };
      }
      const amountInBaseUnit = parsed.shiftedBy(asset.getDecimals()).toFixed(0);

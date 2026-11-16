@@ -1,28 +1,28 @@
 # Wallet interface sale
 
-One Sepolia sale of 1 USDT for EUR. The patched WDK starter wallet, installed on the iOS simulator, confirms the send. The sandbox must recognize that hash by itself and book the sale through `PayoutInProgress` or `Completed`.
+A Sepolia sale of 1 USDT or 0.0001 ETH for EUR, or the same transfer left on the review screen. The patched WDK starter wallet, installed on the iOS simulator, confirms the send or goes back. A confirmed run requires the sandbox to recognize that hash by itself and book the sale through `PayoutInProgress` or `Completed`.
 
-This does not cover a rejected confirmation, a smart account, a purchase, or the bank payout. The wallet runs in a simulator, not on a device, and Maestro taps the controls. The flow screenshots are `sell-widget-open`, `send-review`, and `send-success`. The payment-information step is not captured, because that page prints the payout IBAN next to the deposit address. After the sale is booked, the runner saves the block explorer page and the booking page. The booking can stay in `Processing` on the sandbox; the run is then red and is recorded as red.
+This does not cover a smart account, a purchase, or the bank payout. The wallet runs in a simulator, not on a device, and Maestro taps the controls. It does not cover an unpatched or released wallet. A confirmed run saves `sell-widget-open`, `send-review`, and `send-success`. A rejected run saves `sell-widget-open`, `send-review`, and `send-rejected`. The payment-information step is not captured, because that page prints the payout IBAN next to the deposit address. After a confirmed sale is booked, the runner saves the block explorer page and the booking page. A rejected run has no transaction, so it saves neither. The booking can stay in `Processing` on the sandbox; a confirmed run is then red and is recorded as red.
 
-The starter is not upstream. `build.sh` checks out commit `031e210` and applies `starter.patch`. `ethereum` is switched from the gasless wallet package to the plain EVM wallet (`@tetherto/wdk-wallet-evm`) so a Sepolia account can sign the transfer. Arbitrum and Polygon stay gasless. The confirmation logic is unchanged: `sendAsset` and `onConfirm` still send the amount from the route, and `disabled` at `src/app/send/review.tsx:217` in the starter is unchanged. The Ethereum token fee line is display-only and is not added to the token total.
+The starter is not upstream. `build.sh` checks out commit `031e210` and applies `starter.patch`. `ethereum` is switched from the gasless wallet package to the plain EVM wallet (`@tetherto/wdk-wallet-evm`) so a Sepolia account can sign the transfer. Arbitrum and Polygon stay gasless. The confirmation logic is unchanged: `sendAsset` and `onConfirm` still send the amount from the route, and `disabled` at `src/app/send/review.tsx:220` in the starter is unchanged. An Ethereum token fee is display-only and is not added to the token total. A native ETH fee is in ETH and is included in the total.
 
 `starter.patch` changes these files:
 
 - `package.json` adds `@tetherto/wdk-wallet-evm` 1.0.0-beta.17 and `@dfx.swiss/wdk-protocol-fiat-dfx` via `file:../../..`.
 - `wdk.config.js` points `ethereum` at `@tetherto/wdk-wallet-evm`, registers protocol `dfx`, and limits that protocol's fiat methods to `quoteSell` and `sell`.
-- `src/wdk/networks.ts` builds Ethereum as a plain account (provider only), sets Sepolia USDT to `0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0` with 6 decimals, and binds `dfx` to the sandbox environment.
-- `src/wdk/useSend.ts` quotes an Ethereum token fee with `extension().quoteTransfer` and a native fee with `estimateFee`. `sendAsset` is unchanged.
+- `src/wdk/networks.ts` builds Ethereum as a plain account (provider only), sets Sepolia USDT to `0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0` with 6 decimals, adds native ETH (`id` `eth-ethereum`, 18 decimals, no contract address) before that USDT row for the DFX ETH sale, and binds `dfx` to the sandbox environment. The indexer still has no token type `eth`, so ETH does not appear in Activity.
+- `src/wdk/useSend.ts` quotes an Ethereum token fee with `extension().quoteTransfer` and a native fee with `estimateFee` on the hook return. For native ETH that call is `quoteSendTransaction({ to, value })` and the fee is wei, already in the asset unit. `sendAsset` is unchanged.
 - `src/components/Button.tsx` forwards `testID` to the pressable.
 - `src/components/SeedWordInputGrid.tsx` adds a `testID` on the first word field, the field that already distributes a pasted phrase.
 - `src/app/(onboarding)/import.tsx` adds `import-seed` and `import-submit`.
 - `src/app/(onboarding)/password.tsx` adds `password-input`, `password-confirm`, and `password-submit`.
 - `src/app/_layout.tsx` presents `sell` as a full-screen modal, the same way send is presented.
 - `src/app/sell/_layout.tsx` uses the same stack-plus-toast shell as the other modal routes.
-- `src/app/sell/index.tsx` calls `sell` for 1 USDT on Sepolia to EUR and shows the returned page in a web view. The page URL is not rendered as text and is not logged.
-- `src/app/(app)/(tabs)/wallet.tsx` adds `send-entry` and `sell-entry`.
-- `src/app/send/index.tsx` adds `send-asset-usdt-ethereum` on the Sepolia USDT row.
+- `src/app/sell/index.tsx` reads the `asset` search parameter. `ETH` calls `sell` for 0.0001 ETH (`100000000000000` wei) on Sepolia to EUR. Any other value calls `sell` for 1 USDT. The returned page is shown in a web view. The page URL is not rendered as text and is not logged.
+- `src/app/(app)/(tabs)/wallet.tsx` adds `send-entry` and `sell-entry` (1 USDT). On the same row as `sell-entry`, `sell-eth-entry` is labeled `Sell ETH` and opens `/sell?asset=ETH`.
+- `src/app/send/index.tsx` adds `send-asset-usdt-ethereum` on the Sepolia USDT row and `send-asset-eth-ethereum` on the Sepolia ETH row. Other rows have no send test id.
 - `src/app/send/amount.tsx` adds `send-recipient`, `send-amount`, and `send-continue`.
-- `src/app/send/review.tsx` adds `send-confirm`. The fee line does not change the amount that is sent. `onConfirm` and `disabled` are unchanged.
+- `src/app/send/review.tsx` adds `send-confirm`. A token fee line does not change the amount that is sent. A native ETH fee is included in the total. `onConfirm` and `disabled` are unchanged. Back is the header control labeled `Go back`.
 - `src/app/send/success.tsx` adds `send-success-hash` and sets `accessibilityLabel` to the full hash, because the visible text is shortened.
 
 `.npmrc` is not part of the patch. `build.sh` writes `install-links=true` into the starter checkout because the `file:` dependency needs one shared package copy.
@@ -53,18 +53,28 @@ From `e2e/`:
 node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid>
 ```
 
-That is the preflight. It does not paste the seed, does not start Maestro against the app, does not send, and writes no record. It requires the booted simulator to use iOS 26.5 and Maestro 2.10. Exit 0 means the tree, the installed sale build, the simulator, Maestro, the sandbox version, and the account balance are ready. The account needs at least 1 USDT and 0.0002 ETH. The build checks that the starter's configured Ethereum provider reports the Sepolia chain ID before building. Preflight compares the installed module copy with the working tree right after it reads HEAD and checks that the tree is clean.
+That is the preflight. It does not paste the seed, does not start Maestro against the app, does not send, and writes no record. It requires the booted simulator to use iOS 26.5 and Maestro 2.10. Exit 0 means the tree, the installed sale build, the simulator, Maestro, the sandbox version, and the account balance are ready. `--asset` is `usdt` (default) or `eth`. Preflight for `usdt` requires at least 1 USDT and 0.0002 ETH. Preflight for `eth` requires at least 0.0001 ETH plus 0.0002 ETH, and does not also require 1 USDT. The same balance gate applies to a rejected run of that asset. The build checks that the starter's configured Ethereum provider reports the Sepolia chain ID before building. Preflight compares the installed module copy with the working tree right after it reads HEAD and checks that the tree is clean.
 
 ```sh
 node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid> \
   --send --confirm --follow <minutes> --screenshots <dir> --record <file>
 ```
 
-`--follow` is 1 to 240 minutes. `--screenshots` must be a directory owned by the current user with mode `0700`, and it must not already contain `sell-widget-open.png`, `send-review.png`, or `send-success.png`. `--record` must not exist yet, must not be the seed file, and must not be inside the `--screenshots` directory. `--rpc` defaults to `https://ethereum-sepolia-rpc.publicnode.com`.
+```sh
+node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid> \
+  --asset eth --send --confirm --follow <minutes> --screenshots <dir> --record <file>
+```
+
+```sh
+node wallet-ui/run-sale.mjs --seed-file <path> --udid <simulator-udid> \
+  --asset usdt --send --reject --follow <minutes> --screenshots <dir> --record <file>
+```
+
+`--send` needs exactly one of `--confirm` or `--reject`. Neither flag is accepted without `--send`, and the two flags are not accepted together. `--reject` has the same `--follow`, `--screenshots` and `--record` requirements as a sale. `--follow` is 1 to 240 minutes: the booking wait for a sale, and the observation window for a rejection. `--screenshots` must be a directory owned by the current user with mode `0700`. A sale must not already find `sell-widget-open.png`, `send-review.png`, or `send-success.png` there. A rejection must not already find `sell-widget-open.png`, `send-review.png`, or `send-rejected.png`. `--record` must not exist yet, must not be the seed file, and must not be inside the `--screenshots` directory. `--rpc` defaults to `https://ethereum-sepolia-rpc.publicnode.com`. A sale record has `mode` `sale` and `asset` `USDT` or `ETH`. A rejection record has `mode` `rejected`, `walletConfirmations` 0, and no hash, block, gas used, fee, module status, or explorer reload count.
 
 A send takes a fixed lock directory in the system temporary directory before checking for another Maestro process and normally holds it through cleanup. A second signal during cleanup attempts to release it before exiting. A lock left after a crash must be deleted by hand. Preflight without a send takes no lock.
 
-Exit 0 is a pass. Exit 1 is a failed check; the record file then holds one JSONL line with `result` `fail` and `failedCheck`, unless the record cannot be written. A failed flow records the first failed Maestro step as `failedStep` with the IBAN masked; it is also printed when the flow failure stops the run. Exit 2 is usage. Exit 3 means the run did not start: the reason is printed and no record is written; this includes an occupied or uncreatable lock. The runner starts each flow once and never restarts a flow or a step, so `maestroStepRetries` is always 0; it states how the runner works and is not a measurement of what Maestro does inside one step. The receipt is read for up to 60 seconds, fixed-block balance reads are repeated when a node is lagging, the backend record is read every 20 seconds until `--follow` ends, and the explorer page is reloaded for up to five minutes until it shows the hash and Success. The record counts backend reads in `backendReads`, RPC read retries in `rpcReadRetries`, and explorer reloads in `explorerReloads`. A second Maestro process on the machine makes the preflight exit 3, and makes the gap between the two flows exit 1 with `nothing sent`. Neither the runner nor the patched wallet reports the hash to DFX; the runner only reads the transaction list by `inputTxId`, and `detection` `self` states that rather than a value read from the backend.
+Exit 0 is a pass. Exit 1 is a failed check; the record file then holds one JSONL line with `result` `fail` and `failedCheck`, unless the record cannot be written. A failed flow records the first failed Maestro step as `failedStep` with the IBAN masked; it is also printed when the flow failure stops the run. Exit 2 is usage. Exit 3 means the run did not start: the reason is printed and no record is written; this includes an occupied or uncreatable lock. The runner starts each flow once and never restarts a flow or a step, so `maestroStepRetries` is always 0; it states how the runner works and is not a measurement of what Maestro does inside one step. On a sale, the receipt is read for up to 60 seconds, fixed-block balance reads are repeated when a node is lagging, the backend record is read every 20 seconds until `--follow` ends, and the explorer page is reloaded for up to five minutes until it shows the hash and Success. On a rejection, the runner waits `--follow` minutes and then checks that the nonce and the three balances are unchanged and that the transaction list has no new sale of that asset. The record counts backend reads in `backendReads` and RPC read retries in `rpcReadRetries`. A sale record also counts explorer reloads in `explorerReloads`. A second Maestro process on the machine makes the preflight exit 3, and makes the gap between the two flows exit 1 with `nothing sent`. Neither the runner nor the patched wallet reports the hash to DFX; the runner only reads the transaction list by `inputTxId`, and `detection` `self` states that rather than a value read from the backend. A rejection does not look up a hash. It compares the transaction list with the ids read after flow 1.
 
 Exit 130 or 143 means the run was interrupted by SIGINT or SIGTERM. The runner then starts no further send flow, stops the running Maestro process unless the cleanup flow is running, clears the clipboard and the wallet state, writes a record with `failedCheck` `interrupted` when flow 1 had started, `--record` is set and no record was written yet, and releases the lock. A signal before flow 1 starts writes no record. If a record write is already in progress, it is allowed to finish and may record the earlier result instead. Cleanup errors are reported and can leave state behind. A termination that cannot be caught (SIGKILL, power loss), or a second signal during that cleanup, can leave the seed in the simulator; erase the simulator before the next run.
 
@@ -72,7 +82,7 @@ The seed file is given to the simulator clipboard through a file descriptor. The
 
 ## Traps
 
-The send and cleanup flows are `flow/sell-1-widget.yaml`, `flow/sell-2-send.yaml`, and `flow/cleanup.yaml`.
+The send and cleanup flows are `flow/sell-1-widget.yaml`, `flow/sell-2-send.yaml`, `flow/sell-2-reject.yaml`, and `flow/cleanup.yaml`. Flow 1 taps `${SELL_ENTRY}` (`sell-entry` or `sell-eth-entry`). Flow 2 taps the asset row, types the amount, and opens review. `sell-2-send.yaml` taps `send-confirm` once. `sell-2-reject.yaml` taps `Go back` and does not tap `send-confirm`.
 
 The flows are inputs of `run-sale.mjs` and are not meant to be started on their own. A flow started directly with Maestro can send without the runner's switches, lock, checks, cleanup and record; such a run proves nothing and is not recorded.
 

@@ -35,14 +35,14 @@ appId: io.tether.wdk.starter.reactnative
 - tapOn: "(?i)I prefer to backup manually"
 - extendedWaitUntil:
     visible:
-      id: "sell-entry"
+      id: "${SELL_ENTRY}"
     timeout: 60000
 - extendedWaitUntil:
     notVisible: "Couldn't load"
     timeout: 60000
 - tapOn:
-    id: "sell-entry"
-# sell() already puts 1 USDT on the widget URL. The page opens on the
+    id: "${SELL_ENTRY}"
+# sell() already puts the amount of the chosen asset on the widget URL. The page opens on the
 # bank step. Do not tap a saved account in the list that opens next.
 - extendedWaitUntil:
     visible: "Add or select your IBAN"

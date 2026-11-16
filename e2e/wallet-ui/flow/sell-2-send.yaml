@@ -5,7 +5,7 @@ appId: io.tether.wdk.starter.reactnative
 - tapOn:
     id: "send-entry"
 - tapOn:
-    id: "send-asset-usdt-ethereum"
+    id: "${ASSET_TESTID}"
 - tapOn:
     id: "send-recipient"
 - longPressOn:
@@ -13,16 +13,16 @@ appId: io.tether.wdk.starter.reactnative
 - tapOn: "Paste"
 - tapOn:
     id: "send-amount"
-- inputText: "1"
+- inputText: "${AMOUNT_TEXT}"
 # The title is above the keyboard and dismisses it before Review.
-- tapOn: "Send USDT"
+- tapOn: "Send ${SYMBOL}"
 - tapOn:
     id: "send-continue"
 - extendedWaitUntil:
     visible:
       id: "send-confirm"
     timeout: 60000
-- assertVisible: "1 USDT"
+- assertVisible: "${REVIEW_AMOUNT}"
 - assertVisible: "Ethereum \\(Sepolia\\)"
 - assertVisible: "${DEP_HEAD}\\.\\.\\.${DEP_TAIL}"
 - takeScreenshot: send-review

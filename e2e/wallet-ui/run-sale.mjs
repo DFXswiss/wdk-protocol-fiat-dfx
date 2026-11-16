@@ -1,9 +1,9 @@
 // Copyright 2026 DFX AG
 // SPDX-License-Identifier: Apache-2.0
 
-// Sepolia sale of 1 USDT for EUR.
-// The WDK starter wallet on the iOS simulator confirms the send.
-// Without --send and --confirm, only the preflight runs and the app is not driven.
+// Sepolia sale of 1 USDT or 0.0001 ETH for EUR, or the same transfer rejected on the review screen.
+// The WDK starter wallet on the iOS simulator confirms the send, or leaves the review screen.
+// Without --send, only the preflight runs and the app is not driven.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash, randomInt } from 'node:crypto'
 import { closeSync, constants, copyFileSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, rmdirSync } from 'node:fs'
@@ -32,21 +32,53 @@ const BUNDLE_ID = 'io.tether.wdk.starter.reactnative'
 const CHAIN_ID = 11155111n
 const USDT = getAddress('0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0')
 const USDT_AMOUNT = 1000000n
+const ETH_AMOUNT = 100000000000000n
 const ETH_FEE = parseUnits('0.0002', 18)
+const ASSET_TABLE = {
+  usdt: {
+    symbol: 'USDT',
+    decimals: 6,
+    baseUnits: USDT_AMOUNT,
+    token: USDT,
+    sellEntry: 'sell-entry',
+    assetTestId: 'send-asset-usdt-ethereum',
+    amountText: '1',
+    reviewAmount: '^1 USDT$'
+  },
+  eth: {
+    symbol: 'ETH',
+    decimals: 18,
+    baseUnits: ETH_AMOUNT,
+    token: null,
+    sellEntry: 'sell-eth-entry',
+    assetTestId: 'send-asset-eth-ethereum',
+    amountText: '0.0001',
+    reviewAmount: '^0[.]0001 ETH$'
+  }
+}
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const ERC20_ABI = ['function balanceOf(address) view returns (uint256)']
 const WALLET_INTERFACE = 'wdk-starter-react-native in the iOS simulator, driven by Maestro'
 const IBAN_LABEL = 'CH 00000 (invented per run)'
 const FLOW_SHOTS = ['sell-widget-open.png', 'send-review.png', 'send-success.png']
+const REJECT_FLOW_SHOTS = ['sell-widget-open.png', 'send-review.png', 'send-rejected.png']
 // Short transaction id in explorer-<hash>.png: 10 hex digits, no 0x prefix.
 const HASH_SHORT = 10
-const RECORD_FIELDS = [
+const SALE_RECORD_FIELDS = [
   'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
   'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
-  'account', 'depositAddress', 'ibanCountryAndClearing', 'hash', 'block', 'gasUsed', 'fee',
+  'account', 'depositAddress', 'ibanCountryAndClearing', 'asset', 'mode', 'hash', 'block', 'gasUsed', 'fee',
   'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
   'screenshots'
 ]
+const REJECT_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
+  'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'depositAddress', 'ibanCountryAndClearing', 'asset', 'mode', 'observation', 'nonce',
+  'balances', 'walletConfirmations', 'backend', 'backendReads', 'rpcReadRetries', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
+  'screenshots'
+]
+const REJECT_ABSENT = ['hash', 'block', 'gasUsed', 'fee', 'moduleStatus', 'explorerReloads']
 
 class UsageError extends Error {}
 class NotRunError extends Error {}
@@ -248,23 +280,41 @@ function sha256File (path) {
   }
 }
 
+function lookupAsset (name) {
+  const asset = ASSET_TABLE[name]
+  if (!asset) throw new UsageError('--asset must be usdt or eth')
+  const scale = 10n ** BigInt(asset.decimals)
+  const expected = asset.symbol === 'ETH' ? scale / 10000n : scale
+  if (asset.baseUnits !== expected) throw new UsageError('asset table is inconsistent')
+  return asset
+}
+
+function selectedAsset () {
+  return lookupAsset(state.options.asset)
+}
+
+function recordFields () {
+  return state.options && state.options.reject ? REJECT_RECORD_FIELDS : SALE_RECORD_FIELDS
+}
+
 function parseArgs (args) {
-  const options = { rpc: DEFAULT_RPC, send: false, confirm: false }
+  const options = { rpc: DEFAULT_RPC, send: false, confirm: false, reject: false, asset: 'usdt' }
   const valued = new Map([
     ['--seed-file', 'seedFile'],
     ['--udid', 'udid'],
     ['--record', 'record'],
     ['--screenshots', 'screenshots'],
     ['--follow', 'follow'],
-    ['--rpc', 'rpc']
+    ['--rpc', 'rpc'],
+    ['--asset', 'asset']
   ])
   const seen = new Set()
   for (let i = 0; i < args.length; i++) {
     const name = args[i]
-    if (name === '--send' || name === '--confirm') {
+    if (name === '--send' || name === '--confirm' || name === '--reject') {
       if (seen.has(name)) throw new UsageError(`Duplicate argument: ${name}`)
       seen.add(name)
-      options[name === '--send' ? 'send' : 'confirm'] = true
+      options[name.slice(2)] = true
     } else if (valued.has(name)) {
       if (seen.has(name)) throw new UsageError(`Duplicate argument: ${name}`)
       seen.add(name)
@@ -277,7 +327,10 @@ function parseArgs (args) {
   }
   if (!options.seedFile) throw new UsageError('Required argument missing: --seed-file <path>')
   if (!options.udid) throw new UsageError('Required argument missing: --udid <id>')
-  if (options.send !== options.confirm) throw new UsageError('--send and --confirm are both required to send')
+  lookupAsset(options.asset)
+  if (options.confirm && options.reject) throw new UsageError('--confirm and --reject cannot be combined')
+  if (options.send && options.confirm === options.reject) throw new UsageError('--send needs exactly one of --confirm or --reject')
+  if (!options.send && (options.confirm || options.reject)) throw new UsageError('--confirm and --reject require --send')
   if (options.follow != null) {
     if (!/^(?:[1-9]\d*)$/.test(options.follow) || Number(options.follow) > 240) {
       throw new UsageError('--follow must be an integer from 1 to 240')
@@ -604,8 +657,13 @@ async function preflight (options) {
   } catch {
     throw new NotRunError('not run: balance could not be read')
   }
-  if (usdtBalance < USDT_AMOUNT) throw new NotRunError('not run: account has less than 1 USDT')
-  if (ethBalance < ETH_FEE) throw new NotRunError('not run: account has less than 0.0002 ETH')
+  const asset = lookupAsset(options.asset)
+  if (asset.symbol === 'USDT') {
+    if (usdtBalance < USDT_AMOUNT) throw new NotRunError('not run: account has less than 1 USDT')
+    if (ethBalance < ETH_FEE) throw new NotRunError('not run: account has less than 0.0002 ETH')
+  } else if (ethBalance < ETH_AMOUNT + ETH_FEE) {
+    throw new NotRunError('not run: account has less than 0.0001 ETH plus 0.0002 ETH')
+  }
   return { seed, moduleHead, build, maestroVersion, simulatorRuntime, backendCommitStart, account, provider, usdt }
 }
 
@@ -911,6 +969,107 @@ async function checkChain (prelude, hash, depositAddress) {
   ]
 }
 
+async function readTransaction (provider, hash) {
+  const deadline = Date.now() + 60_000
+  while (true) {
+    let tx
+    try {
+      tx = await provider.getTransaction(hash)
+    } catch (error) {
+      if (!isLagging(error) || Date.now() + 2_000 >= deadline) throw new CheckError('transfer-value', 'transaction read failed')
+      await delay(2_000)
+      state.rpcReadRetries++
+      continue
+    }
+    if (tx) return tx
+    if (Date.now() + 2_000 >= deadline) throw new CheckError('transfer-value', 'transaction missing')
+    await delay(2_000)
+    state.rpcReadRetries++
+  }
+}
+
+async function etherBalanceAt (prelude, address, blockNumber, failedCheck) {
+  try {
+    const value = await readAtBlock(blockNumber, () => prelude.provider.getBalance(address, blockNumber))
+    return BigInt(value)
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError(failedCheck, 'balance read failed')
+  }
+}
+
+async function tokenBalanceAt (prelude, address, blockNumber, failedCheck) {
+  try {
+    const value = await readAtBlock(blockNumber, () => prelude.usdt.balanceOf(address, { blockTag: blockNumber }))
+    return BigInt(value)
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError(failedCheck, 'balance read failed')
+  }
+}
+
+async function checkEthChain (prelude, hash, depositAddress) {
+  const raw = await readReceipt(prelude.provider, hash)
+  const status = quantity(raw.status, 'receipt-status')
+  if (status !== 1n) throw new CheckError('receipt-status', `status is ${status}`)
+  let from
+  try {
+    from = getAddress(raw.from)
+  } catch {
+    throw new CheckError('receipt-from', 'from is not an address')
+  }
+  if (from !== prelude.account) throw new CheckError('receipt-from', 'from is not the account')
+  let to
+  try {
+    to = raw.to ? getAddress(raw.to) : null
+  } catch {
+    to = null
+  }
+  if (to !== depositAddress) throw new CheckError('receipt-to', 'to is not the deposit address')
+  const tx = await readTransaction(prelude.provider, hash)
+  const value = quantity(tx.value, 'transfer-value')
+  if (value !== ETH_AMOUNT) throw new CheckError('transfer-value', 'value is not 100000000000000')
+  if (!Array.isArray(raw.logs) || raw.logs.length !== 0) {
+    throw new CheckError('receipt-logs', `found ${Array.isArray(raw.logs) ? raw.logs.length : 'no'} logs`)
+  }
+  const block = Number(quantity(raw.blockNumber, 'receipt'))
+  if (!Number.isSafeInteger(block) || block < 1) throw new CheckError('receipt', 'block number is not usable')
+  const gasUsed = quantity(raw.gasUsed, 'balance-account-eth')
+  if (typeof raw.effectiveGasPrice !== 'string' && typeof raw.effectiveGasPrice !== 'number') {
+    throw new CheckError('balance-account-eth', 'receipt has no effectiveGasPrice')
+  }
+  const fee = gasUsed * quantity(raw.effectiveGasPrice, 'balance-account-eth')
+  const accountEthBefore = await etherBalanceAt(prelude, prelude.account, block - 1, 'balance-account-eth')
+  const accountEthAfter = await etherBalanceAt(prelude, prelude.account, block, 'balance-account-eth')
+  if (accountEthBefore - accountEthAfter !== ETH_AMOUNT + fee) {
+    throw new CheckError('balance-account-eth', 'account ETH balance did not fall by the amount plus the effective fee')
+  }
+  const depositEthBefore = await etherBalanceAt(prelude, depositAddress, block - 1, 'balance-deposit-eth')
+  const depositEthAfter = await etherBalanceAt(prelude, depositAddress, block, 'balance-deposit-eth')
+  if (depositEthAfter - depositEthBefore !== ETH_AMOUNT) {
+    throw new CheckError('balance-deposit-eth', 'deposit ETH balance did not rise by 100000000000000')
+  }
+  const accountUsdtBefore = await tokenBalanceAt(prelude, prelude.account, block - 1, 'balance-account-usdt')
+  const accountUsdtAfter = await tokenBalanceAt(prelude, prelude.account, block, 'balance-account-usdt')
+  if (accountUsdtBefore !== accountUsdtAfter) {
+    throw new CheckError('balance-account-usdt', 'account USDT balance changed')
+  }
+  const depositUsdtBefore = await tokenBalanceAt(prelude, depositAddress, block - 1, 'balance-deposit-usdt')
+  const depositUsdtAfter = await tokenBalanceAt(prelude, depositAddress, block, 'balance-deposit-usdt')
+  if (depositUsdtBefore !== depositUsdtAfter) {
+    throw new CheckError('balance-deposit-usdt', 'deposit USDT balance changed')
+  }
+  state.evidence.block = block
+  state.evidence.gasUsed = gasUsed.toString()
+  state.evidence.fee = fee.toString()
+  state.evidence.balances = [
+    { address: prelude.account, asset: 'ETH', before: accountEthBefore.toString(), after: accountEthAfter.toString() },
+    { address: depositAddress, asset: 'ETH', before: depositEthBefore.toString(), after: depositEthAfter.toString() },
+    { address: prelude.account, asset: 'USDT', before: accountUsdtBefore.toString(), after: accountUsdtAfter.toString() },
+    { address: depositAddress, asset: 'USDT', before: depositUsdtBefore.toString(), after: depositUsdtAfter.toString() }
+  ]
+}
+
 function plain (value, failedCheck) {
   if (typeof value === 'string' || typeof value === 'number') return value
   throw new CheckError(failedCheck, 'backend field is not a plain value')
@@ -922,12 +1081,23 @@ function amountIsOne (value) {
   return false
 }
 
+function amountIsEthSale (value) {
+  if (typeof value === 'number') return Object.is(value, 0.0001)
+  if (typeof value === 'string') return /^0\.0001(?:0*)$/.test(value.trim())
+  return false
+}
+
 function assertSaleShape (row) {
+  const asset = selectedAsset()
   if (!row || typeof row !== 'object') throw new CheckError('backend-shape', 'record is not an object')
   if (row.type !== 'Sell') throw new CheckError('backend-shape', 'type is not Sell')
-  if (row.inputAsset !== 'USDT') throw new CheckError('backend-shape', 'asset is not USDT')
+  if (row.inputAsset !== asset.symbol) throw new CheckError('backend-shape', `asset is not ${asset.symbol}`)
   if (row.inputBlockchain !== 'Sepolia') throw new CheckError('backend-shape', 'blockchain is not Sepolia')
-  if (!amountIsOne(row.inputAmount)) throw new CheckError('backend-shape', 'amount is not 1')
+  if (asset.symbol === 'USDT') {
+    if (!amountIsOne(row.inputAmount)) throw new CheckError('backend-shape', 'amount is not 1')
+  } else if (!amountIsEthSale(row.inputAmount)) {
+    throw new CheckError('backend-shape', 'amount is not 0.0001')
+  }
   plain(row.id, 'backend-shape')
   plain(row.uid, 'backend-shape')
   plain(row.state, 'backend-shape')
@@ -1242,7 +1412,7 @@ async function assertModuleStatus (sale) {
   } catch {
     throw new CheckError('module-status', 'module detail failed')
   }
-  if (detail?.cryptoAsset !== 'USDT' || detail?.fiatCurrency !== 'EUR' || detail?.status !== expected) {
+  if (detail?.cryptoAsset !== selectedAsset().symbol || detail?.fiatCurrency !== 'EUR' || detail?.status !== expected) {
     throw new CheckError('module-status', 'module status does not match the sale')
   }
   state.evidence.moduleStatus = {
@@ -1252,51 +1422,20 @@ async function assertModuleStatus (sale) {
   }
 }
 
-async function sendAndCheck (prelude) {
-  const options = state.options
-  await copySeed(options.seedFile)
-  const iban = inventedIban()
-  state.saleIban = iban
-  rememberIban(iban)
-  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
-  state.flow1Started = true
-  const flow1 = await runFlow(join(flowDir, 'sell-1-widget.yaml'), { IBAN: iban, IBAN_PATTERN: `.*${[...iban].join(' ?')}.*` })
-  const flow1Code = flow1.code
-  flow1.stdout = ''
-  if (flow1Code !== 0) throw new CheckError('flow-1', 'nothing sent', state.failedStep)
-  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
-  const pasted = await runCapture('xcrun', ['simctl', 'pbpaste', state.udid], 'ignore')
-  if (pasted.code !== 0) throw new CheckError('clipboard', 'nothing sent')
-  const depositRaw = oneLine(pasted.stdout)
-  if (!/^0x[a-fA-F0-9]{40}$/.test(depositRaw)) throw new CheckError('clipboard', 'nothing sent')
-  let depositAddress
-  try {
-    depositAddress = getAddress(depositRaw)
-  } catch {
-    throw new CheckError('clipboard', 'nothing sent')
-  }
-  state.evidence.depositAddress = depositAddress
-  assertNoForeignMaestro(true)
-  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
-  const flow2 = await runFlow(join(flowDir, 'sell-2-send.yaml'), {
+function sendFlowEnv (depositRaw) {
+  const asset = selectedAsset()
+  return {
     DEP_HEAD: depositRaw.slice(0, 6),
-    DEP_TAIL: depositRaw.slice(-4)
-  })
-  const confirmations = confirmationCount(flow2.stdout)
-  flow2.stdout = ''
-  state.evidence.walletConfirmations = confirmations
-  if (confirmations !== 1) {
-    if (confirmations === 0 && flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed before send-confirm', state.failedStep)
-    throw new CheckError('wallet-confirmations', `completed send-confirm taps: ${confirmations}`, state.failedStep)
+    DEP_TAIL: depositRaw.slice(-4),
+    ASSET_TESTID: asset.assetTestId,
+    AMOUNT_TEXT: asset.amountText,
+    SYMBOL: asset.symbol,
+    REVIEW_AMOUNT: asset.reviewAmount
   }
-  const hash = await readSuccessHash()
-  state.evidence.hash = hash
-  if (flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed after send-confirm', state.failedStep)
-  await checkChain(prelude, hash, depositAddress)
-  const session = await sessionFor(prelude.seed, options.rpc)
-  const sale = await followBackend(session, hash, options.follow)
-  await assertModuleStatus(sale)
-  await captureEvidence(session, hash, sale)
+}
+
+async function assertClosed (prelude) {
+  const options = state.options
   const backendCommitEnd = await readVersion(false)
   if (backendCommitEnd !== prelude.backendCommitStart) {
     throw new CheckError('backend-commit', 'backend commit changed during the run')
@@ -1324,6 +1463,212 @@ async function sendAndCheck (prelude) {
   if (bundleSha !== prelude.build.mainJsbundleSha256) {
     throw new CheckError('bundle', 'installed main.jsbundle changed during the run')
   }
+}
+
+async function confirmedNonce (provider, address, blockNumber) {
+  try {
+    return BigInt(await readAtBlock(blockNumber, () => provider.getTransactionCount(address, blockNumber)))
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError('nonce', 'nonce read failed')
+  }
+}
+
+async function pendingNonce (provider, address) {
+  const deadline = Date.now() + 60_000
+  while (true) {
+    try {
+      return BigInt(await provider.getTransactionCount(address, 'pending'))
+    } catch (error) {
+      if (!isLagging(error) || Date.now() + 2_000 >= deadline) throw new CheckError('nonce', 'nonce read failed')
+      await delay(2_000)
+      state.rpcReadRetries++
+    }
+  }
+}
+
+async function observeMinutes (minutes) {
+  const deadline = Date.now() + minutes * 60_000
+  while (Date.now() < deadline) {
+    if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+    await delay(Math.min(20_000, deadline - Date.now()))
+  }
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+}
+
+async function headBlock (provider) {
+  let block
+  try {
+    block = Number(await provider.getBlockNumber())
+  } catch {
+    throw new CheckError('nonce', 'block read failed')
+  }
+  if (!Number.isSafeInteger(block) || block < 0) throw new CheckError('nonce', 'block number is not usable')
+  return block
+}
+
+async function rejectBalances (prelude, depositAddress, blockNumber) {
+  const asset = selectedAsset()
+  const accountAsset = asset.token
+    ? await tokenBalanceAt(prelude, prelude.account, blockNumber, 'balance-account-asset')
+    : await etherBalanceAt(prelude, prelude.account, blockNumber, 'balance-account-asset')
+  const accountEth = await etherBalanceAt(prelude, prelude.account, blockNumber, 'balance-account-eth')
+  const depositFailed = 'balance-deposit-asset'
+  const depositAsset = asset.token
+    ? await tokenBalanceAt(prelude, depositAddress, blockNumber, depositFailed)
+    : await etherBalanceAt(prelude, depositAddress, blockNumber, depositFailed)
+  return { accountAsset, accountEth, depositAsset }
+}
+
+function balanceRows (account, depositAddress, before, after) {
+  const asset = selectedAsset()
+  const rows = [{
+    address: account,
+    asset: asset.symbol,
+    before: before.accountAsset.toString(),
+    after: after.accountAsset.toString()
+  }]
+  if (asset.symbol !== 'ETH') {
+    rows.push({
+      address: account,
+      asset: 'ETH',
+      before: before.accountEth.toString(),
+      after: after.accountEth.toString()
+    })
+  }
+  rows.push({
+    address: depositAddress,
+    asset: asset.symbol,
+    before: before.depositAsset.toString(),
+    after: after.depositAsset.toString()
+  })
+  return rows
+}
+
+function sameBalances (before, after) {
+  if (after.accountAsset !== before.accountAsset) throw new CheckError('balance-account-asset', 'account asset balance changed')
+  if (after.accountEth !== before.accountEth) throw new CheckError('balance-account-eth', 'account ETH balance changed')
+  if (after.depositAsset !== before.depositAsset) throw new CheckError('balance-deposit-asset', 'deposit asset balance changed')
+}
+
+function transactionIds (rows) {
+  const ids = new Set()
+  for (const row of rows) {
+    if (row && row.id != null) ids.add(String(row.id))
+  }
+  return ids
+}
+
+async function rejectShotSet (expectedShots) {
+  const options = state.options
+  const shots = state.screenshots.map(item => {
+    if (sha256File(join(options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    return item
+  })
+  const byName = new Map(shots.map(item => [item.file, item]))
+  if (byName.size !== shots.length || expectedShots.some(name => !byName.has(name)) || byName.size !== expectedShots.length) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+  state.evidence.screenshots = expectedShots.map(name => byName.get(name))
+}
+
+async function rejectTransfer (prelude, depositAddress, depositRaw) {
+  const options = state.options
+  const asset = selectedAsset()
+  await sessionFor(prelude.seed, options.rpc)
+  const baseline = await readTransactions(state.session)
+  const baselineIds = transactionIds(baseline)
+  const fromBlock = await headBlock(prelude.provider)
+  const nonceBefore = await confirmedNonce(prelude.provider, prelude.account, fromBlock)
+  const before = await rejectBalances(prelude, depositAddress, fromBlock)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+  const flow2 = await runFlow(join(flowDir, 'sell-2-reject.yaml'), sendFlowEnv(depositRaw))
+  const confirmations = confirmationCount(flow2.stdout)
+  flow2.stdout = ''
+  state.evidence.walletConfirmations = confirmations
+  if (confirmations !== 0) {
+    throw new CheckError('wallet-confirmations', `completed send-confirm taps: ${confirmations}`, state.failedStep)
+  }
+  if (flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed', state.failedStep)
+  await observeMinutes(options.follow)
+  const toBlock = await headBlock(prelude.provider)
+  const nonceAfter = await confirmedNonce(prelude.provider, prelude.account, toBlock)
+  const noncePending = await pendingNonce(prelude.provider, prelude.account)
+  state.evidence.observation = { fromBlock, toBlock, minutes: options.follow }
+  state.evidence.nonce = {
+    before: nonceBefore.toString(),
+    after: nonceAfter.toString(),
+    pendingAfter: noncePending.toString()
+  }
+  if (nonceAfter !== nonceBefore || noncePending !== nonceAfter) throw new CheckError('nonce', 'nonce changed')
+  const after = await rejectBalances(prelude, depositAddress, toBlock)
+  state.evidence.balances = balanceRows(prelude.account, depositAddress, before, after)
+  sameBalances(before, after)
+  const rows = await readTransactions(state.session)
+  const fresh = rows.filter(row => {
+    if (!row || typeof row !== 'object') return false
+    const id = row.id == null ? null : String(row.id)
+    if (id != null && baselineIds.has(id)) return false
+    return row.type === 'Sell' && row.inputAsset === asset.symbol
+  })
+  state.evidence.backend = { newSaleRows: fresh.length, baselineRows: baseline.length }
+  if (fresh.length !== 0) throw new CheckError('backend-no-sale', `found ${fresh.length} new ${asset.symbol} sales`)
+  await assertClosed(prelude)
+  await rejectShotSet(REJECT_FLOW_SHOTS)
+}
+
+async function sendAndCheck (prelude) {
+  const options = state.options
+  await copySeed(options.seedFile)
+  const iban = inventedIban()
+  state.saleIban = iban
+  rememberIban(iban)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+  state.flow1Started = true
+  const flow1 = await runFlow(join(flowDir, 'sell-1-widget.yaml'), {
+    IBAN: iban,
+    IBAN_PATTERN: `.*${[...iban].join(' ?')}.*`,
+    SELL_ENTRY: selectedAsset().sellEntry
+  })
+  const flow1Code = flow1.code
+  flow1.stdout = ''
+  if (flow1Code !== 0) throw new CheckError('flow-1', 'nothing sent', state.failedStep)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+  const pasted = await runCapture('xcrun', ['simctl', 'pbpaste', state.udid], 'ignore')
+  if (pasted.code !== 0) throw new CheckError('clipboard', 'nothing sent')
+  const depositRaw = oneLine(pasted.stdout)
+  if (!/^0x[a-fA-F0-9]{40}$/.test(depositRaw)) throw new CheckError('clipboard', 'nothing sent')
+  let depositAddress
+  try {
+    depositAddress = getAddress(depositRaw)
+  } catch {
+    throw new CheckError('clipboard', 'nothing sent')
+  }
+  state.evidence.depositAddress = depositAddress
+  assertNoForeignMaestro(true)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+  if (options.reject) {
+    await rejectTransfer(prelude, depositAddress, depositRaw)
+    return
+  }
+  const flow2 = await runFlow(join(flowDir, 'sell-2-send.yaml'), sendFlowEnv(depositRaw))
+  const confirmations = confirmationCount(flow2.stdout)
+  flow2.stdout = ''
+  state.evidence.walletConfirmations = confirmations
+  if (confirmations !== 1) {
+    if (confirmations === 0 && flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed before send-confirm', state.failedStep)
+    throw new CheckError('wallet-confirmations', `completed send-confirm taps: ${confirmations}`, state.failedStep)
+  }
+  const hash = await readSuccessHash()
+  state.evidence.hash = hash
+  if (flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed after send-confirm', state.failedStep)
+  if (selectedAsset().symbol === 'ETH') await checkEthChain(prelude, hash, depositAddress)
+  else await checkChain(prelude, hash, depositAddress)
+  const session = await sessionFor(prelude.seed, options.rpc)
+  const sale = await followBackend(session, hash, options.follow)
+  await assertModuleStatus(sale)
+  await captureEvidence(session, hash, sale)
+  await assertClosed(prelude)
   const explorerName = explorerShotName(hash)
   const bookingName = bookingShotName(sale.uid, session)
   const expectedShots = [...FLOW_SHOTS, explorerName, bookingName]
@@ -1346,7 +1691,7 @@ async function sendAndCheck (prelude) {
 function measuredRecord () {
   const evidence = state.evidence
   const body = {}
-  for (const key of RECORD_FIELDS) {
+  for (const key of recordFields()) {
     if (key === 'date') body.date = new Date().toISOString()
     else if (key === 'backendReads') body.backendReads = state.backendReads
     else if (key === 'rpcReadRetries') body.rpcReadRetries = state.rpcReadRetries
@@ -1360,20 +1705,49 @@ function measuredRecord () {
   return body
 }
 
+function assertRejectedPass (body) {
+  const asset = selectedAsset()
+  if (body.walletConfirmations !== 0) throw new CheckError('wallet-confirmations', 'walletConfirmations is not 0')
+  if (body.walletStateCleared !== true) throw new CheckError('cleanup', 'wallet state was not cleared')
+  if (body.asset !== asset.symbol || body.mode !== 'rejected') throw new CheckError('record', 'asset or mode is wrong')
+  if (!body.nonce || body.nonce.before !== body.nonce.after || body.nonce.pendingAfter !== body.nonce.after) {
+    throw new CheckError('nonce', 'nonce changed')
+  }
+  if (!body.observation || !Number.isSafeInteger(body.observation.fromBlock) || !Number.isSafeInteger(body.observation.toBlock) || body.observation.minutes !== state.options.follow) {
+    throw new CheckError('record', 'observation is incomplete')
+  }
+  if (!body.backend || body.backend.newSaleRows !== 0 || typeof body.backend.baselineRows !== 'number') {
+    throw new CheckError('backend-no-sale', 'backend observation is wrong')
+  }
+  for (const key of REJECT_ABSENT) {
+    if (body[key] !== undefined) throw new CheckError('record', `unexpected ${key}`)
+  }
+  const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
+  if (names.length !== REJECT_FLOW_SHOTS.length || REJECT_FLOW_SHOTS.some((name, index) => names[index] !== name)) {
+    throw new CheckError('screenshots', 'screenshot set changed')
+  }
+}
+
 function assertPass (body) {
-  for (const key of RECORD_FIELDS) {
+  for (const key of recordFields()) {
     if (body[key] === undefined) throw new CheckError('record', `missing ${key}`)
   }
   if (body.dirty !== false) throw new CheckError('dirty-tree', 'the module tree is not clean')
   if (body.walletInterface !== WALLET_INTERFACE) throw new CheckError('record', 'walletInterface changed')
   if (body.ibanCountryAndClearing !== IBAN_LABEL) throw new CheckError('record', 'iban label changed')
+  if (body.mode === 'rejected') {
+    assertRejectedPass(body)
+    return
+  }
   if (body.walletConfirmations !== 1) throw new CheckError('wallet-confirmations', 'walletConfirmations is not 1')
   if (body.walletStateCleared !== true) throw new CheckError('cleanup', 'wallet state was not cleared')
+  const asset = selectedAsset()
+  if (body.asset !== asset.symbol || body.mode !== 'sale') throw new CheckError('record', 'asset or mode is wrong')
   const expectedStatus = body.backend.state === 'Completed' ? 'completed' : 'in_progress'
   if (body.backend.state !== 'PayoutInProgress' && body.backend.state !== 'Completed') {
     throw new CheckError('module-status', 'module status does not match the sale')
   }
-  if (!body.moduleStatus || body.moduleStatus.cryptoAsset !== 'USDT' || body.moduleStatus.fiatCurrency !== 'EUR' || body.moduleStatus.status !== expectedStatus) {
+  if (!body.moduleStatus || body.moduleStatus.cryptoAsset !== asset.symbol || body.moduleStatus.fiatCurrency !== 'EUR' || body.moduleStatus.status !== expectedStatus) {
     throw new CheckError('module-status', 'module status does not match the sale')
   }
   const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
@@ -1518,7 +1892,7 @@ async function main () {
   if (options.screenshots) prepareScreenshots(options.screenshots)
   if (options.send) {
     assertRecordPath(options.record, options.seedFile, options.screenshots)
-    for (const name of FLOW_SHOTS) {
+    for (const name of (options.reject ? REJECT_FLOW_SHOTS : FLOW_SHOTS)) {
       try {
         lstatSync(join(options.screenshots, name))
       } catch (error) {
@@ -1549,7 +1923,9 @@ async function main () {
     walletInterface: WALLET_INTERFACE,
     backendCommitStart: prelude.backendCommitStart,
     account: prelude.account,
-    ibanCountryAndClearing: IBAN_LABEL
+    ibanCountryAndClearing: IBAN_LABEL,
+    asset: selectedAsset().symbol,
+    mode: options.reject ? 'rejected' : 'sale'
   }
   try {
     await sendAndCheck(prelude)
@@ -1565,7 +1941,7 @@ async function main () {
     if (state.interrupted) await state.signalPromise
     state.recordPromise = writeRecord(body)
     await state.recordPromise
-    console.log(`wallet-ui pass: ${body.hash}`)
+    console.log(body.mode === 'rejected' ? 'wallet-ui pass: rejected' : `wallet-ui pass: ${body.hash}`)
   } catch (error) {
     if (state.interrupted) {
       await state.signalPromise
