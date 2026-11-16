@@ -44,8 +44,7 @@
         "Lint",
         "Types",
         "Test",
-        "Audit",
-        "Handbook redaction"
+        "Audit"
       ],
       ".github/workflows/pr-review-bot.yml": [
         "Review"
