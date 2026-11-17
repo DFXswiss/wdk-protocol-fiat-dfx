@@ -264,16 +264,19 @@
       "component": "Bank payout of the sale",
       "status": "switched off — the runner stops at PayoutInProgress or Completed",
       "statusKind": "switched-off",
-      "mechanism": "[ref 0] returns as soon as the sandbox row is PayoutInProgress or Completed. The runner does not read a bank debit.",
+      "mechanism": "[ref 0] checks the booked payout and returns when the sandbox row is PayoutInProgress or Completed. The runner does not read a bank debit.",
       "insteadOf": "a bank transfer of the fiat amount to the payout account",
       "doesNotProve": "A green run does not prove that a bank paid the fiat amount.",
       "refs": [
         {
           "file": "e2e/wallet-ui/run-sale.mjs",
           "anchor": [
-            "if (hits[0].state === 'PayoutInProgress' || hits[0].state === 'Completed') return hits[0]"
+            "if (hits[0].state === 'PayoutInProgress' || hits[0].state === 'Completed') {",
+            "assertBookedPayout(hits[0])",
+            "return hits[0]",
+            "}"
           ],
-          "span": 1,
+          "span": 4,
           "style": {
             "kind": "abs",
             "backtick": true

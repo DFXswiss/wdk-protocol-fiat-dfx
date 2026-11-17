@@ -1,6 +1,6 @@
 {
   "title": "Hybrid real runs",
-  "scope": "Covers e2e/real-sell.mjs, e2e/real-buy.mjs, e2e/bundler-send.mjs and e2e/safe-rescue.mjs. A passing sell executes the chain transfer and sandbox recognition. The smart-account sell passes bundlerUrl through, and the default URL is the public Candide Sepolia bundler [ref 0]; that registration sets no paymaster field [ref 1]. bundler-send.mjs uses the bundler URL the caller passes and sets no paymaster field [ref 2]. Those two bundlers are not stand-ins. No script in this set names a paymaster. The entries are the stand-ins.",
+  "scope": "Covers e2e/real-sell.mjs, e2e/real-buy.mjs, e2e/bundler-send.mjs and e2e/safe-rescue.mjs. A passing sell executes the chain transfer and sandbox recognition. The smart-account sell passes bundlerUrl through, and the default URL is the public Candide Sepolia bundler [ref 0]; that registration sets no paymaster field [ref 1]. bundler-send.mjs uses the bundler URL the caller passes and sets no paymaster field [ref 2]. Those two bundlers are not stand-ins. No script in this set names a paymaster. The entries are the stand-ins, except the bank payout, which is switched off.",
   "refs": [
     {
       "file": "e2e/real-sell.mjs",
@@ -341,6 +341,40 @@
             "if (compact(request.iban) !== compact(iban)) return false"
           ],
           "span": 5,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Bank payout",
+      "status": "switched off — the script stops at PayoutInProgress or Completed",
+      "statusKind": "switched-off",
+      "mechanism": "[ref 0] is the point where the row is PayoutInProgress or Completed. [ref 1] returns that row after the module status check. The script does not read a bank debit.",
+      "insteadOf": "a bank transfer of the fiat amount to the payout account",
+      "doesNotProve": "A green run does not prove that a bank paid the fiat amount.",
+      "refs": [
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "if (entry.state === 'PayoutInProgress' || entry.state === 'Completed') {"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "return entry"
+          ],
+          "span": 1,
           "style": {
             "kind": "abs",
             "backtick": true

@@ -926,6 +926,7 @@ async function findTransaction (session, hash) {
   const deadline = Date.now() + BACKEND_TIMEOUT_MS
   let lastError = null
   while (true) {
+    let hits
     try {
       const response = await fetch(`${API}/v1/transaction`, {
         redirect: 'error',
@@ -935,12 +936,16 @@ async function findTransaction (session, hash) {
       if (!response.ok) throw new Error(`GET /v1/transaction HTTP ${response.status}`)
       const body = await response.json()
       if (!Array.isArray(body)) throw new Error('GET /v1/transaction did not return a list')
-      const found = body.find(entry => String(entry?.inputTxId ?? '').toLowerCase() === hash.toLowerCase())
-      if (found) return found
-      lastError = null
+      hits = body.filter(entry => String(entry?.inputTxId ?? '').toLowerCase() === hash.toLowerCase())
+      if (hits.length <= 1) {
+        const found = hits[0]
+        if (found) return found
+        lastError = null
+      }
     } catch (error) {
       lastError = error
     }
+    if (hits && hits.length > 1) throw new Error(`GET /v1/transaction returned ${hits.length} rows for this inputTxId`)
     if (Date.now() + BACKEND_POLL_MS > deadline) break
     await delay(BACKEND_POLL_MS)
     if (lastError) recordRetry('findTransaction', lastError)
@@ -971,6 +976,23 @@ function assertBackend (entry, spec, ext) {
   }
 }
 
+// quoteSell and sell pass fiatCurrency EUR. A sale amount is rounded to 2 decimal places; the exact amount is not checked.
+function finiteAmount (value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value)) {
+    const amount = Number(value)
+    return Number.isFinite(amount) ? amount : undefined
+  }
+  return undefined
+}
+
+function assertSellPayout (entry) {
+  const amount = finiteAmount(entry.outputAmount)
+  if (amount === undefined) throw new Error('Backend outputAmount is not a finite number')
+  if (!(amount > 0)) throw new Error('Backend outputAmount is not greater than 0')
+  if (entry.outputAsset !== 'EUR') throw new Error(`Backend outputAsset is ${entry.outputAsset}; expected EUR`)
+}
+
 function assertDetail (detail, spec, currency, label) {
   if (detail?.status !== 'in_progress' && detail?.status !== 'completed') {
     throw new Error(`Module ${label} status is ${detail?.status}`)
@@ -991,6 +1013,7 @@ async function followTransaction (tools, session, hash, spec, ext, uid, currency
     }
     if (FAILED_STATES.has(entry.state) || entry.state === 'ReturnPending') throw new Error(`Backend reached failed state ${entry.state}`)
     if (entry.state === 'PayoutInProgress' || entry.state === 'Completed') {
+      assertSellPayout(entry)
       const expected = entry.state === 'Completed' ? 'completed' : 'in_progress'
       for (const [label, detail] of [
         ['externalTransactionId', await tools.fiat.getTransactionDetail(ext, { idType: 'externalTransactionId' })],
@@ -1011,7 +1034,9 @@ async function followTransaction (tools, session, hash, spec, ext, uid, currency
     if (!response.ok) throw new Error(`GET /v1/transaction HTTP ${response.status}`)
     const body = await response.json()
     if (!Array.isArray(body)) throw new Error('GET /v1/transaction did not return a list')
-    entry = body.find(item => String(item?.inputTxId ?? '').toLowerCase() === hash.toLowerCase())
+    const hits = body.filter(item => String(item?.inputTxId ?? '').toLowerCase() === hash.toLowerCase())
+    if (hits.length > 1) throw new Error(`Follow found ${hits.length} rows for this inputTxId`)
+    entry = hits[0]
     if (!entry) throw new Error('Follow transaction disappeared')
     const checked = assertBackend(entry, spec, ext)
     if (checked.uid !== uid) throw new Error('Follow transaction uid changed')

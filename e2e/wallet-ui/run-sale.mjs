@@ -1110,6 +1110,23 @@ function amountIsEthSale (value) {
   return false
 }
 
+function finiteAmount (value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value)) {
+    const amount = Number(value)
+    return Number.isFinite(amount) ? amount : undefined
+  }
+  return undefined
+}
+
+// sell() passes fiatCurrency EUR, and the starter sale does too. A sale amount is rounded to 2 decimal places; the exact amount is not checked.
+function assertBookedPayout (row) {
+  const amount = finiteAmount(row.outputAmount)
+  if (amount === undefined) throw new CheckError('backend-payout', 'outputAmount is not a finite number')
+  if (!(amount > 0)) throw new CheckError('backend-payout', 'outputAmount is not greater than 0')
+  if (row.outputAsset !== 'EUR') throw new CheckError('backend-payout', 'outputAsset is not EUR')
+}
+
 function assertSaleShape (row) {
   const asset = selectedAsset()
   if (!row || typeof row !== 'object') throw new CheckError('backend-shape', 'record is not an object')
@@ -1203,7 +1220,10 @@ async function followBackend (session, hash, followMinutes) {
       assertSaleShape(hits[0])
       last = hits[0]
       state.evidence.backend = backendView(hits[0])
-      if (hits[0].state === 'PayoutInProgress' || hits[0].state === 'Completed') return hits[0]
+      if (hits[0].state === 'PayoutInProgress' || hits[0].state === 'Completed') {
+        assertBookedPayout(hits[0])
+        return hits[0]
+      }
       if (FAILED_STATES.has(hits[0].state)) {
         throw new CheckError('backend-state', `state ${hits[0].state}; reason ${hits[0].reason ?? 'none'}`)
       }
