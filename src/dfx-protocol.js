@@ -120,7 +120,7 @@ function localOrigin (value, name) {
 }
 
 function externalTransactionId (value) {
-  if (value.length < 1 || value.length > 256 || /[^A-Za-z0-9._:-]/.test(value)) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 256 || /[^A-Za-z0-9._:-]/.test(value)) {
     throw new ValueError('externalTransactionId must contain 1–256 characters from A-Z, a-z, 0-9, dot (.), underscore (_), colon (:) and hyphen (-)')
   }
 }

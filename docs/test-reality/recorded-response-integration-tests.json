@@ -238,7 +238,7 @@
       "component": "Failed widget login",
       "status": "fake — the test fetch returns HTTP 401",
       "statusKind": "fake",
-      "mechanism": "[ref 0] returns HTTP 401 and { message: 'Widget login failed' } for the second POST /v1/auth. It also reads each auth response, cloning it when the response has clone, and records the status and parsed body; the recorded copy is not what the module receives. [ref 1] returns that same status and body for the second POST /v1/auth when the case asks the login to fail. Otherwise [ref 1] counts the login and forwards the request to the replay server, which is not a stand-in.",
+      "mechanism": "[ref 0] returns HTTP 401 and { message: 'Widget login failed' } for the second POST /v1/auth. It also reads each auth response, cloning it when the response has clone, and records the status and parsed body. The recorded copy is not what the module receives only when the response is cloned, which is a response from the replay server. [ref 2] has no clone, and then the copy is the same object the module receives. [ref 1] returns that same status and body for the second POST /v1/auth when the case asks the login to fail. [ref 1] counts calls of /v1/auth, returns the 401 Widget login failed itself on the second /v1/auth call when fail is set, and forwards every other request to the replay server.",
       "insteadOf": "an HTTP 401 from the DFX API for a rejected widget login",
       "doesNotProve": "A green run does not prove that the DFX API rejects a widget login with this body.",
       "refs": [
@@ -276,6 +276,18 @@
             "kind": "abs",
             "backtick": true
           }
+        },
+        {
+          "file": "tests/helpers.js",
+          "anchor": [
+            "export function response (data, status = 200) {",
+            "return { ok: status >= 200 && status < 300, status, async text () { return typeof data === 'string' ? data : JSON.stringify(data) } }"
+          ],
+          "span": 2,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
         }
       ]
     },
@@ -285,7 +297,7 @@
       "component": "Smart account and its first signature",
       "status": "fake — stand-in classes",
       "statusKind": "fake",
-      "mechanism": "[ref 0] is not an ERC-4337 account or a Safe. getAddress returns the address passed to the constructor, or 0x0000000000000000000000000000000000000001, and sign and signTypedData record the payload and then call the inner account. [ref 1] returns the signature given to its constructor on the first sign call, and only a later sign call uses the inner account. The unit record entry Signing account does not cover DummySmartAccount or DummyFirstSignature.",
+      "mechanism": "[ref 0] is not an ERC-4337 account or a Safe. getAddress returns the address passed to the constructor, or 0x0000000000000000000000000000000000000001, and sign and signTypedData record the payload and then call the inner account. [ref 1] returns the signature given to its constructor on the first sign call, and only a later sign call uses the inner account. signTypedData from [ref 0] uses the inner account on every call. The unit record entry Signing account does not cover DummySmartAccount or DummyFirstSignature.",
       "insteadOf": "a smart account, ERC-4337 or Safe, and the signature of its first authentication",
       "doesNotProve": "A green run does not prove that a smart account signs in or that its first signature is accepted.",
       "refs": [
@@ -359,6 +371,56 @@
           "file": "tests/integration/helpers.js",
           "anchor": [
             "{ provider: 'http://127.0.0.1:1' }"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Login signature",
+      "status": "fake — EOA personal_sign only",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] checks the login signature in the replay server. It accepts only a string of 0x and 130 hex digits, which is 65 bytes, recovers an EOA from the EIP-191 personal_sign prefix Ethereum Signed Message, and allows recovery ids 0, 1, 27 and 28. [ref 1] rejects the login unless that check succeeds for the challenge text. A smart-account signature is not accepted.",
+      "insteadOf": "the DFX API login check, which also accepts smart-account signatures",
+      "doesNotProve": "A green run does not prove that the DFX API accepts a smart-account signature at login.",
+      "refs": [
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "function validSignature (message, signature, address) {",
+            "if (typeof signature !== 'string' || !/^0x[0-9a-f]{130}$/i.test(signature)) return false",
+            "try {",
+            "const bytes = Buffer.from(signature.slice(2), 'hex')",
+            "const recovery = bytes[64] >= 27 ? bytes[64] - 27 : bytes[64]",
+            "if (recovery !== 0 && recovery !== 1) return false",
+            "const payload = Buffer.from(message, 'utf8')",
+            "const digest = keccak256(Buffer.concat([Buffer.from(`\\x19Ethereum Signed Message:\\n${payload.length}`), payload]))",
+            "const recovered = Uint8Array.from([recovery, ...bytes.subarray(0, 64)])",
+            "const publicKey = secp256k1.recoverPublicKey(recovered, digest, { prehash: false })",
+            "const uncompressed = secp256k1.Point.fromBytes(publicKey).toBytes(false)",
+            "const recoveredAddress = '0x' + Buffer.from(keccak256(uncompressed.subarray(1))).subarray(12).toString('hex')",
+            "return recoveredAddress === address.toLowerCase()",
+            "} catch {",
+            "return false",
+            "}",
+            "}"
+          ],
+          "span": 17,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "if (!message || !validSignature(message, auth.signature, address)) {"
           ],
           "span": 1,
           "style": {
