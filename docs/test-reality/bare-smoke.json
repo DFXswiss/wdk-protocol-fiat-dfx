@@ -52,7 +52,7 @@
       "component": "Signing account",
       "status": "fake — hand-built account with fixed signatures",
       "statusKind": "fake",
-      "mechanism": "[ref 0] says the owner address, the Safe and both signatures were derived ahead of time with an ethers Wallet using private key 2 and abstractionkit SafeAccountV0_3_0 with WDK Safe 0.3.0 parameters. [ref 1] returns that Safe from getAddress, returns the fixed owner signature from sign when the message is the challenge and 0x otherwise, and returns the fixed Safe signature from signTypedData.",
+      "mechanism": "[ref 0] says the owner address, the Safe and both signatures were derived ahead of time with an ethers Wallet using private key 2 and abstractionkit SafeAccountV0_3_0 with WDK Safe 0.3.0 parameters. [ref 3] says the owner is public test key 2 and the factory data comes from abstractionkit SafeAccountV0_3_0 with the WDK Safe 0.3.0 parameters, and that the inner signature is 0x + 11 x 64 + 1b. [ref 2] is that pattern, 0x then the characters 11 repeated 64 times then 1b, and it is not a derived signature. [ref 1] returns the Safe from getAddress, returns the fixed owner signature from sign when the message is the challenge and 0x otherwise, and returns that pattern from signTypedData.",
       "insteadOf": "a WDK account that signs the challenge and the Safe typed data",
       "doesNotProve": "A green run does not prove that a WDK account produces these signatures.",
       "refs": [
@@ -79,6 +79,62 @@
             "}"
           ],
           "span": 5,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "const SAFE_SIGNATURE = `0x${'11'.repeat(64)}1b`"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/fixtures/bare-smoke-expected.json",
+          "anchor": [
+            "\"description\": \"Expected ERC-6492 sign-in signature for e2e/bare-smoke.mjs: abi.encode(address factory, bytes factoryData, bytes innerSignature) followed by the 32-byte 0x6492 magic. Owner is the public test key 2; factory data from abstractionkit SafeAccountV0_3_0.createFactoryAddressAndData with the WDK Safe 0.3.0 parameters; inner signature is 0x + 11 x 64 + 1b.\","
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Safe signature",
+      "status": "fake — a placeholder that looks real",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] sets the Safe signature to 0x, then the characters 11 repeated 64 times, then 1b. That is 65 bytes ending in recovery id 27, the shape of an EOA signature, and it is a repeated pattern rather than a signature derived from the typed data. [ref 1] names that same pattern as the inner signature inside the expected ERC-6492 wrapper.",
+      "insteadOf": "a signature produced for the Safe sign-in typed data",
+      "doesNotProve": "A green run does not prove that this value is a signature a Safe or its owner produced.",
+      "refs": [
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "const SAFE_SIGNATURE = `0x${'11'.repeat(64)}1b`"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/fixtures/bare-smoke-expected.json",
+          "anchor": [
+            "\"description\": \"Expected ERC-6492 sign-in signature for e2e/bare-smoke.mjs: abi.encode(address factory, bytes factoryData, bytes innerSignature) followed by the 32-byte 0x6492 magic. Owner is the public test key 2; factory data from abstractionkit SafeAccountV0_3_0.createFactoryAddressAndData with the WDK Safe 0.3.0 parameters; inner signature is 0x + 11 x 64 + 1b.\","
+          ],
+          "span": 1,
           "style": {
             "kind": "abs",
             "backtick": true

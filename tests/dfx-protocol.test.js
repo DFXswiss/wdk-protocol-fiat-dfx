@@ -208,6 +208,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
     ['x'.repeat(256), 'x'.repeat(256)]
   ]
   const INVALID_EXTERNAL_IDS = ['', '  ', 'x'.repeat(257), ' leading', 'trailing ', 'a b', '<id>', 'id>', 'a/b', 'a?b', 'a&b', 'a=b', 'a+b', 'a#b', 'a%b', 'ümlaut', 'a\nb', 'a\n', 'a\r', 'a\t', 'a\u0000', 'a\u200b']
+  const NON_STRING_EXTERNAL_IDS = [null, 12345, { length: 5, toString () { return 'order' } }]
   const EXTERNAL_ID_MESSAGE = 'externalTransactionId must contain 1–256 characters from A-Z, a-z, 0-9, dot (.), underscore (_), colon (:) and hyphen (-)'
 
   function tradeCases (METHOD) {
@@ -471,6 +472,12 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
     })
 
     test.each([METHOD].flatMap(CASE_METHOD => INVALID_EXTERNAL_IDS.map(ID => [CASE_METHOD, ID])))('%s rejects invalid external ID before HTTP %#', async (CASE_METHOD, ID) => {
+      const { protocol } = setup({ network: 'ethereum' })
+      await failure(protocol[CASE_METHOD]({ ...OPTIONS, config: { externalTransactionId: ID } }), ValueError, EXTERNAL_ID_MESSAGE)
+      expectInteractions([])
+    })
+
+    test.each([METHOD].flatMap(CASE_METHOD => NON_STRING_EXTERNAL_IDS.map(ID => [CASE_METHOD, ID])))('%s rejects a non-string external ID before HTTP %#', async (CASE_METHOD, ID) => {
       const { protocol } = setup({ network: 'ethereum' })
       await failure(protocol[CASE_METHOD]({ ...OPTIONS, config: { externalTransactionId: ID } }), ValueError, EXTERNAL_ID_MESSAGE)
       expectInteractions([])
@@ -1952,6 +1959,12 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
     })
 
     test.each(INVALID_EXTERNAL_IDS.map(ID => [ID]))('rejects invalid external detail ID before HTTP %#', async ID => {
+      const { protocol } = setup()
+      await failure(protocol.getTransactionDetail(ID, { idType: 'externalTransactionId' }), ValueError, EXTERNAL_ID_MESSAGE)
+      expectInteractions([])
+    })
+
+    test.each(NON_STRING_EXTERNAL_IDS)('rejects a non-string external detail ID before HTTP %#', async ID => {
       const { protocol } = setup()
       await failure(protocol.getTransactionDetail(ID, { idType: 'externalTransactionId' }), ValueError, EXTERNAL_ID_MESSAGE)
       expectInteractions([])
