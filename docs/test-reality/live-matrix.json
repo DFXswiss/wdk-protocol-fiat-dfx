@@ -1,0 +1,40 @@
+{
+  "title": "Live matrix",
+  "scope": "e2e/live-matrix.mjs calls the live DFX sandbox or production API and sends no on-chain transaction. The only stand-in found in the script is the bundler URL on the two ERC-4337 cases.",
+  "entries": [
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "ERC-4337 bundler for polygon-4337 and base-4337",
+      "status": "fake — placeholder bundler URL",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] sets polygon-4337 bundlerUrl to https://bundler.invalid. [ref 1] sets the same URL for base-4337. Neither object sets a paymaster URL.",
+      "insteadOf": "a bundler that can submit a user operation on that chain",
+      "doesNotProve": "A green run does not prove that an ERC-4337 account can submit a user operation.",
+      "refs": [
+        {
+          "file": "e2e/live-matrix.mjs",
+          "anchor": [
+            "cfg: { chainId: 137, provider: 'https://polygon-bor-rpc.publicnode.com', bundlerUrl: 'https://bundler.invalid', safeModulesVersion: '0.3.0', useNativeCoins: true },"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/live-matrix.mjs",
+          "anchor": [
+            "cfg: { chainId: 8453, provider: 'https://base-rpc.publicnode.com', bundlerUrl: 'https://bundler.invalid', safeModulesVersion: '0.3.0', useNativeCoins: true },"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    }
+  ]
+}

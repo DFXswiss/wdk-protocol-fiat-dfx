@@ -26,7 +26,7 @@ An optional argument limits the run to one `chain` value from the script.
 
 Before network access, the installed module copy is compared with the working tree; a mismatch exits 1 and requires `npm ci` in `e2e`.
 
-Recorded sandbox: 178/186 steps on 2026-10-29 and again on 2026-11-05. The failures are assets the sandbox does not list as buyable. Recorded production: 182/187 on 2026-10-29 and 177/178 on 2026-11-05. See [TESTING.md](../TESTING.md).
+Recorded sandbox: 178/186 steps on 2026-10-29 and again on 2026-11-05. Recorded production: 182/187 on 2026-10-29 and 177/178 on 2026-11-05. See [TESTING.md](../TESTING.md#current-state--measured).
 
 ## native-quotes.mjs
 
@@ -41,7 +41,7 @@ DFX_ENV=production node native-quotes.mjs
 
 ## signature-diff.mjs
 
-Compares signature normalization with `bs58` (20,000 Solana signatures) and `@noble/curves` (5,000 Spark signatures). No network. Exit code 1 if any mismatch is printed. A recorded run, including a re-run on 2026-11-05, reported 0 mismatches.
+Compares signature normalization with `bs58` (20,000 Solana signatures) and `@noble/curves` (5,000 Spark signatures). No network. Exit code 1 if any mismatch is printed. A recorded run, including a re-run on 2026-11-05, reported 0 mismatches (`commit not recorded`; the same row is in [TESTING.md](../TESTING.md)).
 
 ```sh
 node signature-diff.mjs
@@ -49,7 +49,7 @@ node signature-diff.mjs
 
 ## bare-smoke.mjs
 
-Loads `../bare.js` and signs in through a stubbed `fetch`. No network and no DFX API. Recorded result: 4/4 on 2026-10-20 and on 2026-11-05. `bare@1.34.1` resolved Bare runtime v1.35.0 on 2026-10-20 and v1.36.0 on 2026-11-05.
+Loads `../bare.js` and signs in through a stubbed `fetch`. No network and no DFX API. Recorded result: 4/4 on 2026-10-20 and on 2026-11-05 (`commit not recorded`; the same rows are in [TESTING.md](../TESTING.md)). `bare@1.34.1` resolved Bare runtime v1.35.0 on 2026-10-20 and v1.36.0 on 2026-11-05.
 
 ```sh
 npx --yes bare@1.34.1 bare-smoke.mjs
@@ -132,7 +132,7 @@ node safe-rescue.mjs --rpc https://mainnet.base.org --to 0x000000000000000000000
 
 `wallet-ui/` drives the patched WDK starter wallet on the iOS simulator. A confirmed run sells 1 USDT or 0.0001 ETH for EUR on Sepolia, and the sandbox must book that hash to `PayoutInProgress` or `Completed`. A rejected run leaves the review screen: no confirm tap, nonce and balances unchanged, and no new sale of that asset.
 
-It is the end-to-end run in this directory; the other scripts do not ask a wallet user interface to confirm.
+It is the sale confirmed in a wallet user interface. The other scripts do not ask a wallet user interface to confirm. Stand-ins for that run are declared in [docs/test-reality/](../docs/test-reality/).
 
 Build and command: [wallet-ui/README.md](wallet-ui/README.md).
 

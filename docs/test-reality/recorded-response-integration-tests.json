@@ -1,0 +1,179 @@
+{
+  "title": "Recorded-response integration tests",
+  "scope": "tests/integration/ drives the module through a server on 127.0.0.1. Catalog, quote and challenge bodies come from the sandbox recording. Sign-in tokens, one completed-detail probe, and the authentication and transaction-detail error bodies built by the server do not.",
+  "entries": [
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "DFX HTTP API",
+      "status": "fake — recorded sandbox responses played by a local server",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] loads tests/integration/fixtures/sandbox.json. [ref 1] is the recording time in that file. [ref 2] listens on 127.0.0.1. [ref 3] rejects a request that is not in the recording.",
+      "insteadOf": "the live DFX API as it answers today",
+      "doesNotProve": "A green run does not prove that the live DFX API still returns these bodies.",
+      "refs": [
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "fixture = JSON.parse(await readFile(new URL('./fixtures/sandbox.json', import.meta.url), 'utf8'))"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/fixtures/sandbox.json",
+          "anchor": [
+            "\"recordedAt\": \"2026-09-28T13:17:22.228Z\","
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "server.listen(0, '127.0.0.1', resolve)"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "if (!entry) throw new Error(`Unrecorded DFX request: ${request.method} ${request.url} body=${body}`)"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "DFX access token and completed transaction detail",
+      "status": "fake — synthesized by the replay server",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] answers a successful login with a local access token, not a body from the recording. [ref 1] answers the completedDetail fault with a fixed Buy body in state Completed.",
+      "insteadOf": "an access token issued by the DFX API, and a transaction detail read from that API",
+      "doesNotProve": "A green run does not prove that the DFX API issues this token or that a completed buy has this shape.",
+      "refs": [
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "const token = logins === 1 ? DUMMY_TOKEN : `${DUMMY_TOKEN}.${logins}`",
+            "tokens.add(token)",
+            "registeredAddresses.add(address)",
+            "send(201, JSON.stringify({ accessToken: token }))"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "// Explicit synthetic success, not a recorded sandbox transaction.",
+            "if (faults.completedDetail) {",
+            "send(200, JSON.stringify({ type: 'Buy', state: 'Completed', inputAsset: 'CHF', outputAsset: 'USDT', outputBlockchain: 'Ethereum' }))"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "DFX authentication and transaction-detail errors",
+      "status": "fake — synthesized by the replay server",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] answers a rejected login with a local 401 or 400 body. [ref 1] answers the missing-token fault with HTTP 201 and an empty object, and the comment marks that response as not a recorded success. [ref 2] answers an unknown detail token with a local 401.",
+      "insteadOf": "error bodies returned by the live DFX API",
+      "doesNotProve": "A green run does not prove that the live DFX API returns these error bodies.",
+      "refs": [
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "const rejectAuthentication = () => {",
+            "if (registeredAddresses.has(address)) {",
+            "send(401, JSON.stringify({ statusCode: 401, message: 'Invalid credentials', error: 'Unauthorized' }))",
+            "} else {",
+            "send(400, JSON.stringify({ statusCode: 400, message: 'Invalid signature', error: 'Bad Request' }))",
+            "}"
+          ],
+          "span": 6,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "// Explicit corruption probe, not a recorded successful DFX response.",
+            "if (logins === 1 && faults.auth === 'missing token') {",
+            "send(201, '{}')",
+            "return"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/dfx-server.js",
+          "anchor": [
+            "if (!tokens.has(request.headers.authorization?.slice(7))) {",
+            "send(401, JSON.stringify({ statusCode: 401, message: 'Unauthorized', error: 'Unauthorized' }))",
+            "return"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Chain RPC used by the signing account",
+      "status": "fake — signing stays local",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] constructs the signing wallet with provider http://127.0.0.1:1, a closed port.",
+      "insteadOf": "a chain node the wallet would use for balances and broadcasts",
+      "doesNotProve": "A green run does not prove that an account can be read or funded on a chain.",
+      "refs": [
+        {
+          "file": "tests/integration/helpers.js",
+          "anchor": [
+            "{ provider: 'http://127.0.0.1:1' }"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    }
+  ]
+}
