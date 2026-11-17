@@ -1,6 +1,6 @@
 {
   "title": "Recorded-response integration tests",
-  "scope": "tests/integration/ drives the module through a server on 127.0.0.1. Catalog, quote and challenge bodies come from the sandbox recording. Sign-in tokens, one completed-detail probe, and the authentication and transaction-detail error bodies built by the server do not.",
+  "scope": "tests/integration/ drives the module through a server on 127.0.0.1. Catalog, quote and challenge bodies come from the sandbox recording. Sign-in tokens, one completed-detail probe, and the login, missing-token and unknown-token bodies built by the server do not. Expired-detail and failed-widget-login bodies are returned by the test fetch, not by that server.",
   "entries": [
     {
       "heading": null,
@@ -103,7 +103,7 @@
       "component": "DFX authentication and transaction-detail errors",
       "status": "fake — synthesized by the replay server",
       "statusKind": "fake",
-      "mechanism": "[ref 0] answers a rejected login with a local 401 or 400 body. [ref 1] answers the missing-token fault with HTTP 201 and an empty object, and the comment marks that response as not a recorded success. [ref 2] answers an unknown detail token with a local 401.",
+      "mechanism": "[ref 0] answers a rejected login with a local 401 or 400 body. [ref 1] answers the missing-token fault with HTTP 201 and an empty object, and the comment marks that response as not a recorded success. [ref 2] answers an unknown detail token with a local 401. This server does not build the expired-detail or failed-widget-login responses. The tests return those.",
       "insteadOf": "error bodies returned by the live DFX API",
       "doesNotProve": "A green run does not prove that the live DFX API returns these error bodies.",
       "refs": [
@@ -145,6 +145,199 @@
             "return"
           ],
           "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Expired transaction-detail session",
+      "status": "fake — the test fetch returns HTTP 401",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] waits until two detail requests present the first bearer token, then returns HTTP 401 and { message: 'Expired detail session' } instead of the replay response. [ref 1] returns that same status and body for a detail request whose bearer token is the one the test has marked rejected, after optionally waiting for the test to release it. [ref 2] only records each request and then forwards it to the replay server, or to the fetch the test passed in. [ref 3] forwards the replay response and, for one detail call, waits before returning that same response. [ref 2] and [ref 3] are not stand-ins.",
+      "insteadOf": "an HTTP 401 from the DFX API for an expired session",
+      "doesNotProve": "A green run does not prove that the DFX API reports an expired session with this body.",
+      "refs": [
+        {
+          "file": "tests/integration/module.test.js",
+          "anchor": [
+            "fetch: async (url, init) => {",
+            "if (rejectOld && new URL(url).pathname === '/v1/transaction/detail/single' && init.headers.Authorization === `Bearer ${DUMMY_TOKEN}`) {",
+            "if (++rejected === 2) release()",
+            "await bothRejected",
+            "return response({ message: 'Expired detail session' }, 401)",
+            "}",
+            "return LOCAL_CONFIG.fetch(url, init)",
+            "}"
+          ],
+          "span": 8,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/module.test.js",
+          "anchor": [
+            "if (new URL(url).pathname === '/v1/transaction/detail/single' && init.headers.Authorization === rejectedToken) {",
+            "if (hold) {",
+            "hold = false",
+            "signalHeld()",
+            "await released",
+            "}",
+            "return response({ message: 'Expired detail session' }, 401)",
+            "}",
+            "return LOCAL_CONFIG.fetch(url, init)"
+          ],
+          "span": 9,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/module.test.js",
+          "anchor": [
+            "fetch: async (url, init) => {",
+            "requests.push([url, init])",
+            "return options.fetch ? options.fetch(url, init) : LOCAL_CONFIG.fetch(url, init)",
+            "}"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/module.test.js",
+          "anchor": [
+            "const hold = new URL(url).pathname === '/v1/transaction/detail/single' && ++detailCalls === attempt",
+            "const result = await LOCAL_CONFIG.fetch(url, init)",
+            "if (hold) {",
+            "signalDelayed()",
+            "await released",
+            "}",
+            "return result"
+          ],
+          "span": 7,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Failed widget login",
+      "status": "fake — the test fetch returns HTTP 401",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] returns HTTP 401 and { message: 'Widget login failed' } for the second POST /v1/auth. It also reads each auth response, cloning it when the response has clone, and records the status and parsed body; the recorded copy is not what the module receives. [ref 1] returns that same status and body for the second POST /v1/auth when the case asks the login to fail. Otherwise [ref 1] counts the login and forwards the request to the replay server, which is not a stand-in.",
+      "insteadOf": "an HTTP 401 from the DFX API for a rejected widget login",
+      "doesNotProve": "A green run does not prove that the DFX API rejects a widget login with this body.",
+      "refs": [
+        {
+          "file": "tests/integration/module.test.js",
+          "anchor": [
+            "fetch: async (url, init) => {",
+            "const auth = new URL(url).pathname === '/v1/auth'",
+            "const result = auth && ++logins === 2",
+            "? response({ message: 'Widget login failed' }, 401)",
+            ": await LOCAL_CONFIG.fetch(url, init)",
+            "if (auth) {",
+            "const copy = typeof result.clone === 'function' ? result.clone() : result",
+            "authResponses.push({ status: result.status, body: JSON.parse(await copy.text()) })",
+            "}",
+            "return result",
+            "}"
+          ],
+          "span": 11,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/module.test.js",
+          "anchor": [
+            "fetch: (url, init) => {",
+            "if (new URL(url).pathname === '/v1/auth' && ++logins === 2 && fail) return response({ message: 'Widget login failed' }, 401)",
+            "return LOCAL_CONFIG.fetch(url, init)",
+            "}"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Smart account and its first signature",
+      "status": "fake — stand-in classes",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] is not an ERC-4337 account or a Safe. getAddress returns the address passed to the constructor, or 0x0000000000000000000000000000000000000001, and sign and signTypedData record the payload and then call the inner account. [ref 1] returns the signature given to its constructor on the first sign call, and only a later sign call uses the inner account. The unit record entry Signing account does not cover DummySmartAccount or DummyFirstSignature.",
+      "insteadOf": "a smart account, ERC-4337 or Safe, and the signature of its first authentication",
+      "doesNotProve": "A green run does not prove that a smart account signs in or that its first signature is accepted.",
+      "refs": [
+        {
+          "file": "tests/integration/helpers.js",
+          "anchor": [
+            "export class DummySmartAccount {",
+            "constructor (account, address = DUMMY_SMART_ADDRESS) {",
+            "this.account = account",
+            "this.address = address",
+            "this.messages = []",
+            "this.typedData = []",
+            "}",
+            "",
+            "async getAddress () { return this.address }",
+            "",
+            "sign (message) {",
+            "this.messages.push(message)",
+            "return this.account.sign(message)",
+            "}",
+            "",
+            "signTypedData (typedData) {",
+            "this.typedData.push(typedData)",
+            "return this.account.signTypedData(typedData)",
+            "}",
+            "}"
+          ],
+          "span": 20,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/integration/helpers.js",
+          "anchor": [
+            "export class DummyFirstSignature extends DummySmartAccount {",
+            "constructor (account, signature) {",
+            "super(account)",
+            "this.signature = signature",
+            "}",
+            "",
+            "sign (message) {",
+            "if (this.messages.length === 0) {",
+            "this.messages.push(message)",
+            "return Promise.resolve(this.signature)",
+            "}",
+            "return super.sign(message)",
+            "}",
+            "}"
+          ],
+          "span": 14,
           "style": {
             "kind": "abs",
             "backtick": true

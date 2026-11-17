@@ -1,6 +1,6 @@
 {
   "title": "Bare smoke",
-  "scope": "e2e/bare-smoke.mjs loads the Bare entry and signs in through a fetch supplied by the script. It opens no network connection.",
+  "scope": "e2e/bare-smoke.mjs loads the Bare entry and signs in through a fetch supplied by the script. The account is built in the script. It opens no network connection.",
   "entries": [
     {
       "heading": null,
@@ -39,6 +39,46 @@
             "const protocol = new DfxProtocol(account, { environment: 'sandbox', network: 'polygon', fetch })"
           ],
           "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Signing account",
+      "status": "fake — hand-built account with fixed signatures",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] says the owner address, the Safe and both signatures were derived ahead of time with an ethers Wallet using private key 2 and abstractionkit SafeAccountV0_3_0 with WDK Safe 0.3.0 parameters. [ref 1] returns that Safe from getAddress, returns the fixed owner signature from sign when the message is the challenge and 0x otherwise, and returns the fixed Safe signature from signTypedData.",
+      "insteadOf": "a WDK account that signs the challenge and the Safe typed data",
+      "doesNotProve": "A green run does not prove that a WDK account produces these signatures.",
+      "refs": [
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "// The deterministic public owner 0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF,",
+            "// Safe and signatures were derived with ethers Wallet using private key 2 and",
+            "// abstractionkit SafeAccountV0_3_0 with WDK Safe 0.3.0 params."
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "const account = {",
+            "getAddress: async () => SAFE,",
+            "sign: async message => message === CHALLENGE ? OWNER_SIGNATURE : '0x',",
+            "signTypedData: async () => SAFE_SIGNATURE",
+            "}"
+          ],
+          "span": 5,
           "style": {
             "kind": "abs",
             "backtick": true

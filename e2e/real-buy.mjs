@@ -383,14 +383,59 @@ function assertDetail (detail) {
   if (detail?.status !== 'completed' || detail.cryptoAsset !== 'USDC' || detail.fiatCurrency !== 'EUR') throw new Error('Module detail does not match completed USDC/EUR')
 }
 
-function matchesRoundedAmount (amount, output) {
-  const text = String(output)
-  if (!/^\d+(?:\.\d+)?$/.test(text)) return false
-  const decimals = (text.split('.')[1] || '').length
-  if (decimals > 6) return false
-  const factor = 10n ** BigInt(6 - decimals)
-  const rounded = (amount + factor / 2n) / factor
-  return rounded === parseUnits(text, decimals)
+// A buy outputAmount is the asset amount rounded to 5 significant digits, half up.
+// DFXswiss/backend src/shared/utils/util.ts:30-34 roundReadable with AmountType.ASSET
+// calls roundByPrecision(amount, 5), and :86-88 is
+// new BigNumber(amount).precision(precision, BigNumber.ROUND_HALF_UP).
+// src/subdomains/core/history/mappers/transaction-dto.mapper.ts:66-67 writes that number.
+// rawUnits is the USDC transfer in 6 decimal places. The comparison uses integers only.
+function parseExactDecimal (value) {
+  let text
+  if (typeof value === 'string') text = value
+  else if (typeof value === 'number' && Number.isFinite(value)) text = JSON.stringify(value)
+  else return null
+  const match = /^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(text)
+  if (!match) return null
+  const fraction = match[2] || ''
+  const exponent = match[3] === undefined ? 0 : Number(match[3])
+  if (!Number.isSafeInteger(exponent)) return null
+  let coefficient = BigInt(match[1] + fraction)
+  let power = exponent - fraction.length
+  if (coefficient === 0n) return { coefficient: 0n, exponent: 0 }
+  while (coefficient % 10n === 0n) {
+    coefficient /= 10n
+    power += 1
+  }
+  return { coefficient, exponent: power }
+}
+
+function roundHalfUpSignificantDigits (rawUnits, decimals, digits) {
+  if (rawUnits === 0n) return { coefficient: 0n, exponent: 0 }
+  let coefficient = rawUnits
+  let exponent = -decimals
+  while (coefficient % 10n === 0n) {
+    coefficient /= 10n
+    exponent += 1
+  }
+  const text = coefficient.toString()
+  if (text.length <= digits) return { coefficient, exponent }
+  const discarded = text.slice(digits)
+  let rounded = BigInt(text.slice(0, digits))
+  if (discarded[0] >= '5') rounded += 1n
+  exponent += discarded.length
+  while (rounded % 10n === 0n) {
+    rounded /= 10n
+    exponent += 1
+  }
+  return { coefficient: rounded, exponent }
+}
+
+function transferMatchesFiveSignificantDigitsHalfUp (rawUnits, outputAmount) {
+  if (typeof rawUnits !== 'bigint' || rawUnits <= 0n) return false
+  const output = parseExactDecimal(outputAmount)
+  if (!output) return false
+  const rounded = roundHalfUpSignificantDigits(rawUnits, 6, 5)
+  return rounded.coefficient === output.coefficient && rounded.exponent === output.exponent
 }
 
 async function main () {
@@ -495,7 +540,8 @@ async function main () {
   const logs = receipt.logs.filter(log => log.address.toLowerCase() === USDC.toLowerCase() && log.topics.length === 3 && log.topics[0].toLowerCase() === TRANSFER.toLowerCase() && log.topics[2].toLowerCase() === toTopic)
   if (logs.length !== 1 || !/^0x[0-9a-fA-F]{64}$/.test(logs[0].data)) throw new Error('Expected exactly one token Transfer to the account')
   const amount = BigInt(logs[0].data)
-  if (amount <= 0n || !matchesRoundedAmount(amount, backend.outputAmount)) throw new Error('Transfer amount does not match backend outputAmount')
+  if (amount <= 0n) throw new Error('Transfer amount is not positive')
+  if (!transferMatchesFiveSignificantDigitsHalfUp(amount, backend.outputAmount)) throw new Error('Transfer amount does not match backend outputAmount')
   const [prior, after] = await Promise.all([
     readAtBlock(receipt.blockNumber - 1, () => token.balanceOf(address, { blockTag: receipt.blockNumber - 1 })),
     readAtBlock(receipt.blockNumber, () => token.balanceOf(address, { blockTag: receipt.blockNumber }))

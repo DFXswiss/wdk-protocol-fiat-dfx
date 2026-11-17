@@ -63,7 +63,7 @@ Without `--send` the script quotes and opens the widget, and sends nothing. `--s
 
 `--seed-file` is required. `--out <file>` optionally writes the log to a new file with owner-only permissions; an error ends the log with a line containing `step: error` and `exitCode`. `--explorer <origin>` defaults to `https://eth-sepolia.blockscout.com` and must be an HTTP or HTTPS origin without credentials. `--follow` defaults to 0 and accepts integers from 0 to 240; a send requires at least 1. A send also takes a fixed lock in the system temporary directory named `wdk-real-sell-<lowercase EOA address>.lock`, in addition to any `--lock`; an occupied or uncreatable account lock exits 3 before sending.
 
-The deposit-address balance in the receipt block must exceed the balance in the previous block by the amount sent, for an EOA and for a Safe. A mismatch exits 1.
+The deposit-address balance in the receipt block must exceed the balance in the previous block by the amount sent, for an EOA and for a Safe. A mismatch exits 1. The sandbox list must contain one row for that deposit hash. At `PayoutInProgress` or `Completed`, `outputAmount` must be a finite number greater than 0 and `outputAsset` must be EUR, the `fiatCurrency` passed to `sell`. The script stops there and does not read a bank payout.
 
 The bundler quotes of a fresh Safe need its funded balance, so the prefund check runs after funding; if it fails, the funds stay in the Safe, whose address and account index the `safe-preflight` line names. No script in this tree returns them: `safe-rescue.mjs` covers index 0 on Base only.
 
@@ -89,7 +89,7 @@ For either script, a `--follow` or `--wait-minutes` period that outlasts the wid
 
 The file given by `--url-file` must not exist yet, contains the buy URL with a session, is created with owner-only permissions, and should be deleted after the purchase. `--record` must also name a new file and is created with owner-only permissions after a passing run.
 
-The balance after the payout, at the receipt block, must exceed the balance at the previous block by the payout transfer amount.
+The balance after the payout, at the receipt block, must exceed the balance at the previous block by the payout transfer amount. The USDC transfer, in raw units of 6 decimals, rounded with integers to 5 significant digits half up, must equal `outputAmount`.
 The buy URL must carry EUR, the asset, Base and the amount, and the completed backend record must show `inputAsset` EUR and `inputAmount` equal to `--amount`.
 
 Exit 2 is usage. Exit 3 is only a `NotRunError`: an unusable seed file, duplicate `@tetherto/wdk-wallet` copies, a module copy that differs from this tree (the digest differs, the file list differs, the installed copy is missing, or a symlink is rejected), an unreachable RPC, a preflight `/version` that is unreachable or without a usable answer, or a `--url-file` that cannot be created. A held lock, a dirty tree, a chain id that is not Base, an unavailable DFX protocol, a git failure, and any other exception exit 1. Exit 130 or 143 means SIGINT or SIGTERM: the script releases its lock and exits. The record is written in one synchronous step, so a signal leaves either no record or a complete one.
@@ -130,7 +130,7 @@ node safe-rescue.mjs --rpc https://mainnet.base.org --to 0x000000000000000000000
 
 ## wallet-ui/
 
-`wallet-ui/` drives the patched WDK starter wallet on the iOS simulator. A confirmed run sells 1 USDT or 0.0001 ETH for EUR on Sepolia, and the sandbox must book that hash to `PayoutInProgress` or `Completed`. A rejected run leaves the review screen: no confirm tap, nonce and balances unchanged, and no new sale of that asset.
+`wallet-ui/` drives the patched WDK starter wallet on the iOS simulator. A confirmed run sells 1 USDT or 0.0001 ETH for EUR on Sepolia, and the sandbox must book that hash to `PayoutInProgress` or `Completed`, with a finite `outputAmount` greater than 0 and `outputAsset` EUR. A rejected run leaves the review screen: no confirm tap, nonce and balances unchanged, and no new sale of that asset.
 
 It is the sale confirmed in a wallet user interface. The other scripts do not ask a wallet user interface to confirm. Stand-ins for that run are declared in [docs/test-reality/](../docs/test-reality/).
 
