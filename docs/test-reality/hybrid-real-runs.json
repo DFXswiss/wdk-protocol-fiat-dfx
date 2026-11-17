@@ -1,0 +1,352 @@
+{
+  "title": "Hybrid real runs",
+  "scope": "Covers e2e/real-sell.mjs, e2e/real-buy.mjs, e2e/bundler-send.mjs and e2e/safe-rescue.mjs. A passing sell executes the chain transfer and sandbox recognition. The smart-account sell passes bundlerUrl through, and the default URL is the public Candide Sepolia bundler [ref 0]; that registration sets no paymaster field [ref 1]. bundler-send.mjs uses the bundler URL the caller passes and sets no paymaster field [ref 2]. Those two bundlers are not stand-ins. No script in this set names a paymaster. The entries are the stand-ins.",
+  "refs": [
+    {
+      "file": "e2e/real-sell.mjs",
+      "anchor": [
+        "const DEFAULT_BUNDLER = 'https://api.candide.dev/public/v3/11155111'"
+      ],
+      "span": 1,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/real-sell.mjs",
+      "anchor": [
+        ".registerWallet('sepolia', WalletManagerEvmErc4337, { chainId: 11155111, provider: options.rpc, bundlerUrl: options.bundler, safeModulesVersion: '0.3.0', useNativeCoins: true })"
+      ],
+      "span": 1,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/bundler-send.mjs",
+      "anchor": [
+        "const manager = new WalletManagerEvmErc4337(seed, {",
+        "chainId: 8453,",
+        "provider: options.rpc,",
+        "bundlerUrl: options.bundler,",
+        "safeModulesVersion: '0.3.0',",
+        "useNativeCoins: true,",
+        "...maxFeeConfig",
+        "})"
+      ],
+      "span": 8,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    }
+  ],
+  "entries": [
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Wallet user interface",
+      "status": "fake — the scripts call WDK directly",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] states that real-sell.mjs has no wallet user interface and no confirmation dialog. [ref 1] states the same for real-buy.mjs. [ref 2] sends the sell deposit from the account object. [ref 3] sends the Base user operation from the account object. [ref 4] sends the Safe rescue from the owner account.",
+      "insteadOf": "a person confirming the transaction in a wallet user interface",
+      "doesNotProve": "A green run does not prove that a wallet user interface showed the transaction or that a person confirmed it.",
+      "refs": [
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "// Real run without a wallet user interface (hybrid): no wallet user interface confirms the transaction.",
+            "// With --send, follow the backend state to payout in progress or completion and capture the booking page.",
+            "// WDK has no confirmation dialog, so a rejected wallet prompt is not covered."
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/real-buy.mjs",
+          "anchor": [
+            "// Real run without a wallet user interface (hybrid): no wallet user interface confirms the transaction."
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "async function sendOnce (account, spec, depositAddress) {",
+            "const sent = spec.asset === 'USDT'",
+            "? await account.transfer({ token: USDT, recipient: depositAddress, amount: spec.amount })",
+            ": await account.sendTransaction({ to: depositAddress, value: spec.amount })"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/bundler-send.mjs",
+          "anchor": [
+            "const sent = options.native",
+            "? await account.sendTransaction({ to: options.to, value: amount })",
+            ": await account.transfer({ token: options.token, recipient: options.to, amount })"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/safe-rescue.mjs",
+          "anchor": [
+            "const transferSent = await ownerAccount.sendTransaction({"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "DFX API host for the Sepolia sell",
+      "status": "fake — sandbox instead of production",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] sets the sell client to https://dev.api.dfx.swiss. [ref 1] registers the protocol with environment sandbox.",
+      "insteadOf": "the production DFX API at https://api.dfx.swiss",
+      "doesNotProve": "A green run does not prove that production recognizes the deposit or books the sale.",
+      "refs": [
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "const API = 'https://dev.api.dfx.swiss'"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "const wdk = new WDK(seed)",
+            ".registerWallet('sepolia', WalletManagerEvm, { provider: options.rpc })",
+            ".registerProtocol('sepolia', 'dfx', DfxProtocol, { environment: 'sandbox', network: 'sepolia' })"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "ERC-4337 bundler on the Base purchase and the Safe rescue",
+      "status": "fake — placeholder bundler URL",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] registers a smart-account purchase against https://bundler.invalid and sets no paymaster field. The purchase script does not submit a user operation. [ref 1] puts the same URL on the rescue account, again with no paymaster field. [ref 2] deploys and [ref 3] transfers by an owner-account transaction, not by a bundler.",
+      "insteadOf": "a bundler that submits a user operation, and a paymaster when one pays the gas",
+      "doesNotProve": "A green run does not prove that a bundler accepted a user operation or that a paymaster paid the gas.",
+      "refs": [
+        {
+          "file": "e2e/real-buy.mjs",
+          "anchor": [
+            "const config = options.account === 'smart' ? { chainId: 8453, provider: options.rpc, bundlerUrl: 'https://bundler.invalid', safeModulesVersion: '0.3.0', useNativeCoins: true } : { provider: options.rpc }"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/safe-rescue.mjs",
+          "anchor": [
+            "const SAFE_CONFIG = {",
+            "chainId: Number(CHAIN_ID),",
+            "safeModulesVersion: '0.3.0',",
+            "bundlerUrl: 'https://bundler.invalid',",
+            "useNativeCoins: true",
+            "}"
+          ],
+          "span": 6,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/safe-rescue.mjs",
+          "anchor": [
+            "const sent = await ownerAccount.sendTransaction({",
+            "to: factory,",
+            "data: factoryData,"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/safe-rescue.mjs",
+          "anchor": [
+            "const transferSent = await ownerAccount.sendTransaction({",
+            "to: safe,",
+            "data: sendExecData,"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Safe balance when --fork-fund is set",
+      "status": "fake — Anvil writes the balance",
+      "statusKind": "fake",
+      "mechanism": "When --fork-fund is set, [ref 0] writes the Base balance with anvil_setBalance or anvil_setStorageAt, and [ref 1] does the same for the rescue. A run without the flag does not take this path.",
+      "insteadOf": "a balance that arrived through a transfer",
+      "doesNotProve": "A green run that used --fork-fund does not prove the Safe received that balance through a transfer.",
+      "refs": [
+        {
+          "file": "e2e/bundler-send.mjs",
+          "anchor": [
+            "if (options.native) {",
+            "await provider.send('anvil_setBalance', [safe, toBeHex(funded)])",
+            "} else {",
+            "const slot = keccak256(coder.encode(['address', 'uint256'], [safe, 9]))",
+            "await provider.send('anvil_setStorageAt', [options.token, slot, asBytes32(funded)])",
+            "}"
+          ],
+          "span": 6,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/safe-rescue.mjs",
+          "anchor": [
+            "if (options.native) {",
+            "await provider.send('anvil_setBalance', [safe, toBeHex(amount)])",
+            "} else {",
+            "const slot = keccak256(coder.encode(['address', 'uint256'], [safe, 9]))",
+            "const storageValue = asBytes32(amount)",
+            "await provider.send('anvil_setStorageAt', [options.token, slot, storageValue])",
+            "}"
+          ],
+          "span": 7,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Payout IBAN",
+      "status": "fake — invented per run, a placeholder that looks real",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] builds a Swiss IBAN. The BBAN starts with clearing 00000 and twelve random digits, and the two check digits are 98 minus the mod-97 remainder of the BBAN followed by 121700. [ref 1] builds one for the EOA and a different one for the Safe. [ref 2] types the number into the IBAN field. [ref 3] selects that same number when it is already listed. [ref 4] keeps a paymentInfos response only when the request IBAN is that number.",
+      "insteadOf": "an IBAN of a bank account the seller holds",
+      "doesNotProve": "A green run does not prove that a bank would accept this number or pay the sale to an account the seller holds.",
+      "refs": [
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "function inventedIban (other) {",
+            "let iban",
+            "do {",
+            "const bban = '00000' + Array.from({ length: 12 }, () => String(randomInt(10))).join('')",
+            "const remainder = [...`${bban}121700`].reduce((n, digit) => (n * 10 + Number(digit)) % 97, 0)",
+            "iban = `CH${String(98 - remainder).padStart(2, '0')}${bban}`",
+            "} while (iban === compact(other).toUpperCase())",
+            "return iban",
+            "}"
+          ],
+          "span": 9,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "const iban = inventedIban()",
+            "rememberIban(iban)",
+            "const smartIban = inventedIban(iban)",
+            "rememberIban(smartIban)"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "const input = page.locator('input[name=\"iban\"]')",
+            "await input.waitFor({ state: 'visible', timeout: 30_000 })",
+            "await input.fill(iban)"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "await clickExactText(page, compact(iban), 30_000, 'No IBAN option matches the invented IBAN')"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/real-sell.mjs",
+          "anchor": [
+            "function paymentCandidate (capture, ext, iban, spec) {",
+            "if (capture.status !== 200 || !capture.body || capture.body.isValid !== true) return false",
+            "const request = capture.request",
+            "if (!request || request.externalTransactionId !== ext) return false",
+            "if (compact(request.iban) !== compact(iban)) return false"
+          ],
+          "span": 5,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    }
+  ]
+}

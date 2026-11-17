@@ -1,0 +1,65 @@
+{
+  "title": "Unit tests",
+  "scope": "The Jest suite under tests/, excluding tests/integration/. It calls the public methods with HTTP answers supplied by the test.",
+  "entries": [
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "DFX HTTP API",
+      "status": "fake — injected responses",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] builds one response object per method and path and passes that function to DfxProtocol as fetch. [ref 1] also replaces globalThis.fetch for the file. In the library, [ref 2] uses the supplied fetch or globalThis.fetch, and [ref 3] sends production calls to https://api.dfx.swiss.",
+      "insteadOf": "the DFX API",
+      "doesNotProve": "A green run does not prove that the DFX API accepts these requests or returns these bodies.",
+      "refs": [
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "function setup (config = {}, overrides = {}, account = new DummyAccount()) {"
+          ],
+          "span": 23,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          },
+          "endAnchor": [
+            "return { protocol: new DfxProtocol(account, { fetch, ...config }), routes }"
+          ]
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "globalThis.fetch = transportMock"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "src/dfx-client.js",
+          "anchor": [
+            "this._fetch = config.fetch ?? globalThis.fetch"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "src/dfx-client.js",
+          "anchor": [
+            "this._base = config.environment === 'local' ? config.apiUrl : config.environment === 'sandbox' ? 'https://dev.api.dfx.swiss' : 'https://api.dfx.swiss'"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    }
+  ]
+}

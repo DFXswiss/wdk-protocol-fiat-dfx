@@ -12,7 +12,10 @@ export const DUMMY_TOKEN = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJkdW1teS1sb2NhbC11c2Vy
 
 export async function accountFixture (index = 0) {
   // Signing is local; an accidental RPC request must never reach a public node.
-  const wallet = new WalletManagerEvm('cook voyage document eight skate token alien guide drink uncle term abuse', { provider: 'http://127.0.0.1:1' })
+  const wallet = new WalletManagerEvm(
+    'cook voyage document eight skate token alien guide drink uncle term abuse',
+    { provider: 'http://127.0.0.1:1' }
+  )
   return wallet.getAccount(index)
 }
 

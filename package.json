@@ -21,7 +21,8 @@
   "types": "./types",
   "scripts": {
     "build:types": "tsc",
-    "lint": "standard",
+    "docs:reality:check": "node scripts/test-reality/check.js",
+    "lint": "standard && npm run docs:reality:check",
     "lint:fix": "standard --fix",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config jest.coverage.config.js --coverage --runInBand",
@@ -57,7 +58,8 @@
     "ignore": [
       "bare.js",
       "tests/**/*.js",
-      "e2e/**"
+      "e2e/**",
+      "scripts/test-reality/**"
     ]
   },
   "repository": {
