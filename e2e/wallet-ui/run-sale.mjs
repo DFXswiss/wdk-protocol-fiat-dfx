@@ -238,7 +238,7 @@ function git (args) {
   }).trim()
 }
 
-function runCapture (command, args, stdinMode) {
+function runCapture (command, args, stdinMode, env) {
   const stdin = stdinMode === 'empty' ? 'pipe' : stdinMode === 'ignore' || stdinMode == null ? 'ignore' : stdinMode
   return new Promise((resolve, reject) => {
     let child
@@ -249,7 +249,9 @@ function runCapture (command, args, stdinMode) {
       handler(value)
     }
     try {
-      child = spawn(command, args, { stdio: [stdin, 'pipe', 'pipe'] })
+      const options = { stdio: [stdin, 'pipe', 'pipe'] }
+      if (env) options.env = env
+      child = spawn(command, args, options)
       state.child = child
     } catch (error) {
       reject(error)
@@ -314,6 +316,11 @@ function productionTarget (options = state.options) {
   return options?.target === 'production-polygon'
 }
 
+function displayAmount (text) {
+  if (!text.includes('.')) return text
+  return text.replace(/0+$/, '').replace(/\.$/, '')
+}
+
 function selectedAsset () {
   const asset = lookupAsset(state.options.asset)
   if (!productionTarget()) return asset
@@ -325,7 +332,7 @@ function selectedAsset () {
     sellEntry: 'sell-entry',
     assetTestId: 'send-asset-usdt-polygon',
     amountText,
-    reviewAmount: `^${amountText.replace(/\./g, '[.]')} USDT$`
+    reviewAmount: `^${displayAmount(amountText).replace(/\./g, '[.]')} USDT$`
   }
 }
 
@@ -339,11 +346,14 @@ function parseSaleAmount (text) {
   if (typeof text !== 'string' || !/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(text)) {
     throw new UsageError('--amount must be a USDT decimal with at most 6 decimal places')
   }
+  let parsed
   try {
-    return parseUnits(text, 6)
+    parsed = parseUnits(text, 6)
   } catch {
     throw new UsageError('--amount must be a USDT decimal with at most 6 decimal places')
   }
+  if (parsed === 0n) throw new UsageError('--amount must be a USDT decimal with at most 6 decimal places')
+  return parsed
 }
 
 function apiOrigin () {
@@ -371,7 +381,11 @@ function amountIsSale (value) {
     if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return false
     return scaled6(text) === base
   }
-  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return scaled6(value.toFixed(6)) === base
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const text = String(value)
+    if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return false
+    return scaled6(text) === base
+  }
   return false
 }
 
@@ -902,14 +916,22 @@ function copyShots (fromDir, toDir) {
   return copied
 }
 
-async function runFlow (file, env) {
+function maestroSecretEnv (secrets) {
+  if (!secrets || Object.keys(secrets).length === 0) return undefined
+  const childEnv = { ...process.env }
+  for (const [name, value] of Object.entries(secrets)) childEnv[`MAESTRO_${name}`] = value
+  return childEnv
+}
+
+async function runFlow (file, env, secrets) {
   const debugDir = mkdtempSync(join(tmpdir(), 'wallet-ui-debug-'))
   const outDir = mkdtempSync(join(tmpdir(), 'wallet-ui-out-'))
+  const childEnv = maestroSecretEnv(secrets)
   const args = ['--udid', state.udid, 'test']
   for (const [key, value] of Object.entries(env)) args.push('-e', `${key}=${value}`)
   args.push('--debug-output', debugDir, '--test-output-dir', outDir, file)
   try {
-    const result = await runCapture('maestro', args, 'ignore')
+    const result = await runCapture('maestro', args, 'ignore', childEnv)
     if (result.code !== 0) state.failedStep = failedStep(result.stdout)
     let copied = []
     try {
@@ -1994,9 +2016,10 @@ async function sendAndCheck (prelude) {
   if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
   state.flow1Started = true
   const flow1Env = production
-    ? { IBAN_PATTERN: `.*${[...iban].join(' ?')}.*`, SELL_ENTRY: 'sell-entry', SELL_AMOUNT: String(options.amountBase) }
+    ? { SELL_ENTRY: 'sell-entry', SELL_AMOUNT: String(options.amountBase) }
     : { IBAN: iban, IBAN_PATTERN: `.*${[...iban].join(' ?')}.*`, SELL_ENTRY: selectedAsset().sellEntry }
-  const flow1 = await runFlow(join(flowDir, production ? 'sell-1-widget-saved-iban.yaml' : 'sell-1-widget.yaml'), flow1Env)
+  const flow1Secrets = production ? { IBAN_PATTERN: `.*${[...iban].join(' ?')}.*` } : undefined
+  const flow1 = await runFlow(join(flowDir, production ? 'sell-1-widget-saved-iban.yaml' : 'sell-1-widget.yaml'), flow1Env, flow1Secrets)
   const flow1Code = flow1.code
   flow1.stdout = ''
   if (flow1Code !== 0) throw new CheckError('flow-1', 'nothing sent', state.failedStep)

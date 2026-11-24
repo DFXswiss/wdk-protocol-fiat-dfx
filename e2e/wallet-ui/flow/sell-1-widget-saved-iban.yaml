@@ -52,16 +52,16 @@ appId: io.tether.wdk.starter.reactnative
 - takeScreenshot: sell-widget-open
 - tapOn: "Add or select your IBAN"
 - scrollUntilVisible:
-    element: "${IBAN_PATTERN}"
+    element: "${MAESTRO_IBAN_PATTERN}"
     direction: DOWN
     centerElement: true
     timeout: 180000
 - waitForAnimationToEnd
-- tapOn: "${IBAN_PATTERN}"
+- tapOn: "${MAESTRO_IBAN_PATTERN}"
 - extendedWaitUntil:
     visible: "Payment Information"
     timeout: 120000
-- assertVisible: ${IBAN_PATTERN}
+- assertVisible: ${MAESTRO_IBAN_PATTERN}
 - scrollUntilVisible:
     element: "Blockchain"
     direction: DOWN

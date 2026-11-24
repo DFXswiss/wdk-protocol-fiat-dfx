@@ -1,6 +1,6 @@
 {
   "title": "Sale in a wallet user interface",
-  "scope": "e2e/wallet-ui/ sells 1 USDT or 0.0001 ETH on Sepolia from the patched starter wallet. The runner reads the sandbox transaction list [ref 0] and keeps the row whose inputTxId is that hash [ref 1]. It does not send the hash in that request. The chain transfer, the wallet send and that sandbox recognition are executed. The entries are the stand-ins around them.",
+  "scope": "e2e/wallet-ui/ runs two targets from the patched starter wallet. The default target sells 1 USDT or 0.0001 ETH on Sepolia. --target production-polygon sells the given USDT amount on Polygon against the production API [ref 2] and binds the runner protocol to environment production [ref 3]. The runner reads the transaction list [ref 0] and keeps the row whose inputTxId is that hash [ref 1]. It does not send the hash in that request. The chain transfer, the wallet send and that recognition are executed. On the default target the entries are the stand-ins around them, except the bank payout, which is switched off. --target production-polygon uses the production API and the account holder's saved bank account [ref 4]; the patched wallet, Maestro, the simulator and the switched-off bank payout remain.",
   "refs": [
     {
       "file": "e2e/wallet-ui/run-sale.mjs",
@@ -23,6 +23,42 @@
         "const hits = rows.filter(row => String(row?.inputTxId ?? '').toLowerCase() === hash)"
       ],
       "span": 1,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "const PRODUCTION_API = 'https://api.dfx.swiss'"
+      ],
+      "span": 1,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        ".registerProtocol('polygon', 'dfx', DfxProtocol, { environment: 'production', network: 'polygon' })"
+      ],
+      "span": 1,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "async function readActiveIban (session) {",
+        "let response",
+        "try {",
+        "response = await fetch(`${PRODUCTION_API}/v1/bankAccount`, {"
+      ],
+      "span": 4,
       "style": {
         "kind": "abs",
         "backtick": true
@@ -163,7 +199,7 @@
             "for (const [key, value] of Object.entries(env)) args.push('-e', `${key}=${value}`)",
             "args.push('--debug-output', debugDir, '--test-output-dir', outDir, file)",
             "try {",
-            "const result = await runCapture('maestro', args, 'ignore')"
+            "const result = await runCapture('maestro', args, 'ignore', childEnv)"
           ],
           "span": 5,
           "style": {
@@ -200,11 +236,11 @@
       "heading": null,
       "headingLevel": null,
       "component": "DFX API",
-      "status": "fake — sandbox instead of production",
-      "statusKind": "fake",
-      "mechanism": "[ref 0] reads https://dev.api.dfx.swiss. [ref 1] binds the starter's DFX protocol to environment sandbox.",
-      "insteadOf": "the production DFX API at https://api.dfx.swiss",
-      "doesNotProve": "A green run does not prove that production recognizes the deposit or books the sale.",
+      "status": "mixed — sandbox on the default target, the production API on production-polygon",
+      "statusKind": "mixed",
+      "mechanism": "The default target reads https://dev.api.dfx.swiss [ref 0] and binds the starter's DFX protocol to environment sandbox [ref 1]. --target production-polygon reads the production API [ref 2] and binds the runner protocol to environment production [ref 3].",
+      "insteadOf": "On the default target, the production DFX API at https://api.dfx.swiss. --target production-polygon uses that API and is not a stand-in.",
+      "doesNotProve": "A green default-target run does not prove that production recognizes the deposit or books the sale. A green --target production-polygon run does not prove the sandbox.",
       "refs": [
         {
           "file": "e2e/wallet-ui/run-sale.mjs",
@@ -230,6 +266,28 @@
             "kind": "abs",
             "backtick": true
           }
+        },
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "const PRODUCTION_API = 'https://api.dfx.swiss'"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            ".registerProtocol('polygon', 'dfx', DfxProtocol, { environment: 'production', network: 'polygon' })"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
         }
       ]
     },
@@ -237,11 +295,11 @@
       "heading": null,
       "headingLevel": null,
       "component": "Payout IBAN",
-      "status": "fake — invented per run, a placeholder that looks real",
-      "statusKind": "fake",
-      "mechanism": "[ref 0] builds a Swiss IBAN. The BBAN starts with clearing 00000 and twelve random digits, and the two check digits are 98 minus the mod-97 remainder of the BBAN followed by 121700.",
-      "insteadOf": "an IBAN of a bank account the seller holds",
-      "doesNotProve": "A green run does not prove that a bank would accept this number or pay the sale to an account the seller holds.",
+      "status": "mixed — invented per run on the default target, the saved account on production-polygon",
+      "statusKind": "mixed",
+      "mechanism": "On the default target [ref 0] builds a Swiss IBAN. The BBAN starts with clearing 00000 and twelve random digits, and the two check digits are 98 minus the mod-97 remainder of the BBAN followed by 121700. --target production-polygon reads the account holder's active bank account [ref 1] and never invents an IBAN.",
+      "insteadOf": "On the default target, an IBAN of a bank account the seller holds. --target production-polygon uses that saved account and is not a stand-in.",
+      "doesNotProve": "A green default-target run does not prove that a bank would accept the invented number or pay the sale to an account the seller holds. A green --target production-polygon run does not prove a payout to an invented IBAN.",
       "refs": [
         {
           "file": "e2e/wallet-ui/run-sale.mjs",
@@ -257,6 +315,20 @@
             "kind": "abs",
             "backtick": true
           }
+        },
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "async function readActiveIban (session) {",
+            "let response",
+            "try {",
+            "response = await fetch(`${PRODUCTION_API}/v1/bankAccount`, {"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
         }
       ]
     },
@@ -266,7 +338,7 @@
       "component": "Bank payout of the sale",
       "status": "switched off — the runner stops at PayoutInProgress or Completed",
       "statusKind": "switched-off",
-      "mechanism": "[ref 0] checks the booked payout and returns when the sandbox row is PayoutInProgress or Completed. The runner does not read a bank debit.",
+      "mechanism": "[ref 0] checks the booked payout and returns when the sale row is PayoutInProgress or Completed. The runner does not read a bank debit.",
       "insteadOf": "a bank transfer of the fiat amount to the payout account",
       "doesNotProve": "A green run does not prove that a bank paid the fiat amount.",
       "refs": [
