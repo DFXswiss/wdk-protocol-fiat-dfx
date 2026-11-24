@@ -175,10 +175,19 @@ blockchain value. This covers DFX networks with complete asset
 metadata, not only EVM chains.
 
 Assets without API `decimals` are excluded from supported lists and cannot be
-quoted or traded. In the recorded sandbox catalog this includes Bitcoin/BTC,
-Lightning/BTC and Arkade/BTC; Firo/FIRO has API `decimals: 8`. The production
-API returned `decimals: null` for all four in the production catalog recorded on 2026-10-02 (`b5cafa1`) and again on 2026-10-29. An API value is authoritative,
-including zero.
+quoted or traded, unless the exact key `blockchain/name` is `Bitcoin/BTC`,
+`Lightning/BTC`, `Arkade/BTC`, `BitcoinTestnet4/BTC` or `Firo/FIRO`. For those
+keys a `null` or absent API value uses 8. Satoshi is 1e-8 BTC. Firo uses 8,
+which is what the sandbox API reports. An API value is authoritative, including
+zero. The recorded sandbox catalog marks Bitcoin/BTC, Lightning/BTC, Arkade/BTC
+and BitcoinTestnet4/BTC tradable with API `decimals: null`, so the module lists
+them at 8. Firo/FIRO in that recording keeps API `decimals: 8`. On 2026-11-24
+the production API returned `decimals: null` for all five of those keys.
+Bitcoin/BTC and Lightning/BTC were buyable and sellable. Arkade/BTC,
+BitcoinTestnet4/BTC and Firo/FIRO were not tradable, so they stay unlisted.
+The production catalog recorded on 2026-10-02 (`b5cafa1`) and again on
+2026-10-29 also returned `decimals: null` for Bitcoin/BTC, Lightning/BTC,
+Arkade/BTC and Firo/FIRO.
 
 A ticker can occur on multiple networks. Without a network, ambiguous tickers
 throw `ValueError` listing the candidate networks. Lists include assets and
@@ -372,10 +381,16 @@ same fallback.
   the wallet signature on the account address. Without a constructor `network`,
   no Safe signature is built. EOA accounts still need one signature.
   Unrecoverable signatures are forwarded unchanged with the account address.
-- Bitcoin authentication is sandbox-verified. Bitcoin/BTC, Lightning/BTC and
-  Arkade/BTC remain excluded from the recorded sandbox catalog until the API
-  supplies `decimals`; sandbox Firo/FIRO supplies `8`. In the production catalog recorded on 2026-10-02 (`b5cafa1`), production
-  returned `decimals: null` for all four, and again on 2026-10-29.
+- Bitcoin authentication is sandbox-verified. Bitcoin/BTC, Lightning/BTC,
+  Arkade/BTC, BitcoinTestnet4/BTC and Firo/FIRO use 8 when API `decimals` is
+  null or absent. An API value, including zero, wins. Other assets without API
+  decimals stay excluded. The recorded sandbox catalog lists Bitcoin/BTC,
+  Lightning/BTC, Arkade/BTC and BitcoinTestnet4/BTC at 8 from that fallback,
+  and Firo/FIRO at API `decimals: 8`. On 2026-11-24 production returned
+  `decimals: null` for all five; only Bitcoin/BTC and Lightning/BTC were
+  tradable. The production catalog recorded on 2026-10-02 (`b5cafa1`) and
+  again on 2026-10-29 returned `decimals: null` for Bitcoin/BTC, Lightning/BTC,
+  Arkade/BTC and Firo/FIRO.
 - Ambiguous tickers without a network are rejected.
 - HTTP 429 and account-state failures provisionally map to `INTERNAL_SERVER_ERROR`.
 - A `recipient` or `refundAddress` differing from the account address is rejected.

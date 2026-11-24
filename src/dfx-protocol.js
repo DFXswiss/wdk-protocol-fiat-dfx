@@ -10,7 +10,7 @@ import DfxClient from './dfx-client.js'
 import { normalizeSignature, recoverEvmAddress, safeMessageTypedData } from './signature.js'
 import { erc6492SafeSignature } from './safe.js'
 import { decimal, displayAmount, divideAmounts, minorUnits, positiveAmount, unexpected } from './amounts.js'
-import { BLOCKCHAINS, ERC6492_NETWORKS, EVM_BLOCKCHAINS, EVM_CHAIN_IDS, FAILED_STATES, FIAT_DECIMALS, INPUT_ERRORS, MAX_ASSET_DECIMALS, MAX_TIMEOUT_MS, SIGN_IN_CHALLENGE, SIGN_IN_CHALLENGE_PREFIX } from './constants.js'
+import { BLOCKCHAINS, ERC6492_NETWORKS, EVM_BLOCKCHAINS, EVM_CHAIN_IDS, FAILED_STATES, FIAT_DECIMALS, INPUT_ERRORS, MAX_ASSET_DECIMALS, MAX_TIMEOUT_MS, NATIVE_DECIMALS, SIGN_IN_CHALLENGE, SIGN_IN_CHALLENGE_PREFIX } from './constants.js'
 
 /** @typedef {import('@tetherto/wdk-wallet').IWalletAccount} IWalletAccount */
 /** @typedef {import('@tetherto/wdk-wallet').IWalletAccountReadOnly} IWalletAccountReadOnly */
@@ -145,11 +145,16 @@ function textField (value) {
   return value
 }
 
+function nativeAssetKey (asset) {
+  return `${asset.blockchain}/${asset.name}`
+}
+
 function hasDecimals (asset) {
-  return asset.decimals != null
+  return asset.decimals != null || Object.hasOwn(NATIVE_DECIMALS, nativeAssetKey(asset))
 }
 
 function assetDecimals (asset) {
+  if (asset.decimals == null) return NATIVE_DECIMALS[nativeAssetKey(asset)]
   const value = decimal(asset.decimals)
   if (value.lt(0) || value.gt(MAX_ASSET_DECIMALS) || !value.eq(value.round(0))) throw unexpected('Invalid asset decimals')
   return Number(value.toFixed())
@@ -488,6 +493,7 @@ export default class DfxProtocol extends FiatProtocol {
   /**
    * Retrieves a list of supported crypto assets from the provider.
    * Includes only assets available for buying or selling with known decimals.
+   * Bitcoin/BTC, Lightning/BTC, Arkade/BTC, BitcoinTestnet4/BTC and Firo/FIRO use 8 when the API value is null or absent. Any API value, including zero, wins.
    *
    * @returns {Promise<SupportedCryptoAsset[]>} Tickers, lowercase blockchain names and base-unit decimals.
    * @throws {ProviderError} If the API fails.

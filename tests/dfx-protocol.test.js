@@ -201,7 +201,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
     return AbiCoder.defaultAbiCoder().decode(['address', 'bytes', 'bytes'], encoded)[2]
   }
 
-  const NATIVE_ASSETS = [['Bitcoin', 'BTC', 'bitcoin'], ['Lightning', 'BTC', 'lightning'], ['Arkade', 'BTC', 'arkade'], ['Firo', 'FIRO', 'firo']]
+  const NATIVE_ASSETS = [['Bitcoin', 'BTC', 'bitcoin'], ['Lightning', 'BTC', 'lightning'], ['Arkade', 'BTC', 'arkade'], ['BitcoinTestnet4', 'BTC', 'bitcointestnet4'], ['Firo', 'FIRO', 'firo']]
   const EXTERNAL_IDS = [
     ['a', 'a'],
     ['ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._%3A-'],
@@ -221,13 +221,52 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
     const { signatures, addresses, result: EXPECTED_RESULT, requests: EXPECTED_REQUESTS } = EXPECTATIONS[METHOD]
     test.each(NATIVE_ASSETS.flatMap(([NETWORK, CRYPTO_ASSET]) => [null, undefined].map(DUMMY_DECIMALS =>
       [NETWORK, CRYPTO_ASSET, METHOD, DUMMY_DECIMALS]
-    )))('%s/%s %s rejects API decimals %p', async (NETWORK, CRYPTO_ASSET, CASE_METHOD, DUMMY_DECIMALS) => {
-      const { protocol } = setup({ network: NETWORK }, {
+    )))('%s/%s %s converts 125000000n with fallback decimals when API decimals are %p', async (NETWORK, CRYPTO_ASSET, CASE_METHOD, DUMMY_DECIMALS) => {
+      const QUOTE = CASE_METHOD.startsWith('quote')
+      const overrides = {
         'GET /v1/asset': response([{ ...DUMMY_ASSETS[3], blockchain: NETWORK, name: CRYPTO_ASSET, decimals: DUMMY_DECIMALS }])
-      })
+      }
+      if (CASE_METHOD === 'quoteBuy') overrides['PUT /v1/buy/quote'] = response('{"isValid":true,"amount":100,"estimatedAmount":1.25,"rate":80,"fees":{"total":1.23}}')
+      if (CASE_METHOD === 'quoteSell') overrides['PUT /v1/sell/quote'] = response('{"isValid":true,"amount":1.25,"estimatedAmount":100,"rate":80,"feesTarget":{"total":1.23}}')
+      const { protocol } = setup({ network: NETWORK }, overrides)
+      const result = await protocol[CASE_METHOD]({ cryptoAsset: CRYPTO_ASSET, fiatCurrency: 'EUR', cryptoAmount: 125000000n })
 
-      await failure(protocol[CASE_METHOD]({ cryptoAsset: CRYPTO_ASSET, fiatCurrency: 'EUR', cryptoAmount: 125000000n }), ValueError, `Missing decimals for ${NETWORK}/${CRYPTO_ASSET}`)
-      expectInteractions(CATALOG_REQUESTS)
+      if (QUOTE) {
+        const BODY = CASE_METHOD === 'quoteBuy'
+          ? '{"currency":{"name":"EUR"},"asset":{"id":4},"specialCode":"","paymentMethod":"Bank","targetAmount":1.25}'
+          : '{"currency":{"name":"EUR"},"asset":{"id":4},"specialCode":"","amount":1.25}'
+        expect(result).toEqual({ cryptoAmount: 125000000n, fiatAmount: 10000n, fee: 123n, rate: '80' })
+        expectInteractions([...CATALOG_REQUESTS, httpRequest(CASE_METHOD === 'quoteBuy' ? '/v1/buy/quote' : '/v1/sell/quote', 'PUT', BODY)])
+      } else {
+        expect(result).toEqual(widget(CASE_METHOD, { asset: CRYPTO_ASSET, blockchain: NETWORK, amount: '1.25', crypto: true }))
+        expectInteractions([...CATALOG_REQUESTS, CHALLENGE_REQUEST,
+          httpRequest('/v1/auth', 'POST', JSON.stringify({ address: DUMMY_ADDRESS, signature: 'dummy-signature', blockchain: NETWORK }))],
+        [[challengeMessage(DUMMY_ADDRESS)]], [[]])
+      }
+    })
+
+    test.each([0, 6].map(DUMMY_DECIMALS => [METHOD, DUMMY_DECIMALS, DUMMY_DECIMALS === 0 ? '125000000' : '125']))('%s keeps API decimals %i for Bitcoin/BTC (display %s)', async (CASE_METHOD, DUMMY_DECIMALS, EXPECTED_AMOUNT) => {
+      const QUOTE = CASE_METHOD.startsWith('quote')
+      const overrides = {
+        'GET /v1/asset': response([{ ...DUMMY_ASSETS[3], decimals: DUMMY_DECIMALS }])
+      }
+      if (CASE_METHOD === 'quoteBuy') overrides['PUT /v1/buy/quote'] = response('{"isValid":true,"amount":100,"estimatedAmount":2,"rate":50,"fees":{"total":1.23}}')
+      if (CASE_METHOD === 'quoteSell') overrides['PUT /v1/sell/quote'] = response('{"isValid":true,"amount":2,"estimatedAmount":100,"rate":50,"feesTarget":{"total":1.23}}')
+      const { protocol } = setup({ network: 'Bitcoin' }, overrides)
+      const result = await protocol[CASE_METHOD]({ cryptoAsset: 'BTC', fiatCurrency: 'EUR', cryptoAmount: 125000000n })
+
+      if (QUOTE) {
+        const BODY = CASE_METHOD === 'quoteBuy'
+          ? `{"currency":{"name":"EUR"},"asset":{"id":4},"specialCode":"","paymentMethod":"Bank","targetAmount":${EXPECTED_AMOUNT}}`
+          : `{"currency":{"name":"EUR"},"asset":{"id":4},"specialCode":"","amount":${EXPECTED_AMOUNT}}`
+        expect(result).toEqual({ cryptoAmount: 2n * (10n ** BigInt(DUMMY_DECIMALS)), fiatAmount: 10000n, fee: 123n, rate: '50' })
+        expectInteractions([...CATALOG_REQUESTS, httpRequest(CASE_METHOD === 'quoteBuy' ? '/v1/buy/quote' : '/v1/sell/quote', 'PUT', BODY)])
+      } else {
+        expect(result).toEqual(widget(CASE_METHOD, { asset: 'BTC', blockchain: 'Bitcoin', amount: EXPECTED_AMOUNT, crypto: true }))
+        expectInteractions([...CATALOG_REQUESTS, CHALLENGE_REQUEST,
+          httpRequest('/v1/auth', 'POST', '{"address":"0x0000000000000000000000000000000000000001","signature":"dummy-signature","blockchain":"Bitcoin"}')],
+        [[challengeMessage(DUMMY_ADDRESS)]], [[]])
+      }
     })
 
     test.each([METHOD].flatMap(CASE_METHOD =>
@@ -323,6 +362,17 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
         'GET /v1/asset': response([{ ...DUMMY_ASSETS[3], name: 'UNKNOWN' }])
       })
       await failure(protocol[CASE_METHOD]({ ...OPTIONS, cryptoAsset: 'UNKNOWN' }), ValueError, 'Missing decimals for Bitcoin/UNKNOWN')
+      expectInteractions(CATALOG_REQUESTS)
+    })
+
+    test.each([
+      ['Monero', 'XMR'],
+      ['Bitcoin', 'Btc']
+    ].map(([NETWORK, CRYPTO_ASSET]) => [METHOD, NETWORK, CRYPTO_ASSET]))('%s rejects %s/%s when null decimals are not in the native table', async (CASE_METHOD, NETWORK, CRYPTO_ASSET) => {
+      const { protocol } = setup({ network: NETWORK }, {
+        'GET /v1/asset': response([{ ...DUMMY_ASSETS[3], blockchain: NETWORK, name: CRYPTO_ASSET, decimals: null }])
+      })
+      await failure(protocol[CASE_METHOD]({ ...OPTIONS, cryptoAsset: CRYPTO_ASSET }), ValueError, `Missing decimals for ${NETWORK}/${CRYPTO_ASSET}`)
       expectInteractions(CATALOG_REQUESTS)
     })
 
@@ -1239,9 +1289,23 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       expectInteractions([httpRequest('/v1/asset')])
     })
 
+    test.each(NATIVE_ASSETS.flatMap(([DUMMY_BLOCKCHAIN, DUMMY_NAME, EXPECTED_NETWORK]) => [null, undefined].map(DUMMY_DECIMALS =>
+      [DUMMY_BLOCKCHAIN, DUMMY_NAME, DUMMY_DECIMALS, EXPECTED_NETWORK]
+    )))('lists %s/%s at 8 when API decimals are %p', async (DUMMY_BLOCKCHAIN, DUMMY_NAME, DUMMY_DECIMALS, EXPECTED_NETWORK) => {
+      const { protocol } = setup({}, {
+        'GET /v1/asset': response([{ ...DUMMY_ASSETS[3], blockchain: DUMMY_BLOCKCHAIN, name: DUMMY_NAME, decimals: DUMMY_DECIMALS }])
+      })
+      const result = await protocol.getSupportedCryptoAssets()
+
+      expect(result).toEqual([
+        { code: DUMMY_NAME, networkCode: EXPECTED_NETWORK, decimals: 8, name: 'Bitcoin' }
+      ])
+      expectInteractions([httpRequest('/v1/asset')])
+    })
+
     test.each([
-      ...NATIVE_ASSETS.flatMap(([DUMMY_BLOCKCHAIN, DUMMY_NAME]) => [null, undefined].map(DUMMY_DECIMALS => [DUMMY_BLOCKCHAIN, DUMMY_NAME, DUMMY_DECIMALS])),
-      ['Bitcoin', 'UNKNOWN', undefined], ['Unknown', 'BTC', undefined], ['Unknown', 'FIRO', undefined]
+      ['Bitcoin', 'UNKNOWN', undefined], ['Unknown', 'BTC', undefined], ['Unknown', 'FIRO', undefined],
+      ['Monero', 'XMR', null], ['Bitcoin', 'Btc', null]
     ])('excludes %s/%s with API decimals %p', async (DUMMY_BLOCKCHAIN, DUMMY_NAME, DUMMY_DECIMALS) => {
       const { protocol } = setup({}, {
         'GET /v1/asset': response([{ ...DUMMY_ASSETS[3], blockchain: DUMMY_BLOCKCHAIN, name: DUMMY_NAME, decimals: DUMMY_DECIMALS }])
@@ -1303,7 +1367,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
       expectInteractions([httpRequest('/v1/asset')])
     })
 
-    test('lists assets available in either direction only with API decimals', async () => {
+    test('lists assets available in either direction and Bitcoin/BTC at fallback decimals 8', async () => {
       const { protocol } = setup()
       const result = await protocol.getSupportedCryptoAssets()
 
@@ -1311,6 +1375,7 @@ describe('@dfx.swiss/wdk-protocol-fiat-dfx', () => {
         { code: 'ETH', networkCode: 'ethereum', decimals: 18, name: 'Ether' },
         { code: 'USDT', networkCode: 'ethereum', decimals: 6, name: 'Tether' },
         { code: 'USDT', networkCode: 'tron', decimals: 6, name: 'Tether' },
+        { code: 'BTC', networkCode: 'bitcoin', decimals: 8, name: 'Bitcoin' },
         { code: 'BUY', networkCode: 'ethereum', decimals: 2, name: 'Buy only' },
         { code: 'SELL', networkCode: 'ethereum', decimals: 2, name: 'Sell only' }
       ])

@@ -1,7 +1,9 @@
 // Copyright 2026 DFX AG
 // SPDX-License-Identifier: Apache-2.0
 
-// Read-only probe: checks per environment which of BTC/Bitcoin, Lightning, Arkade and FIRO are listed, and that both quote methods reject the unlisted ones with "Missing decimals". Sends no on-chain transaction.
+// Read-only probe of Bitcoin, Lightning, Arkade and Firo. Sends no on-chain transaction.
+// A listed asset must quote for buy and for sell. These four are in the native decimals table,
+// so an unlisted asset is rejected as unsupported, not for missing decimals. Exit code 1 on a mismatch.
 import { createHash } from 'node:crypto'
 import { closeSync, constants, lstatSync, openSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -63,6 +65,8 @@ const cases = [
   ['arkade', 'Arkade', 'BTC'],
   ['firo', 'Firo', 'FIRO']
 ]
+// Same keys as NATIVE_DECIMALS. Not imported: that table is not a package export.
+const nativeTable = new Set(cases.map(([, blockchain, asset]) => `${blockchain}/${asset}`))
 
 for (const environment of [process.env.DFX_ENV === 'production' ? 'production' : 'sandbox']) {
   const protocol = new DfxProtocol(undefined, { environment })
@@ -70,17 +74,22 @@ for (const environment of [process.env.DFX_ENV === 'production' ? 'production' :
   for (const [network, blockchain, asset] of cases) {
     const listed = assets.some(row => row.networkCode === network && row.code === asset)
     console.log(`${environment} ${network} listed: ${listed}`)
-    const expectedListed = environment === 'sandbox' && network === 'firo'
-    if (listed !== expectedListed) process.exitCode = 1
-    if (expectedListed) continue
     for (const method of ['quoteBuy', 'quoteSell']) {
+      const direction = method === 'quoteBuy' ? 'buy' : 'sell'
       try {
-        await protocol[method]({ cryptoAsset: asset, fiatCurrency: 'EUR', config: { network }, fiatAmount: 10000n })
-        console.log(`  ${method} ${asset}/${network}: NOT REJECTED`)
-        process.exitCode = 1
+        const quote = await protocol[method]({ cryptoAsset: asset, fiatCurrency: 'EUR', config: { network }, fiatAmount: 10000n })
+        console.log(`  ${method} ${asset}/${network}: quoted`)
+        if (!listed || typeof quote?.cryptoAmount !== 'bigint') process.exitCode = 1
       } catch (error) {
-        const expected = `Missing decimals for ${blockchain}/${asset}`
         console.log(`  ${method} ${asset}/${network}: ${err(error)}`)
+        if (listed) {
+          process.exitCode = 1
+          continue
+        }
+        const key = `${blockchain}/${asset}`
+        const expected = nativeTable.has(key)
+          ? `Unsupported ${direction} asset or network: ${asset}`
+          : `Missing decimals for ${key}`
         if (error?.constructor?.name !== 'ValueError' || error.message !== expected) process.exitCode = 1
       }
     }

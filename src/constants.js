@@ -175,6 +175,16 @@ export const FIAT_DECIMALS = Object.freeze({
   ZWG: 2
 })
 
+// Satoshi is 1e-8 BTC. Firo uses 8, which is what the sandbox API reports.
+// Used only when the API value is null or absent. An API value always wins, including 0.
+export const NATIVE_DECIMALS = Object.freeze({
+  'Bitcoin/BTC': 8,
+  'Lightning/BTC': 8,
+  'Arkade/BTC': 8,
+  'BitcoinTestnet4/BTC': 8,
+  'Firo/FIRO': 8
+})
+
 export const EVM_BLOCKCHAINS = new Set([
   'ethereum', 'sepolia', 'binancesmartchain', 'optimism', 'arbitrum', 'polygon',
   'base', 'haqq', 'gnosis', 'plasma', 'citrea', 'citreatestnet'

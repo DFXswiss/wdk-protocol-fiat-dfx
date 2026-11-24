@@ -271,6 +271,7 @@ export default class DfxProtocol extends FiatProtocol {
     /**
      * Retrieves a list of supported crypto assets from the provider.
      * Includes only assets available for buying or selling with known decimals.
+     * Bitcoin/BTC, Lightning/BTC, Arkade/BTC, BitcoinTestnet4/BTC and Firo/FIRO use 8 when the API value is null or absent. Any API value, including zero, wins.
      *
      * @returns {Promise<SupportedCryptoAsset[]>} Tickers, lowercase blockchain names and base-unit decimals.
      * @throws {ProviderError} If the API fails.

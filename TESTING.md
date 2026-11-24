@@ -42,7 +42,7 @@ Live probes below have a date and no recorded commit.
 | `e2e/live-matrix.mjs`, production | 182/187 steps | 2026-10-29 | commit not recorded |
 | `e2e/live-matrix.mjs`, production | 177/178 steps | 2026-11-05 | commit not recorded |
 | `e2e/signature-diff.mjs` | 0 mismatches in 20,000 Solana and 5,000 Spark signatures, including a re-run | 2026-11-05 | commit not recorded |
-| `e2e/native-quotes.mjs` | Sandbox lists only Firo among Bitcoin, Lightning, Arkade and Firo. Production lists none. Unlisted assets are rejected with `Missing decimals` | re-run 2026-11-05 | commit not recorded |
+| `e2e/native-quotes.mjs` | Historical, before the native decimals fallback, and not re-run after it: sandbox listed only Firo among Bitcoin, Lightning, Arkade and Firo; production listed none; unlisted assets were rejected with `Missing decimals` | re-run 2026-11-05 | commit not recorded |
 | `e2e/bare-smoke.mjs` | 4/4. Bare runtime v1.35.0, with `bare@1.34.1` | 2026-10-20 | commit not recorded |
 | `e2e/bare-smoke.mjs` | 4/4. Bare runtime v1.36.0, with `bare@1.34.1` | 2026-11-05 | commit not recorded |
 
