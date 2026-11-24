@@ -122,7 +122,7 @@ function cryptoUnits (asset, listedRows) {
   if (typeof source === 'number' && Number.isInteger(source) && source >= 0 && source <= 255) {
     return 50n * 10n ** BigInt(source)
   }
-  return 50n
+  throw new Error(`decimals for ${asset.blockchain}/${asset.name} are not an integer from 0 to 255`)
 }
 
 function skip (chain, name, reason) {
@@ -144,12 +144,12 @@ async function sessionStep (chain, kind, url, address) {
   })
 }
 
-async function expectUnsupported (chain, fiat, direction, code, fiatCurrency, cryptoAmount) {
+async function expectUnsupported (chain, fiat, direction, code, fiatCurrency, amountAsset, listedRows) {
   const message = `Unsupported ${direction} asset or network: ${code}`
   const method = direction === 'sell' ? 'quoteSell' : 'quoteBuy'
   await step(chain, `${method} ${code} -> ValueError ${message}`, async () => {
     try {
-      if (direction === 'sell') await fiat.quoteSell({ cryptoAsset: code, fiatCurrency, cryptoAmount })
+      if (direction === 'sell') await fiat.quoteSell({ cryptoAsset: code, fiatCurrency, cryptoAmount: cryptoUnits(amountAsset, listedRows) })
       else await fiat.quoteBuy({ cryptoAsset: code, fiatCurrency, fiatAmount: 10000n })
     } catch (e) {
       if (e?.constructor?.name === 'ValueError' && e.message === message) return err(e)
@@ -320,16 +320,16 @@ for (const c of CASES.filter(c => !only || c.chain === only)) {
         throw e
       }
     })
-    if (buyAsset.sellable !== true) await expectUnsupported(c.chain, fiat, 'sell', code, cur, cryptoUnits(buyAsset, listed))
+    if (buyAsset.sellable !== true) await expectUnsupported(c.chain, fiat, 'sell', code, cur, buyAsset, listed)
   }
 
   if (!sellAsset) {
     skip(c.chain, 'sell', `no sellable asset on ${c.network} in the API catalog`)
   } else {
     const code = sellAsset.name
-    const cryptoAmount = cryptoUnits(sellAsset, listed)
-    await step(c.chain, `quoteSell ${code}->${cur} cryptoAmount 50`, () => fiat.quoteSell({ cryptoAsset: code, fiatCurrency: cur, cryptoAmount }))
+    await step(c.chain, `quoteSell ${code}->${cur} cryptoAmount 50`, () => fiat.quoteSell({ cryptoAsset: code, fiatCurrency: cur, cryptoAmount: cryptoUnits(sellAsset, listed) }))
     const sell = await step(c.chain, `sell ${code}->${cur} cryptoAmount 50`, async () => {
+      const cryptoAmount = cryptoUnits(sellAsset, listed)
       const url = (await fiat.sell({ cryptoAsset: code, fiatCurrency: cur, cryptoAmount })).sellUrl
       if (!url) throw new Error('sell returned no widget URL')
       return url

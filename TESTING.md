@@ -34,7 +34,7 @@ Measured on `99ec31e`, 2026-11-17, Node v22.23.5.
 
 Older unit and coverage counts in previous revisions of this file had no recorded commit. They are not repeated here.
 
-Live probes below have a date and no recorded commit.
+Live probes below have a date. A row without a recorded commit says `commit not recorded`.
 
 | Probe | Result | Date | Commit |
 | --- | --- | --- | --- |
@@ -42,9 +42,14 @@ Live probes below have a date and no recorded commit.
 | `e2e/live-matrix.mjs`, production | 182/187 steps | 2026-10-29 | commit not recorded |
 | `e2e/live-matrix.mjs`, production | 177/178 steps | 2026-11-05 | commit not recorded |
 | `e2e/signature-diff.mjs` | 0 mismatches in 20,000 Solana and 5,000 Spark signatures, including a re-run | 2026-11-05 | commit not recorded |
-| `e2e/native-quotes.mjs` | Historical, before the native decimals fallback, and not re-run after it: sandbox listed only Firo among Bitcoin, Lightning, Arkade and Firo; production listed none; unlisted assets were rejected with `Missing decimals` | re-run 2026-11-05 | commit not recorded |
+| `e2e/native-quotes.mjs` | Historical, before the native decimals fallback: sandbox listed only Firo among Bitcoin, Lightning, Arkade and Firo; production listed none; unlisted assets were rejected with `Missing decimals`. The production run after the fallback is the 2026-11-24 `DFX_ENV=production node native-quotes.mjs` row | re-run 2026-11-05 | commit not recorded |
 | `e2e/bare-smoke.mjs` | 4/4. Bare runtime v1.35.0, with `bare@1.34.1` | 2026-10-20 | commit not recorded |
 | `e2e/bare-smoke.mjs` | 4/4. Bare runtime v1.36.0, with `bare@1.34.1` | 2026-11-05 | commit not recorded |
+| `GET https://api.dfx.swiss/v1/asset` | `Bitcoin/BTC` decimals null, buyable true, sellable true; `Lightning/BTC` null, true, true; `Arkade/BTC` null, false, false; `BitcoinTestnet4/BTC` null, false, false; `Firo/FIRO` null, false, false | 2026-11-24 | `f9cacbc` |
+| `DFX_ENV=production node native-quotes.mjs` | exit 0. bitcoin listed, quoteBuy and quoteSell quoted; lightning listed, both quoted; arkade not listed, both rejected with `Unsupported buy/sell asset or network: BTC`; firo not listed, both rejected with `Unsupported buy/sell asset or network: FIRO` | 2026-11-24 | `f9cacbc` |
+| `DFX_ENV=production node live-matrix.mjs` | exit 1, `172/176 steps ok, 7 skipped`. Sign-in succeeded on 12 of 13 cases. The 4 FAILs are all in the solana case: `ProviderError UNAUTHORIZED Invalid signature` on the sign-in step and the three steps that sign in again. Skips: sepolia, tron and spark buy and sell (no buyable and no sellable asset on that network in the API catalog); solana sell (no sellable asset on solana in the API catalog) | 2026-11-24 | `f9cacbc` |
+
+The three 2026-11-24 production rows were measured on macpro, Node v22.22.0, module commit `f9cacbca2fdf685defc797ed7268c0163779e954`, clean tree. Production API `/version` commit `7d14468756fe7ae6c346679424c7c3ed01783454` was the same at start and end.
 
 `e2e/out/matrix-results-sandbox.json` in this tree has no commit and is not the 178/186 record. `e2e/evidence/` holds the real-run rows in the table further down. Those rows name a date. Of the wallet-ui rows, the 2026-11-12 sales and the 2026-11-16 runs name module heads, and the 2026-11-16 red row names the head of its ETH sale; the mutation rows and the 2026-11-12 red row do not.
 
@@ -78,6 +83,7 @@ A run whose fakes are not declared is an incomplete result.
 - **Sale from a smart account in a wallet user interface.** The patched starter registers Ethereum as a plain EVM account, not an ERC-4337 account. A hybrid sandbox sale from a fresh Safe, id 10035, reached `Processing` and the follow timed out (`e2e/evidence/2026-11-09-sandbox-real-sell-pimlico.jsonl`, run `red6-18f0acf-safe-sell-stays-processing`, commit `78264680`, 2026-11-09).
 - **Bank payout.** This repository does not pay out from a bank. `e2e/real-sell.mjs` and the wallet-ui runner return when the sandbox state is `PayoutInProgress` or `Completed` and do not read a bank debit. Recorded wallet-ui sales stopped at `PayoutInProgress`.
 - **The wallet-ui run does not run in CI.** A weekly run outside CI that repeats it is not in this repository.
+- **Solana sign-in when the address matches the Bitcoin format.** This is a DFX API defect, not a module defect. Measured the same day, 2026-11-24. The DFX API detects the chain of a sign-in address by regular expressions in a fixed order and tests the Bitcoin format `([13]|bc1)[a-zA-HJ-NP-Z0-9]{25,62}` before the Solana format, so a Solana address that begins with `1` or `3` is verified as a Bitcoin address and rejected. 174 of 3000 random WDK Solana addresses (5.80 %) match that Bitcoin format. A targeted production sign-in with a Solana address beginning with `3` returned `Invalid signature`; one beginning with `9` signed in. The module's signature for both is valid (offline ed25519 verification, 200 of 200), and the earlier 2026-11-24 production run at the uncommitted tree signed in on all 13 cases with another random seed. `DFX_ENV=production node live-matrix.mjs` at `f9cacbc` exited 1, `172/176 steps ok, 7 skipped`. Sign-in succeeded on 12 of 13 cases. The 4 FAILs are all in the solana case: `ProviderError UNAUTHORIZED Invalid signature` on the sign-in step and the three steps that sign in again. The live matrix uses a random seed per run, so its solana case fails in about 6 % of runs until the DFX API checks the Solana format before the Bitcoin format.
 
 ## Target
 

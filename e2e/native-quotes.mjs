@@ -65,7 +65,8 @@ const cases = [
   ['arkade', 'Arkade', 'BTC'],
   ['firo', 'Firo', 'FIRO']
 ]
-// Same keys as NATIVE_DECIMALS. Not imported: that table is not a package export.
+// The four probe keys in `cases`: Bitcoin/BTC, Lightning/BTC, Arkade/BTC and Firo/FIRO.
+// Omits BitcoinTestnet4/BTC, which is also in NATIVE_DECIMALS. Not imported: that table is not a package export.
 const nativeTable = new Set(cases.map(([, blockchain, asset]) => `${blockchain}/${asset}`))
 
 for (const environment of [process.env.DFX_ENV === 'production' ? 'production' : 'sandbox']) {

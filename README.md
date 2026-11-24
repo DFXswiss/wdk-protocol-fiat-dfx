@@ -184,7 +184,8 @@ and BitcoinTestnet4/BTC tradable with API `decimals: null`, so the module lists
 them at 8. Firo/FIRO in that recording keeps API `decimals: 8`. On 2026-11-24
 the production API returned `decimals: null` for all five of those keys.
 Bitcoin/BTC and Lightning/BTC were buyable and sellable. Arkade/BTC,
-BitcoinTestnet4/BTC and Firo/FIRO were not tradable, so they stay unlisted.
+BitcoinTestnet4/BTC and Firo/FIRO were not buyable and not sellable. See
+[TESTING.md](TESTING.md#current-state--measured).
 The production catalog recorded on 2026-10-02 (`b5cafa1`) and again on
 2026-10-29 also returned `decimals: null` for Bitcoin/BTC, Lightning/BTC,
 Arkade/BTC and Firo/FIRO.
@@ -388,9 +389,13 @@ same fallback.
   Lightning/BTC, Arkade/BTC and BitcoinTestnet4/BTC at 8 from that fallback,
   and Firo/FIRO at API `decimals: 8`. On 2026-11-24 production returned
   `decimals: null` for all five; only Bitcoin/BTC and Lightning/BTC were
-  tradable. The production catalog recorded on 2026-10-02 (`b5cafa1`) and
+  buyable and sellable. See [TESTING.md](TESTING.md#current-state--measured).
+  The production catalog recorded on 2026-10-02 (`b5cafa1`) and
   again on 2026-10-29 returned `decimals: null` for Bitcoin/BTC, Lightning/BTC,
   Arkade/BTC and Firo/FIRO.
+- The live matrix uses a random seed per run, so its solana case fails in
+  about 6 % of runs until the DFX API checks the Solana format before the
+  Bitcoin format; this is a DFX API defect, not a module defect.
 - Ambiguous tickers without a network are rejected.
 - HTTP 429 and account-state failures provisionally map to `INTERNAL_SERVER_ERROR`.
 - A `recipient` or `refundAddress` differing from the account address is rejected.

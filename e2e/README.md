@@ -28,7 +28,7 @@ An optional argument limits the run to one `chain` value from the script.
 
 Before network access, the installed module copy is compared with the working tree; a mismatch exits 1 and requires `npm ci` in `e2e`.
 
-Recorded sandbox: 178/186 steps on 2026-10-29 and again on 2026-11-05. Recorded production: 182/187 on 2026-10-29 and 177/178 on 2026-11-05. Those counts are earlier runs, before buy and sell were taken from the live catalog. See [TESTING.md](../TESTING.md#current-state--measured).
+Recorded production on 2026-11-24 at `f9cacbc`, command `DFX_ENV=production node live-matrix.mjs`: exit 1, `172/176 steps ok, 7 skipped`. The live matrix uses a random seed per run, so its solana case fails in about 6 % of runs until the DFX API checks the Solana format before the Bitcoin format; this is a DFX API defect, not a module defect. See [TESTING.md](../TESTING.md#current-state--measured).
 
 ## native-quotes.mjs
 
