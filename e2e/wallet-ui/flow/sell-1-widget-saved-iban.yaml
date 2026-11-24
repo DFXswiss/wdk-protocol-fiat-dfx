@@ -72,6 +72,7 @@ appId: io.tether.wdk.starter.reactnative
 - extendedWaitUntil:
     visible: "Payment Information"
     timeout: 120000
+- assertVisible: "${MAESTRO_IBAN_PATTERN}"
 - scrollUntilVisible:
     element: "Blockchain"
     direction: DOWN

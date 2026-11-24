@@ -921,23 +921,30 @@ function payoutOcrTail (iban) {
 }
 
 // The OCR text and the payout account are not logged, recorded, or put on an error.
-async function assertFlowShotHidesIban (dest) {
+// On a production sale this runs on the Maestro source, before that file is copied.
+async function assertFlowShotHidesIban (source) {
   if (!productionTarget() || !state.saleIban) return
   const tail = payoutOcrTail(state.saleIban)
   if (tail.length !== 10) throw new CheckError('screenshots', 'flow screenshot could not be checked')
   let matched = false
   try {
-    const result = await runCapture('tesseract', [dest, '-'], 'ignore')
-    if (result.code !== 0) throw new Error('ocr failed')
-    matched = normalizeOcr(result.stdout).includes(tail)
+    const result = await runCapture('tesseract', [source, '-'], 'ignore')
+    const text = result.stdout
     result.stdout = ''
+    if (result.code !== 0) throw new Error('ocr failed')
+    matched = normalizeOcr(text).includes(tail)
   } catch (error) {
     if (error instanceof CheckError) throw error
+    try {
+      unlinkSync(source)
+    } catch {
+      throw new CheckError('screenshots', 'flow screenshot could not be read')
+    }
     throw new CheckError('screenshots', 'flow screenshot could not be read')
   }
   if (!matched) return
   try {
-    unlinkSync(dest)
+    unlinkSync(source)
   } catch {
     throw new CheckError('screenshots', 'flow screenshot shows the payout IBAN')
   }
@@ -960,8 +967,10 @@ async function copyShots (fromDir, toDir) {
         await visit(path)
       } else if (entry.isFile() && entry.name.endsWith('.png') && path.includes('takeScreenshot')) {
         const dest = join(toDir, entry.name)
+        if (productionTarget() && state.saleIban) {
+          await assertFlowShotHidesIban(path)
+        }
         copyFileSync(path, dest, constants.COPYFILE_EXCL)
-        await assertFlowShotHidesIban(dest)
         copied.push({ file: entry.name, sha256: sha256File(dest) })
       }
     }
