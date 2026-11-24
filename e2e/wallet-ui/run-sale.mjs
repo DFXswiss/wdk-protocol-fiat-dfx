@@ -7,7 +7,7 @@
 // Without --send, only the preflight runs and the app is not driven.
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash, randomInt } from 'node:crypto'
-import { closeSync, constants, copyFileSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, rmdirSync } from 'node:fs'
+import { closeSync, constants, copyFileSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, rmdirSync, unlinkSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -830,6 +830,14 @@ async function preflight (options) {
   } catch {
     throw new NotRunError('not run: xcrun is not callable')
   }
+  if (productionTarget(options)) {
+    try {
+      const tesseract = captureSync('tesseract', ['--version'])
+      if (tesseract.code !== 0) throw new Error()
+    } catch {
+      throw new NotRunError('not run: tesseract is required for the production target')
+    }
+  }
   const simulatorRuntime = bootedRuntime(options.udid)
   assertNoForeignMaestro(false)
   const backendCommitStart = await readVersion(true)
@@ -891,9 +899,54 @@ function failedStep (stdout) {
   return redact(line.trim().replace(/CH(?:[\s\u00a0]*\d){19}/g, 'CH[REDACTED]')).slice(0, 200)
 }
 
-function copyShots (fromDir, toDir) {
+function saleFlowShots () {
+  if (productionTarget()) return ['send-review.png', 'send-success.png']
+  return FLOW_SHOTS
+}
+
+function normalizeOcr (value) {
+  return String(value)
+    .toUpperCase()
+    .replace(/O/g, '0')
+    .replace(/[IL]/g, '1')
+    .replace(/S/g, '5')
+    .replace(/B/g, '8')
+    .replace(/[^0-9A-Z]/g, '')
+}
+
+function payoutOcrTail (iban) {
+  const normalized = normalizeOcr(iban)
+  if (normalized.length < 10) return ''
+  return normalized.slice(-10)
+}
+
+// The OCR text and the payout account are not logged, recorded, or put on an error.
+async function assertFlowShotHidesIban (dest) {
+  if (!productionTarget() || !state.saleIban) return
+  const tail = payoutOcrTail(state.saleIban)
+  if (tail.length !== 10) throw new CheckError('screenshots', 'flow screenshot could not be checked')
+  let matched = false
+  try {
+    const result = await runCapture('tesseract', [dest, '-'], 'ignore')
+    if (result.code !== 0) throw new Error('ocr failed')
+    matched = normalizeOcr(result.stdout).includes(tail)
+    result.stdout = ''
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError('screenshots', 'flow screenshot could not be read')
+  }
+  if (!matched) return
+  try {
+    unlinkSync(dest)
+  } catch {
+    throw new CheckError('screenshots', 'flow screenshot shows the payout IBAN')
+  }
+  throw new CheckError('screenshots', 'flow screenshot shows the payout IBAN; deleted')
+}
+
+async function copyShots (fromDir, toDir) {
   const copied = []
-  const visit = dir => {
+  const visit = async dir => {
     let entries
     try {
       entries = readdirSync(dir, { withFileTypes: true })
@@ -904,15 +957,16 @@ function copyShots (fromDir, toDir) {
     for (const entry of entries) {
       const path = join(dir, entry.name)
       if (entry.isDirectory()) {
-        visit(path)
+        await visit(path)
       } else if (entry.isFile() && entry.name.endsWith('.png') && path.includes('takeScreenshot')) {
         const dest = join(toDir, entry.name)
         copyFileSync(path, dest, constants.COPYFILE_EXCL)
+        await assertFlowShotHidesIban(dest)
         copied.push({ file: entry.name, sha256: sha256File(dest) })
       }
     }
   }
-  visit(fromDir)
+  await visit(fromDir)
   return copied
 }
 
@@ -935,8 +989,9 @@ async function runFlow (file, env, secrets) {
     if (result.code !== 0) state.failedStep = failedStep(result.stdout)
     let copied = []
     try {
-      copied = copyShots(outDir, state.options.screenshots)
-    } catch {
+      copied = await copyShots(outDir, state.options.screenshots)
+    } catch (error) {
+      if (error instanceof CheckError) throw error
       const step = state.evidence.depositAddress && confirmationCount(result.stdout) === 1 ? undefined : state.failedStep
       throw new CheckError('screenshots', `screenshot copy failed${state.evidence.depositAddress ? '' : '; nothing sent'}`, step)
     }
@@ -2064,13 +2119,14 @@ async function sendAndCheck (prelude) {
   await assertClosed(prelude)
   const explorerName = explorerShotName(chainHash)
   const bookingName = bookingShotName(sale.uid, session)
-  const expectedShots = [...FLOW_SHOTS, explorerName, bookingName]
+  const flowShots = saleFlowShots()
+  const expectedShots = [...flowShots, explorerName, bookingName]
   const shots = state.screenshots.map(item => {
     if (sha256File(join(options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
     return item
   })
   const byName = new Map(shots.map(item => [item.file, item]))
-  if (byName.size !== shots.length || FLOW_SHOTS.some(name => !byName.has(name))) {
+  if (byName.size !== shots.length || flowShots.some(name => !byName.has(name))) {
     throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
   }
   if (!byName.has(explorerName)) throw new CheckError('explorer-capture', 'explorer screenshot missing')
@@ -2146,7 +2202,7 @@ function assertPass (body) {
     throw new CheckError('module-status', 'module status does not match the sale')
   }
   const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
-  const expectedNames = [...FLOW_SHOTS, explorerShotName(body.hash), bookingShotName(body.backend.uid, state.session)]
+  const expectedNames = [...saleFlowShots(), explorerShotName(body.hash), bookingShotName(body.backend.uid, state.session)]
   if (names.length !== expectedNames.length || expectedNames.some((name, index) => names[index] !== name)) {
     throw new CheckError('screenshots', 'screenshot set changed')
   }

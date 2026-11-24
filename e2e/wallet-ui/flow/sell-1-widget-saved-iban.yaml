@@ -49,25 +49,29 @@ appId: io.tether.wdk.starter.reactnative
     commands:
       - tapOn: "Open"
 # sell() already puts the amount of the chosen asset on the widget URL. The page opens on the
-# bank step. The saved account is selected after the open screenshot.
+# bank step. Production preselects the saved account, so this wait accepts that account or the
+# selection step. visible is a Java regular expression, the same matcher as the deep-link dialog.
+# No takeScreenshot in this flow: the widget can already show the payout account.
+# sell-widget-open is not taken. The sale is evidenced by the review and success screens of flow 2, the explorer page and the masked app transaction page.
 - extendedWaitUntil:
-    visible: "Add or select your IBAN"
+    visible: "(?s).*(Add or select your IBAN|${MAESTRO_IBAN_PATTERN}).*"
     timeout: 90000
-- waitForAnimationToEnd
-# the widget is open inside the wallet and no bank account is shown yet; the payment-information step prints the payout IBAN next to the deposit address, so that step is not captured.
-- takeScreenshot: sell-widget-open
-- tapOn: "Add or select your IBAN"
-- scrollUntilVisible:
-    element: "${MAESTRO_IBAN_PATTERN}"
-    direction: DOWN
-    centerElement: true
-    timeout: 180000
-- waitForAnimationToEnd
-- tapOn: "${MAESTRO_IBAN_PATTERN}"
+- runFlow:
+    when:
+      visible: "Add or select your IBAN"
+    commands:
+      - tapOn: "Add or select your IBAN"
+      - scrollUntilVisible:
+          element: "${MAESTRO_IBAN_PATTERN}"
+          direction: DOWN
+          centerElement: true
+          timeout: 180000
+      - waitForAnimationToEnd
+      - tapOn: "${MAESTRO_IBAN_PATTERN}"
+- assertVisible: "${MAESTRO_IBAN_PATTERN}"
 - extendedWaitUntil:
     visible: "Payment Information"
     timeout: 120000
-- assertVisible: ${MAESTRO_IBAN_PATTERN}
 - scrollUntilVisible:
     element: "Blockchain"
     direction: DOWN
