@@ -30,7 +30,7 @@ index af4a294..0432d28 100644
    CreditCard,
    RefreshCw,
  } from 'lucide-react-native';
-@@ -144,12 +145,28 @@ export default function WalletHome() {
+@@ -144,12 +145,34 @@ export default function WalletHome() {
  
          {/* Action row: Send / Receive / Swap / Buy */}
          <View style={{ flexDirection: 'row', gap: 10, marginVertical: moderateScale(8) }}>
@@ -50,6 +50,12 @@ index af4a294..0432d28 100644
 +            onPress={() => router.push('/sell')}
 +          />
 +          <ActionButton
++            testID="wallet-buy"
++            icon={<Banknote size={moderateScale(20)} color={theme.colors.textPrimary} />}
++            label="Buy"
++            onPress={() => router.push('/buy?amount=1100')}
++          />
++          <ActionButton
 +            testID="sell-eth-entry"
 +            icon={<Banknote size={moderateScale(20)} color={theme.colors.textPrimary} />}
 +            label="Sell ETH"
@@ -60,7 +66,7 @@ index af4a294..0432d28 100644
          {/* Tokens */}
          <Text variant="label" style={{ marginBottom: 4, fontWeight:'bold', marginTop:10 }}>Tokens</Text>
          <View>
-@@ -185,16 +202,19 @@ function ActionButton({
+@@ -185,16 +208,19 @@ function ActionButton({
    label,
    onPress,
    disabled,
@@ -133,14 +139,152 @@ diff --git a/src/app/_layout.tsx b/src/app/_layout.tsx
 index ba3ee94..a443770 100644
 --- a/src/app/_layout.tsx
 +++ b/src/app/_layout.tsx
-@@ -40,6 +40,7 @@ function RootStack() {
+@@ -40,6 +40,8 @@ function RootStack() {
        <Stack.Screen name="(app)" />
        <Stack.Screen name="unlock" />
        <Stack.Screen name="send" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
 +      <Stack.Screen name="sell" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
++      <Stack.Screen name="buy" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
        <Stack.Screen name="receive" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
        <Stack.Screen name="accounts" />
        <Stack.Screen name="tx" />
+diff --git a/src/app/buy/_layout.tsx b/src/app/buy/_layout.tsx
+new file mode 100644
+index 0000000..ec2d8fa
+--- /dev/null
++++ b/src/app/buy/_layout.tsx
+@@ -0,0 +1,15 @@
++import { Stack } from 'expo-router';
++import { Toast } from '@/components';
++
++/**
++ * Same modal toast mount as send and receive. Buy is a full-screen modal,
++ * so a toast from the root layer would render behind it.
++ */
++export default function BuyLayout() {
++  return (
++    <>
++      <Stack screenOptions={{ headerShown: false }} />
++      <Toast />
++    </>
++  );
++}
+diff --git a/src/app/buy/index.tsx b/src/app/buy/index.tsx
+new file mode 100644
+index 0000000..a08e4b4
+--- /dev/null
++++ b/src/app/buy/index.tsx
+@@ -0,0 +1,110 @@
++import React, { useEffect, useRef, useState } from 'react';
++import { View } from 'react-native';
++import { useRouter, useLocalSearchParams } from 'expo-router';
++import { WebView } from 'react-native-webview';
++import { useAccount, useProtocol } from '@tetherto/wdk-react-native-core';
++import { Screen, ScreenHeader, Text, Button, LoadingState } from '@/components';
++import { useAccounts } from '@/state/accounts';
++import { DFX_BINDING } from '@/wdk/networks';
++
++/**
++ * fiatAmount is a number because the worklet bridge serializes bigint as a
++ * string, and the fiat module rejects a string amount. The route amount is
++ * EUR cents, a positive safe integer (1100 is 11.00 EUR).
++ */
++type BuyCaller = {
++  buy: (options: {
++    cryptoAsset: string;
++    fiatCurrency: string;
++    fiatAmount: number;
++    config?: { network?: string };
++  }) => Promise<{ buyUrl?: string } | undefined>;
++};
++
++function buyErrorText(error: unknown): string {
++  let message = '';
++  if (error instanceof Error) message = error.message;
++  else if (typeof error === 'string') message = error;
++  else if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
++    message = error.message;
++  }
++  const trimmed = message.trim();
++  if (!trimmed || /session=/i.test(trimmed) || /https?:\/\//i.test(trimmed)) return 'Buy failed';
++  return trimmed;
++}
++
++function parseEurCents(value: string | string[] | undefined): number | null {
++  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return null;
++  const parsed = Number(value);
++  if (!Number.isSafeInteger(parsed) || parsed <= 0 || String(parsed) !== value) return null;
++  return parsed;
++}
++
++export default function BuyScreen() {
++  const router = useRouter();
++  const amountParam = useLocalSearchParams<{ amount?: string | string[] }>().amount;
++  const fiatAmount = parseEurCents(amountParam);
++  const blocked = fiatAmount === null
++    ? (amountParam === undefined
++      ? 'Amount is required'
++      : 'Amount must be a positive safe integer in EUR cents')
++    : null;
++  const activeIndex = useAccounts((s) => s.activeIndex);
++  const wallet = useAccount({ network: DFX_BINDING.walletKey, accountIndex: activeIndex });
++  const dfx = useProtocol<BuyCaller>({
++    network: DFX_BINDING.walletKey,
++    accountIndex: activeIndex,
++    protocolType: 'fiat',
++    protocolName: 'dfx',
++  });
++  const started = useRef(false);
++  const [buyUrl, setBuyUrl] = useState<string | null>(null);
++  const [error, setError] = useState<string | null>(null);
++
++  useEffect(() => {
++    if (fiatAmount === null || !wallet.address || started.current) return;
++    started.current = true;
++    dfx.buy({
++      cryptoAsset: 'USDT',
++      fiatCurrency: 'EUR',
++      fiatAmount,
++      config: { network: DFX_BINDING.network },
++    }).then((result) => {
++      const url = typeof result?.buyUrl === 'string' ? result.buyUrl : '';
++      if (!url) {
++        setError('Buy returned no URL');
++        return;
++      }
++      setBuyUrl(url);
++    }).catch((caught: unknown) => {
++      setError(buyErrorText(caught));
++    });
++  }, [wallet.address, dfx, fiatAmount]);
++
++  const done = () => {
++    router.dismissTo('/(app)/(tabs)/wallet');
++  };
++
++  const shown = blocked ?? error;
++
++  return (
++    <Screen edges={['top', 'bottom']}>
++      <ScreenHeader title="Buy" onBack={done} />
++      <View style={{ flex: 1 }}>
++        {shown ? (
++          <Text testID="buy-error" variant="body" color="error">{shown}</Text>
++        ) : null}
++        {buyUrl ? (
++          <WebView
++            testID="buy-webview"
++            source={{ uri: buyUrl }}
++            style={{ flex: 1 }}
++          />
++        ) : !shown ? (
++          <LoadingState message="Opening buy" />
++        ) : null}
++      </View>
++      <Button testID="buy-done" label="Done" onPress={done} />
++    </Screen>
++  );
++}
 diff --git a/src/app/sell/_layout.tsx b/src/app/sell/_layout.tsx
 new file mode 100644
 index 0000000..ec2d8fa
@@ -167,7 +311,7 @@ new file mode 100644
 index 0000000..a08e4b4
 --- /dev/null
 +++ b/src/app/sell/index.tsx
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,120 @@
 +import React, { useEffect, useRef, useState } from 'react';
 +import { View } from 'react-native';
 +import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -175,11 +319,13 @@ index 0000000..a08e4b4
 +import { useAccount, useProtocol } from '@tetherto/wdk-react-native-core';
 +import { Screen, ScreenHeader, Text, Button, LoadingState } from '@/components';
 +import { useAccounts } from '@/state/accounts';
++import { DFX_BINDING } from '@/wdk/networks';
 +
 +/**
 + * Amounts are numbers because the worklet bridge serializes bigint as a
-+ * string, and the fiat module rejects a string amount. Both values are
++ * string, and the fiat module rejects a string amount. The defaults are
 + * safe integers: 1 USDT in 6-decimal base units, and 0.0001 ETH in wei.
++ * A route amount, when present, is that crypto amount in base units.
 + */
 +const ONE_USDT_BASE_UNITS = 1000000;
 +const ETH_BASE_UNITS = 100000000000000;
@@ -205,14 +351,33 @@ index 0000000..a08e4b4
 +  return trimmed;
 +}
 +
++function parseBaseUnits(value: string | string[] | undefined): number | undefined | null {
++  if (value === undefined) return undefined;
++  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return null;
++  const parsed = Number(value);
++  if (!Number.isSafeInteger(parsed) || parsed <= 0 || String(parsed) !== value) return null;
++  return parsed;
++}
++
 +export default function SellScreen() {
 +  const router = useRouter();
-+  const assetParam = useLocalSearchParams<{ asset?: string | string[] }>().asset;
-+  const sellEth = assetParam === 'ETH';
++  const params = useLocalSearchParams<{ asset?: string | string[]; amount?: string | string[] }>();
++  const sellEth = params.asset === 'ETH';
++  const parsedAmount = parseBaseUnits(params.amount);
++  const blocked = sellEth && DFX_BINDING.target === 'production-polygon'
++    ? 'No native ETH sale on Polygon'
++    : parsedAmount === null
++      ? 'Amount must be a positive safe integer in base units'
++      : null;
++  const cryptoAmount = typeof parsedAmount === 'number'
++    ? parsedAmount
++    : sellEth
++      ? ETH_BASE_UNITS
++      : ONE_USDT_BASE_UNITS;
 +  const activeIndex = useAccounts((s) => s.activeIndex);
-+  const wallet = useAccount({ network: 'ethereum', accountIndex: activeIndex });
++  const wallet = useAccount({ network: DFX_BINDING.walletKey, accountIndex: activeIndex });
 +  const dfx = useProtocol<SellCaller>({
-+    network: 'ethereum',
++    network: DFX_BINDING.walletKey,
 +    accountIndex: activeIndex,
 +    protocolType: 'fiat',
 +    protocolName: 'dfx',
@@ -222,13 +387,13 @@ index 0000000..a08e4b4
 +  const [error, setError] = useState<string | null>(null);
 +
 +  useEffect(() => {
-+    if (!wallet.address || started.current) return;
++    if (blocked || !wallet.address || started.current) return;
 +    started.current = true;
 +    dfx.sell({
 +      cryptoAsset: sellEth ? 'ETH' : 'USDT',
 +      fiatCurrency: 'EUR',
-+      cryptoAmount: sellEth ? ETH_BASE_UNITS : ONE_USDT_BASE_UNITS,
-+      config: { network: 'Sepolia' },
++      cryptoAmount,
++      config: { network: DFX_BINDING.network },
 +    }).then((result) => {
 +      const url = typeof result?.sellUrl === 'string' ? result.sellUrl : '';
 +      if (!url) {
@@ -239,25 +404,27 @@ index 0000000..a08e4b4
 +    }).catch((caught: unknown) => {
 +      setError(sellErrorText(caught));
 +    });
-+  }, [wallet.address, dfx, sellEth]);
++  }, [wallet.address, dfx, sellEth, blocked, cryptoAmount]);
 +
 +  const done = () => {
 +    router.dismissTo('/(app)/(tabs)/wallet');
 +  };
 +
++  const shown = blocked ?? error;
++
 +  return (
 +    <Screen edges={['top', 'bottom']}>
 +      <ScreenHeader title="Sell" onBack={done} />
 +      <View style={{ flex: 1 }}>
-+        {error ? (
-+          <Text variant="body" color="error">{error}</Text>
++        {shown ? (
++          <Text variant="body" color="error">{shown}</Text>
 +        ) : null}
 +        {sellUrl ? (
 +          <WebView
 +            source={{ uri: sellUrl }}
 +            style={{ flex: 1 }}
 +          />
-+        ) : !error ? (
++        ) : !shown ? (
 +          <LoadingState message="Opening sell" />
 +        ) : null}
 +      </View>
@@ -298,20 +465,21 @@ diff --git a/src/app/send/index.tsx b/src/app/send/index.tsx
 index 8ac5024..7ed30d1 100644
 --- a/src/app/send/index.tsx
 +++ b/src/app/send/index.tsx
-@@ -19,6 +19,12 @@ import { networkDisplayName } from '@/wdk/chains';
+@@ -19,6 +19,13 @@ import { networkDisplayName } from '@/wdk/chains';
   * reintroducing Receive's more detailed "· ERC-20 · gasless" wording —
   * consistency with Home, since this screen is effectively its sibling.
   */
 +function sendAssetTestId(id: string): string | undefined {
 +  if (id === 'usdt-ethereum') return 'send-asset-usdt-ethereum';
 +  if (id === 'eth-ethereum') return 'send-asset-eth-ethereum';
++  if (id === 'usdt-polygon') return 'send-asset-usdt-polygon';
 +  return undefined;
 +}
 +
  export default function SendPick() {
    const router = useRouter();
    const theme = useTheme();
-@@ -68,6 +74,7 @@ export default function SendPick() {
+@@ -68,6 +75,7 @@ export default function SendPick() {
            {filtered.map((b, i) => (
              <Pressable
                key={b.token.id}
@@ -554,10 +722,45 @@ index 5fdb982..deafe6f 100644
  function buildEvmConfig(
    network: string,
    evm: NonNullable<NetworkDefinition['evm']>,
-@@ -422,19 +446,37 @@ function buildBitcoinConfig(
+@@ -422,19 +446,74 @@ function buildBitcoinConfig(
    };
  }
  
++export type DfxTarget = 'sandbox-sepolia' | 'production-polygon';
++
++function resolveDfxBinding(): {
++  target: DfxTarget;
++  walletKey: 'ethereum' | 'polygon';
++  network: 'Sepolia' | 'Polygon';
++  environment: 'sandbox' | 'production';
++} {
++  const selected = process.env.EXPO_PUBLIC_DFX_TARGET;
++  if (selected === undefined || selected === 'sandbox-sepolia') {
++    return {
++      target: 'sandbox-sepolia',
++      walletKey: 'ethereum',
++      network: 'Sepolia',
++      environment: 'sandbox',
++    };
++  }
++  if (selected === 'production-polygon') {
++    return {
++      target: 'production-polygon',
++      walletKey: 'polygon',
++      network: 'Polygon',
++      environment: 'production',
++    };
++  }
++  throw new Error('EXPO_PUBLIC_DFX_TARGET must be unset, sandbox-sepolia or production-polygon');
++}
++
++export const DFX_BINDING: {
++  target: DfxTarget;
++  walletKey: 'ethereum' | 'polygon';
++  network: 'Sepolia' | 'Polygon';
++  environment: 'sandbox' | 'production';
++} = resolveDfxBinding();
++
 -export const wdkConfigs: WdkConfigs<BtcWalletConfig | Evm7702GaslessWalletConfig> = {
 +export const wdkConfigs: WdkConfigs<
 +  BtcWalletConfig | Evm7702GaslessWalletConfig | EvmWalletConfig
@@ -581,16 +784,18 @@ index 5fdb982..deafe6f 100644
    ),
 -} as WdkConfigs<BtcWalletConfig | Evm7702GaslessWalletConfig>;
 +  // `blockchain` is the wallet key from wdk.config.js. `config.network` is
-+  // the DFX chain name, which is Sepolia while this wallet key stays ethereum.
++  // the DFX chain name: Sepolia while this wallet key stays ethereum, and
++  // Polygon while this wallet key is polygon.
 +  // environment 'sandbox' is the module value that selects the dev hosts.
++  // environment 'production' selects the production hosts.
 +  // The string 'dev' is not an environment; the module rejects it with a ValueError.
 +  protocols: {
 +    dfx: {
 +      protocolName: 'dfx',
-+      blockchain: 'ethereum',
++      blockchain: DFX_BINDING.walletKey,
 +      config: {
-+        environment: 'sandbox',
-+        network: 'Sepolia',
++        environment: DFX_BINDING.environment,
++        network: DFX_BINDING.network,
 +      },
 +    },
 +  },
@@ -680,7 +885,7 @@ index 9121105..ae3bcf4 100644
      },
      arbitrum: {
        package: '@tetherto/wdk-wallet-evm-7702-gasless'
-@@ -24,6 +24,25 @@ module.exports = {
+@@ -24,6 +24,34 @@ module.exports = {
      }
      // tron: still on hold — see config.ts's comment.
    },
@@ -697,7 +902,16 @@ index 9121105..ae3bcf4 100644
 +      protocols: {
 +        fiat: {
 +          dfx: {
-+            methods: ['quoteSell', 'sell']
++            methods: ['quoteSell', 'sell', 'buy']
++          }
++        }
++      }
++    },
++    polygon: {
++      protocols: {
++        fiat: {
++          dfx: {
++            methods: ['quoteSell', 'sell', 'buy']
 +          }
 +        }
 +      }

@@ -23,7 +23,8 @@ appId: io.tether.wdk.starter.reactnative
       id: "send-confirm"
     timeout: 60000
 - assertVisible: "${REVIEW_AMOUNT}"
-- assertVisible: "Ethereum \\(Sepolia\\)"
+# The runner sets NETWORK_TEXT (Sepolia: Ethereum \(Sepolia\), production: Polygon).
+- assertVisible: "${NETWORK_TEXT}"
 - assertVisible: "${DEP_HEAD}\\.\\.\\.${DEP_TAIL}"
 - takeScreenshot: send-review
 - tapOn:

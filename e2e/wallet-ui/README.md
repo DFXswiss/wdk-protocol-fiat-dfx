@@ -9,18 +9,20 @@ The starter is not upstream. `build.sh` checks out commit `031e210` and applies 
 `starter.patch` changes these files:
 
 - `package.json` adds `@tetherto/wdk-wallet-evm` 1.0.0-beta.17 and `@dfx.swiss/wdk-protocol-fiat-dfx` via `file:../../..`.
-- `wdk.config.js` points `ethereum` at `@tetherto/wdk-wallet-evm`, registers protocol `dfx`, and limits that protocol's fiat methods to `quoteSell` and `sell`.
-- `src/wdk/networks.ts` builds Ethereum as a plain account (provider only), sets Sepolia USDT to `0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0` with 6 decimals, adds native ETH (`id` `eth-ethereum`, 18 decimals, no contract address) before that USDT row for the DFX ETH sale, and binds `dfx` to the sandbox environment. The indexer still has no token type `eth`, so ETH does not appear in Activity.
+- `wdk.config.js` points `ethereum` at `@tetherto/wdk-wallet-evm`, registers protocol `dfx`, and limits that protocol's fiat methods on `ethereum` and `polygon` to `quoteSell`, `sell`, and `buy`.
+- `src/wdk/networks.ts` builds Ethereum as a plain account (provider only), sets Sepolia USDT to `0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0` with 6 decimals, adds native ETH (`id` `eth-ethereum`, 18 decimals, no contract address) before that USDT row for the DFX ETH sale, and leaves Polygon gasless with asset id `usdt-polygon`. `DFX_BINDING` follows `EXPO_PUBLIC_DFX_TARGET`: unset or `sandbox-sepolia` binds wallet key `ethereum`, network `Sepolia`, and environment `sandbox`; `production-polygon` binds wallet key `polygon`, network `Polygon`, and environment `production`. The indexer still has no token type `eth`, so ETH does not appear in Activity.
 - `src/wdk/useSend.ts` quotes an Ethereum token fee with `extension().quoteTransfer` and a native fee with `estimateFee` on the hook return. For native ETH that call is `quoteSendTransaction({ to, value })` and the fee is wei, already in the asset unit. `sendAsset` is unchanged.
 - `src/components/Button.tsx` forwards `testID` to the pressable.
 - `src/components/SeedWordInputGrid.tsx` adds a `testID` on the first word field, the field that already distributes a pasted phrase.
 - `src/app/(onboarding)/import.tsx` adds `import-seed` and `import-submit`.
 - `src/app/(onboarding)/password.tsx` adds `password-input`, `password-confirm`, and `password-submit`.
-- `src/app/_layout.tsx` presents `sell` as a full-screen modal, the same way send is presented.
+- `src/app/_layout.tsx` presents `sell` and `buy` as full-screen modals, the same way send is presented.
+- `src/app/buy/_layout.tsx` uses the same stack-plus-toast shell as the other modal routes.
+- `src/app/buy/index.tsx` reads `amount` as EUR cents (a positive safe integer; `1100` is 11.00 EUR) and calls `buy` of USDT paid in EUR on `DFX_BINDING.network`. The returned page is shown in a web view. The page URL is not rendered as text and is not logged.
 - `src/app/sell/_layout.tsx` uses the same stack-plus-toast shell as the other modal routes.
-- `src/app/sell/index.tsx` reads the `asset` search parameter. `ETH` calls `sell` for 0.0001 ETH (`100000000000000` wei) on Sepolia to EUR. Any other value calls `sell` for 1 USDT. The returned page is shown in a web view. The page URL is not rendered as text and is not logged.
-- `src/app/(app)/(tabs)/wallet.tsx` adds `send-entry` and `sell-entry` (1 USDT). On the same row as `sell-entry`, `sell-eth-entry` is labeled `Sell ETH` and opens `/sell?asset=ETH`.
-- `src/app/send/index.tsx` adds `send-asset-usdt-ethereum` on the Sepolia USDT row and `send-asset-eth-ethereum` on the Sepolia ETH row. Other rows have no send test id.
+- `src/app/sell/index.tsx` reads `asset` and an optional `amount`. `amount`, when present, is the crypto amount in base units (a positive safe integer). Without it, `ETH` sells 0.0001 ETH (`100000000000000` wei) and any other asset sells 1 USDT (`1000000` base units), to EUR, on `DFX_BINDING.network` (`Sepolia` or `Polygon`). `ETH` on the production target shows `No native ETH sale on Polygon` and does not call `sell`. The returned page is shown in a web view. The page URL is not rendered as text and is not logged.
+- `src/app/(app)/(tabs)/wallet.tsx` adds `send-entry` and `sell-entry` (1 USDT). On that row, `wallet-buy` is labeled `Buy` and opens `/buy?amount=1100`, and `sell-eth-entry` is labeled `Sell ETH` and opens `/sell?asset=ETH`. The original Buy button on the first row stays disabled.
+- `src/app/send/index.tsx` adds `send-asset-usdt-ethereum` on the Sepolia USDT row, `send-asset-eth-ethereum` on the Sepolia ETH row, and `send-asset-usdt-polygon` on the Polygon USDT row. Other rows have no send test id.
 - `src/app/send/amount.tsx` adds `send-recipient`, `send-amount`, and `send-continue`.
 - `src/app/send/review.tsx` adds `send-confirm`. A token fee line does not change the amount that is sent. A native ETH fee is included in the total. `onConfirm` and `disabled` are unchanged. Back is the header control labeled `Go back`.
 - `src/app/send/success.tsx` adds `send-success-hash` and sets `accessibilityLabel` to the full hash, because the visible text is shortened.
@@ -43,7 +45,9 @@ From `e2e/wallet-ui/`:
 ./build.sh <simulator-udid>
 ```
 
-The script clones the starter, checks out `STARTER_COMMIT`, applies `starter.patch`, copies `.env.example` to `.env`, writes `.npmrc`, and installs. The starter does not commit `ios/`. The script then runs `npx expo prebuild --clean --platform ios`, which creates that directory and needs CocoaPods, and only then looks up the workspace and scheme. It builds a Release simulator app with `IPHONEOS_DEPLOYMENT_TARGET=17.0`, terminates and uninstalls any copy already on the simulator, and installs the new app. Only the Sepolia provider in `.env` is used for this sale. Do not print `.env`. The script then writes `out/build.json` with the module head, the starter commit, the patch digest, and the digest of `main.jsbundle` in the installed app.
+The script clones the starter, checks out `STARTER_COMMIT`, applies `starter.patch`, copies `.env.example` to `.env`, writes `.npmrc`, and installs. The starter does not commit `ios/`. The script then runs `npx expo prebuild --clean --platform ios`, which creates that directory and needs CocoaPods, and only then looks up the workspace and scheme. It builds a Release simulator app with `IPHONEOS_DEPLOYMENT_TARGET=17.0`, terminates and uninstalls any copy already on the simulator, and installs the new app. The script checks the Ethereum provider in `.env` for the Sepolia chain id and does not print `.env`. The script then writes `out/build.json` with the module head, the starter commit, the patch digest, the digest of `main.jsbundle` in the installed app, and the build target.
+
+`DFX_TARGET` selects the build. Unset or `sandbox-sepolia` keeps the Sepolia sandbox binding on the plain Ethereum account. `production-polygon` appends `EXPO_PUBLIC_DFX_TARGET=production-polygon` to the starter `.env` and requires `EXPO_PUBLIC_EVM_POLYGON_PROVIDER` to report chain id `0x89`. Any other value exits 2 before cloning. That production build binds DFX to `environment: 'production'` and the starter's Polygon gasless wallet, and both builds open Buy for 11.00 EUR beside Sell. `out/build.json` records `target`.
 
 ## Run
 
@@ -80,9 +84,13 @@ Exit 130 or 143 means the run was interrupted by SIGINT or SIGTERM. The runner t
 
 The seed file is given to the simulator clipboard through a file descriptor. The IBAN is a new Swiss IBAN for that run (clearing `00000`). Each run therefore adds one bank account to the test account, and the flow scrolls past all of them to reach the IBAN field; it allows three minutes for that. Each run also opens a second sandbox sale without a deposit, because `sell()` is the public call that returns a session for the backend reads. Flow 1 requires the IBAN of the run to be visible on the Payment Information screen. The record stores `CH 00000 (invented per run)` and does not store the IBAN. Before a record is written, the runner tries up to three times to clear the clipboard. The record reports the result in `clipboardCleared`. If clearing fails, the run exits 1 and the clipboard must be cleared by hand; an earlier failed check remains in the record. Once flow 1 has started, `flow/cleanup.yaml` clears the app state and keychain, waits for the import entry and stops the app. The record reports `walletStateCleared`; cleanup failure makes a passing run fail and preserves any earlier failure.
 
+## Production sale
+
+A production sale is `node wallet-ui/run-sale.mjs --target production-polygon --amount <USDT>`. Flow 1 is `flow/sell-1-widget-saved-iban.yaml`. The flow opens the sale screen by link with the amount. The payout goes to the account holder's single active bank account. That account is never typed, printed, or recorded. The send is an EIP-7702 gasless user operation. There is no rejection run on production.
+
 ## Traps
 
-The send and cleanup flows are `flow/sell-1-widget.yaml`, `flow/sell-2-send.yaml`, `flow/sell-2-reject.yaml`, and `flow/cleanup.yaml`. Flow 1 taps `${SELL_ENTRY}` (`sell-entry` or `sell-eth-entry`). Flow 2 taps the asset row, types the amount, and opens review. `sell-2-send.yaml` taps `send-confirm` once. `sell-2-reject.yaml` taps `Go back` and does not tap `send-confirm`.
+The send and cleanup flows are `flow/sell-1-widget.yaml`, `flow/sell-2-send.yaml`, `flow/sell-2-reject.yaml`, and `flow/cleanup.yaml`. The production sale uses `flow/sell-1-widget-saved-iban.yaml` in place of `flow/sell-1-widget.yaml`. Flow 1 taps `${SELL_ENTRY}` (`sell-entry` or `sell-eth-entry`). Flow 2 taps the asset row, types the amount, and opens review. `sell-2-send.yaml` taps `send-confirm` once. `sell-2-reject.yaml` taps `Go back` and does not tap `send-confirm`.
 
 The flows are inputs of `run-sale.mjs` and are not meant to be started on their own. A flow started directly with Maestro can send without the runner's switches, lock, checks, cleanup and record; such a run proves nothing and is not recorded.
 

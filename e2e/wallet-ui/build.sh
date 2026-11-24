@@ -21,6 +21,11 @@ if [[ "$STARTER_COMMIT" != "$PINNED_STARTER_COMMIT" ]]; then
   echo "STARTER_COMMIT must equal the pinned commit" >&2
   exit 2
 fi
+DFX_TARGET="${DFX_TARGET:-sandbox-sepolia}"
+if [[ "$DFX_TARGET" != "sandbox-sepolia" && "$DFX_TARGET" != "production-polygon" ]]; then
+  echo "DFX_TARGET must be sandbox-sepolia or production-polygon" >&2
+  exit 2
+fi
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 MODULE="$(cd "$ROOT/../.." && pwd)"
@@ -40,6 +45,7 @@ git clone --quiet https://github.com/tetherto/wdk-starter-react-native.git "$STA
 git -C "$STARTER" checkout --detach "$STARTER_COMMIT"
 git -C "$STARTER" apply --index "$ROOT/starter.patch"
 cp "$STARTER/.env.example" "$STARTER/.env"
+printf '\nEXPO_PUBLIC_DFX_TARGET=%s\n' "$DFX_TARGET" >> "$STARTER/.env"
 provider=""
 while IFS= read -r line || [[ -n "$line" ]]; do
   if [[ "$line" == EXPO_PUBLIC_EVM_ETHEREUM_PROVIDER=* ]]; then
@@ -64,6 +70,32 @@ if [[ "$chain" != "0xaa36a7" ]]; then
   exit 1
 fi
 echo "Ethereum provider chain: $chain"
+if [[ "$DFX_TARGET" == "production-polygon" ]]; then
+  polygon_provider=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == EXPO_PUBLIC_EVM_POLYGON_PROVIDER=* ]]; then
+      if [[ -n "$polygon_provider" ]]; then
+        echo "multiple Polygon providers in .env" >&2
+        exit 1
+      fi
+      polygon_provider="${line#*=}"
+    fi
+  done < "$STARTER/.env"
+  if [[ -z "$polygon_provider" ]]; then
+    echo "Polygon provider missing in .env" >&2
+    exit 1
+  fi
+  if ! response="$(curl --silent --show-error --fail --max-time 20 -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$polygon_provider" 2>/dev/null)"; then
+    echo "Polygon provider chain check failed" >&2
+    exit 1
+  fi
+  chain="$(printf '%s' "$response" | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const v=JSON.parse(s).result;process.stdout.write(typeof v==="string" && /^0x[0-9a-f]+$/.test(v)?v:"invalid")}catch{process.stdout.write("invalid")}})')"
+  if [[ "$chain" != "0x89" ]]; then
+    echo "Polygon provider chain is $chain; expected 0x89" >&2
+    exit 1
+  fi
+  echo "Polygon provider chain: $chain"
+fi
 printf 'install-links=true\n' > "$STARTER/.npmrc"
 (cd "$STARTER" && npm install)
 
@@ -156,6 +188,7 @@ cat > "$ROOT/out/build.json" <<EOF
   "moduleHead": "${module_head}",
   "moduleDirty": false,
   "starterCommit": "${starter_head}",
+  "target": "${DFX_TARGET}",
   "patchSha256": "${patch_sha}",
   "mainJsbundleSha256": "${bundle_sha}"
 }

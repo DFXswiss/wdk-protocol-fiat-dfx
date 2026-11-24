@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Sepolia sale of 1 USDT or 0.0001 ETH for EUR, or the same transfer rejected on the review screen.
+// --target production-polygon sells a given USDT amount on Polygon mainnet against the production API.
 // The WDK starter wallet on the iOS simulator confirms the send, or leaves the review screen.
 // Without --send, only the preflight runs and the app is not driven.
 import { execFileSync, spawn } from 'node:child_process'
@@ -16,7 +17,7 @@ import { stripVTControlCharacters } from 'node:util'
 import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
 import WDK from '@tetherto/wdk'
 import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
-import { Contract, JsonRpcProvider, getAddress, parseUnits } from 'ethers'
+import { Contract, Interface, JsonRpcProvider, getAddress, parseUnits } from 'ethers'
 import { chromium } from 'playwright'
 import { FAILED_STATES } from '../../src/constants.js'
 
@@ -25,12 +26,21 @@ const flowDir = fileURLToPath(new URL('./flow', import.meta.url))
 const buildPath = fileURLToPath(new URL('./out/build.json', import.meta.url))
 const patchPath = fileURLToPath(new URL('./starter.patch', import.meta.url))
 const API = 'https://dev.api.dfx.swiss'
+const PRODUCTION_API = 'https://api.dfx.swiss'
 const APP = 'https://dev.app.dfx.swiss'
+const PRODUCTION_APP = 'https://app.dfx.swiss'
 const EXPLORER = 'https://eth-sepolia.blockscout.com'
+const PRODUCTION_EXPLORER = 'https://polygon.blockscout.com'
 const DEFAULT_RPC = 'https://ethereum-sepolia-rpc.publicnode.com'
+const PRODUCTION_RPC = 'https://polygon-bor-rpc.publicnode.com'
 const BUNDLE_ID = 'io.tether.wdk.starter.reactnative'
 const CHAIN_ID = 11155111n
+const PRODUCTION_CHAIN_ID = 137n
 const USDT = getAddress('0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0')
+const PRODUCTION_USDT = getAddress('0xc2132D05D31c914a87C6611C10748AEb04B58e8F')
+// EntryPoint v0.8, the default of the Polygon account in @tetherto/wdk-wallet-evm-7702-gasless 1.0.0-beta.5.
+const ENTRY_POINT = getAddress('0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108')
+const USER_OP_EVENT_ABI = 'event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)'
 const USDT_AMOUNT = 1000000n
 const ETH_AMOUNT = 100000000000000n
 const ETH_FEE = parseUnits('0.0002', 18)
@@ -62,6 +72,7 @@ const NATIVE_TRANSFER_ADDRESS = getAddress('0xffffffffffffffffffffffffffffffffff
 const ERC20_ABI = ['function balanceOf(address) view returns (uint256)']
 const WALLET_INTERFACE = 'wdk-starter-react-native in the iOS simulator, driven by Maestro'
 const IBAN_LABEL = 'CH 00000 (invented per run)'
+const PRODUCTION_IBAN_LABEL = 'account holder\'s active bank account (not recorded)'
 const FLOW_SHOTS = ['sell-widget-open.png', 'send-review.png', 'send-success.png']
 const REJECT_FLOW_SHOTS = ['sell-widget-open.png', 'send-review.png', 'send-rejected.png']
 // Short transaction id in explorer-<hash>.png: 10 hex digits, no 0x prefix.
@@ -70,6 +81,14 @@ const SALE_RECORD_FIELDS = [
   'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
   'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
   'account', 'depositAddress', 'ibanCountryAndClearing', 'asset', 'mode', 'hash', 'block', 'gasUsed', 'fee',
+  'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
+  'screenshots'
+]
+const PRODUCTION_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
+  'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'depositAddress', 'ibanCountryAndClearing', 'asset', 'mode',
+  'userOperationHash', 'hash', 'block', 'paymaster', 'actualGasCost', 'actualGasUsed', 'feePaidBy', 'bundlerHost', 'polBalance',
   'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
   'screenshots'
 ]
@@ -291,16 +310,73 @@ function lookupAsset (name) {
   return asset
 }
 
+function productionTarget (options = state.options) {
+  return options?.target === 'production-polygon'
+}
+
 function selectedAsset () {
-  return lookupAsset(state.options.asset)
+  const asset = lookupAsset(state.options.asset)
+  if (!productionTarget()) return asset
+  const amountText = state.options.amount
+  return {
+    ...asset,
+    baseUnits: state.options.amountBase,
+    token: PRODUCTION_USDT,
+    sellEntry: 'sell-entry',
+    assetTestId: 'send-asset-usdt-polygon',
+    amountText,
+    reviewAmount: `^${amountText.replace(/\./g, '[.]')} USDT$`
+  }
 }
 
 function recordFields () {
-  return state.options && state.options.reject ? REJECT_RECORD_FIELDS : SALE_RECORD_FIELDS
+  if (state.options && state.options.reject) return REJECT_RECORD_FIELDS
+  if (productionTarget()) return PRODUCTION_RECORD_FIELDS
+  return SALE_RECORD_FIELDS
+}
+
+function parseSaleAmount (text) {
+  if (typeof text !== 'string' || !/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(text)) {
+    throw new UsageError('--amount must be a USDT decimal with at most 6 decimal places')
+  }
+  try {
+    return parseUnits(text, 6)
+  } catch {
+    throw new UsageError('--amount must be a USDT decimal with at most 6 decimal places')
+  }
+}
+
+function apiOrigin () {
+  return productionTarget() ? PRODUCTION_API : API
+}
+
+function appOrigin () {
+  return productionTarget() ? PRODUCTION_APP : APP
+}
+
+function explorerOrigin () {
+  return productionTarget() ? PRODUCTION_EXPLORER : EXPLORER
+}
+
+function scaled6 (text) {
+  const [whole, frac = ''] = text.split('.')
+  if (frac.length > 6 && !/^0+$/.test(frac.slice(6))) return null
+  return BigInt(`${whole}${frac.slice(0, 6).padEnd(6, '0')}`)
+}
+
+function amountIsSale (value) {
+  const base = state.options.amountBase
+  if (typeof value === 'string') {
+    const text = value.trim()
+    if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return false
+    return scaled6(text) === base
+  }
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return scaled6(value.toFixed(6)) === base
+  return false
 }
 
 function parseArgs (args) {
-  const options = { rpc: DEFAULT_RPC, send: false, confirm: false, reject: false, asset: 'usdt' }
+  const options = { rpc: DEFAULT_RPC, send: false, confirm: false, reject: false, asset: 'usdt', target: 'sandbox-sepolia' }
   const valued = new Map([
     ['--seed-file', 'seedFile'],
     ['--udid', 'udid'],
@@ -308,7 +384,9 @@ function parseArgs (args) {
     ['--screenshots', 'screenshots'],
     ['--follow', 'follow'],
     ['--rpc', 'rpc'],
-    ['--asset', 'asset']
+    ['--asset', 'asset'],
+    ['--target', 'target'],
+    ['--amount', 'amount']
   ])
   const seen = new Set()
   for (let i = 0; i < args.length; i++) {
@@ -330,6 +408,18 @@ function parseArgs (args) {
   if (!options.seedFile) throw new UsageError('Required argument missing: --seed-file <path>')
   if (!options.udid) throw new UsageError('Required argument missing: --udid <id>')
   lookupAsset(options.asset)
+  if (options.target !== 'sandbox-sepolia' && options.target !== 'production-polygon') {
+    throw new UsageError('--target must be sandbox-sepolia or production-polygon')
+  }
+  if (options.target === 'production-polygon') {
+    if (options.asset !== 'usdt') throw new UsageError('--asset eth is not valid for --target production-polygon')
+    if (options.reject) throw new UsageError('--reject is not valid for --target production-polygon')
+    if (options.amount == null) throw new UsageError('Required argument missing: --amount <USDT>')
+    options.amountBase = parseSaleAmount(options.amount)
+    if (!seen.has('--rpc')) options.rpc = PRODUCTION_RPC
+  } else if (options.amount != null) {
+    throw new UsageError('--amount is only valid for --target production-polygon')
+  }
   if (options.confirm && options.reject) throw new UsageError('--confirm and --reject cannot be combined')
   if (options.send && options.confirm === options.reject) throw new UsageError('--send needs exactly one of --confirm or --reject')
   if (!options.send && (options.confirm || options.reject)) throw new UsageError('--confirm and --reject require --send')
@@ -567,7 +657,7 @@ async function readVersion (preflight) {
   }
   let response
   try {
-    response = await fetch(`${API}/version`, { redirect: 'error', signal: AbortSignal.timeout(20_000) })
+    response = await fetch(`${apiOrigin()}/version`, { redirect: 'error', signal: AbortSignal.timeout(20_000) })
   } catch {
     fail('version unreachable')
   }
@@ -583,10 +673,104 @@ async function readVersion (preflight) {
 }
 
 async function deriveAccount (seed, rpc) {
-  const wdk = new WDK(seed).registerWallet('sepolia', WalletManagerEvm, { provider: rpc })
+  const key = productionTarget() ? 'polygon' : 'sepolia'
+  const wdk = new WDK(seed).registerWallet(key, WalletManagerEvm, { provider: rpc })
   try {
-    const account = await wdk.getAccount('sepolia', 0)
+    const account = await wdk.getAccount(key, 0)
     return getAddress(await account.getAddress())
+  } finally {
+    await wdk.dispose?.()
+  }
+}
+
+function readPolygonBundler () {
+  const envPath = fileURLToPath(new URL('./.starter/.env', import.meta.url))
+  let text
+  try {
+    text = readFileSync(envPath, 'utf8')
+  } catch {
+    throw new NotRunError('not run: starter .env cannot be read')
+  }
+  const prefix = 'EXPO_PUBLIC_EVM_POLYGON_BUNDLER_URL='
+  let found = null
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.replace(/\r$/, '')
+    if (!line.startsWith(prefix)) continue
+    if (found !== null) throw new NotRunError('not run: starter .env has more than one polygon bundler url')
+    found = line.slice(prefix.length).trim()
+  }
+  if (!found) throw new NotRunError('not run: starter .env has no polygon bundler url')
+  let parsed
+  try {
+    parsed = new URL(found)
+  } catch {
+    throw new NotRunError('not run: polygon bundler url is not a url')
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new NotRunError('not run: polygon bundler url must use HTTP or HTTPS')
+  }
+  if (!parsed.host) throw new NotRunError('not run: polygon bundler url has no host')
+  rememberSecret(found)
+  state.bundlerUrl = found
+  return parsed.host
+}
+
+async function readActiveIban (session) {
+  let response
+  try {
+    response = await fetch(`${PRODUCTION_API}/v1/bankAccount`, {
+      headers: { authorization: `Bearer ${session}`, accept: 'application/json' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000)
+    })
+  } catch {
+    throw new NotRunError('not run: bank account list unreachable')
+  }
+  if (!response.ok) throw new NotRunError(`not run: bank account list returned HTTP ${response.status}`)
+  let body
+  try {
+    body = await response.json()
+  } catch {
+    throw new NotRunError('not run: bank account list was not JSON')
+  }
+  if (!Array.isArray(body)) throw new NotRunError('not run: bank account list was not an array')
+  const active = body.filter(row => row && row.active === true)
+  if (active.length !== 1) throw new NotRunError(`not run: expected one active bank account, found ${active.length}`)
+  if (typeof active[0].iban !== 'string') throw new NotRunError('not run: active bank account has no IBAN')
+  const iban = compact(active[0].iban).toUpperCase()
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) throw new NotRunError('not run: active bank account has no usable IBAN')
+  return iban
+}
+
+async function productionQuoteAndIban (seed, rpc, amountBase) {
+  const wdk = new WDK(seed)
+    .registerWallet('polygon', WalletManagerEvm, { provider: rpc })
+    .registerProtocol('polygon', 'dfx', DfxProtocol, { environment: 'production', network: 'polygon' })
+  try {
+    const account = await wdk.getAccount('polygon', 0)
+    const fiat = account.getFiatProtocol('dfx')
+    try {
+      await fiat.quoteSell({ cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: amountBase })
+    } catch (error) {
+      if (error instanceof NotRunError) throw error
+      throw new NotRunError(`not run: sell quote is not valid (${redact(error?.message ?? error)})`)
+    }
+    let sellUrl
+    try {
+      ;({ sellUrl } = await fiat.sell({ cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: amountBase }))
+    } catch {
+      throw new NotRunError('not run: production sign-in failed')
+    }
+    rememberSecret(sellUrl)
+    let session
+    try {
+      session = new URL(sellUrl).searchParams.get('session')
+    } catch {
+      session = null
+    }
+    if (!session) throw new NotRunError('not run: production sign-in returned no session')
+    rememberSecret(session)
+    return await readActiveIban(session)
   } finally {
     await wdk.dispose?.()
   }
@@ -604,6 +788,8 @@ async function preflight (options) {
   if (porcelain !== '') throw new NotRunError('not run: the module working tree is not clean')
   assertModuleCopy()
   const build = readBuild()
+  const recordedTarget = build.target === undefined ? 'sandbox-sepolia' : build.target
+  if (recordedTarget !== options.target) throw new NotRunError(`not run: out/build.json target is not ${options.target}`)
   if (build.moduleHead !== moduleHead) throw new NotRunError('not run: out/build.json moduleHead is not HEAD')
   let patchSha
   try {
@@ -641,7 +827,8 @@ async function preflight (options) {
   } catch {
     throw new NotRunError('not run: RPC unreachable')
   }
-  if (network.chainId !== CHAIN_ID) throw new NotRunError(`not run: chain id is ${network.chainId}`)
+  const expectedChain = productionTarget(options) ? PRODUCTION_CHAIN_ID : CHAIN_ID
+  if (network.chainId !== expectedChain) throw new NotRunError(`not run: chain id is ${network.chainId}`)
   const seed = await readPrivateFile(options.seedFile)
   rememberSecret(seed)
   let account
@@ -650,7 +837,7 @@ async function preflight (options) {
   } catch {
     throw new NotRunError('not run: account could not be derived')
   }
-  const usdt = new Contract(USDT, ERC20_ABI, provider)
+  const usdt = new Contract(productionTarget(options) ? PRODUCTION_USDT : USDT, ERC20_ABI, provider)
   let usdtBalance
   let ethBalance
   try {
@@ -660,6 +847,17 @@ async function preflight (options) {
     throw new NotRunError('not run: balance could not be read')
   }
   const asset = lookupAsset(options.asset)
+  if (productionTarget(options)) {
+    if (usdtBalance < options.amountBase) throw new NotRunError('not run: account has less USDT than --amount')
+    const activeIban = await productionQuoteAndIban(seed, options.rpc, options.amountBase)
+    rememberIban(activeIban)
+    state.saleIban = activeIban
+    const bundlerHost = readPolygonBundler()
+    return {
+      seed, moduleHead, build, maestroVersion, simulatorRuntime, backendCommitStart, account, provider, usdt,
+      polBalance: ethBalance, activeIban, bundlerHost
+    }
+  }
   if (asset.symbol === 'USDT') {
     if (usdtBalance < USDT_AMOUNT) throw new NotRunError('not run: account has less than 1 USDT')
     if (ethBalance < ETH_FEE) throw new NotRunError('not run: account has less than 0.0002 ETH')
@@ -873,6 +1071,33 @@ async function readReceipt (provider, hash) {
   }
 }
 
+async function readUserOperationReceipt (hash) {
+  const deadline = Date.now() + 180_000
+  while (true) {
+    let body
+    try {
+      const response = await fetch(state.bundlerUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getUserOperationReceipt', params: [hash] }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(20_000)
+      })
+      if (!response.ok) throw new Error('http')
+      body = await response.json()
+    } catch {
+      if (Date.now() + 2_000 >= deadline) throw new CheckError('userop-receipt', 'user operation receipt read failed')
+      await delay(2_000)
+      state.rpcReadRetries++
+      continue
+    }
+    if (body && body.result) return body.result
+    if (Date.now() + 2_000 >= deadline) throw new CheckError('userop-receipt', 'no user operation receipt')
+    await delay(2_000)
+    state.rpcReadRetries++
+  }
+}
+
 function addressFromTopic (topic, failedCheck) {
   if (typeof topic !== 'string' || topic.length < 40) throw new CheckError(failedCheck, 'Transfer topic is not an address')
   return getAddress(`0x${topic.slice(-40)}`)
@@ -968,6 +1193,95 @@ async function checkChain (prelude, hash, depositAddress) {
     { address: prelude.account, asset: 'USDT', before: accountUsdtBefore.toString(), after: accountUsdtAfter.toString() },
     { address: prelude.account, asset: 'ETH', before: accountEthBefore.toString(), after: accountEthAfter.toString() },
     { address: depositAddress, asset: 'USDT', before: depositUsdtBefore.toString(), after: depositUsdtAfter.toString() }
+  ]
+}
+
+async function checkSponsoredChain (prelude, userOpHash, depositAddress) {
+  const amount = state.options.amountBase
+  const userOp = await readUserOperationReceipt(userOpHash)
+  if (userOp.success !== true) throw new CheckError('userop-success', 'user operation success is not true')
+  let sender
+  try {
+    sender = getAddress(userOp.sender)
+  } catch {
+    throw new CheckError('userop-sender', 'sender is not an address')
+  }
+  if (sender !== prelude.account) throw new CheckError('userop-sender', 'sender is not the account')
+  const txHashRaw = userOp.receipt && userOp.receipt.transactionHash
+  if (typeof txHashRaw !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHashRaw)) {
+    throw new CheckError('userop-receipt', 'user operation receipt has no transaction hash')
+  }
+  const txHash = txHashRaw.toLowerCase()
+  state.evidence.hash = txHash
+  const raw = await readReceipt(prelude.provider, txHash)
+  const status = quantity(raw.status, 'receipt-status')
+  if (status !== 1n) throw new CheckError('receipt-status', `status is ${status}`)
+  const iface = new Interface([USER_OP_EVENT_ABI])
+  const event = iface.getEvent('UserOperationEvent')
+  if (!event) throw new CheckError('userop-event', 'UserOperationEvent is not in the interface')
+  const topic0 = event.topicHash.toLowerCase()
+  const opLogs = Array.isArray(raw.logs) ? raw.logs.filter(log => {
+    try {
+      return getAddress(log.address) === ENTRY_POINT &&
+        String(log.topics?.[0] ?? '').toLowerCase() === topic0 &&
+        String(log.topics?.[1] ?? '').toLowerCase() === userOpHash.toLowerCase()
+    } catch {
+      return false
+    }
+  }) : []
+  if (opLogs.length !== 1) throw new CheckError('userop-event', `found ${opLogs.length} UserOperationEvent logs`)
+  let decoded
+  try {
+    decoded = iface.parseLog({ topics: opLogs[0].topics, data: opLogs[0].data })
+  } catch {
+    throw new CheckError('userop-event', 'UserOperationEvent did not decode')
+  }
+  if (!decoded || decoded.args.success !== true) throw new CheckError('userop-event', 'UserOperationEvent success is not true')
+  let paymaster
+  try {
+    paymaster = getAddress(decoded.args.paymaster)
+  } catch {
+    throw new CheckError('userop-event', 'paymaster is not an address')
+  }
+  if (paymaster === getAddress('0x0000000000000000000000000000000000000000')) {
+    throw new CheckError('userop-event', 'paymaster is zero')
+  }
+  const actualGasCost = decoded.args.actualGasCost
+  const actualGasUsed = decoded.args.actualGasUsed
+  if (typeof actualGasCost !== 'bigint' || typeof actualGasUsed !== 'bigint') {
+    throw new CheckError('userop-event', 'gas figures are not quantities')
+  }
+  const transfers = Array.isArray(raw.logs) ? raw.logs.filter(log => {
+    try {
+      if (getAddress(log.address) !== PRODUCTION_USDT || String(log.topics?.[0] ?? '').toLowerCase() !== TRANSFER_TOPIC) return false
+      const from = addressFromTopic(log.topics?.[1], 'transfer')
+      const to = addressFromTopic(log.topics?.[2], 'transfer')
+      return from === prelude.account && to === depositAddress && quantity(log.data, 'transfer') === amount
+    } catch {
+      return false
+    }
+  }) : []
+  if (transfers.length !== 1) throw new CheckError('transfer', `found ${transfers.length} USDT Transfer logs from the account to the deposit address`)
+  const block = Number(quantity(raw.blockNumber, 'receipt'))
+  if (!Number.isSafeInteger(block) || block < 1) throw new CheckError('receipt', 'block number is not usable')
+  const accountUsdtBefore = await tokenBalanceAt(prelude, prelude.account, block - 1, 'balance-account-usdt')
+  const accountUsdtAfter = await tokenBalanceAt(prelude, prelude.account, block, 'balance-account-usdt')
+  if (accountUsdtBefore - accountUsdtAfter !== amount) {
+    throw new CheckError('balance-account-usdt', 'account USDT balance did not fall by the sale amount')
+  }
+  const accountPolBefore = await etherBalanceAt(prelude, prelude.account, block - 1, 'balance-account-pol')
+  const accountPolAfter = await etherBalanceAt(prelude, prelude.account, block, 'balance-account-pol')
+  if (accountPolBefore !== accountPolAfter) {
+    throw new CheckError('balance-account-pol', 'account POL balance changed')
+  }
+  state.evidence.block = block
+  state.evidence.paymaster = paymaster
+  state.evidence.actualGasCost = actualGasCost.toString()
+  state.evidence.actualGasUsed = actualGasUsed.toString()
+  state.evidence.feePaidBy = 'paymaster'
+  state.evidence.balances = [
+    { address: prelude.account, asset: 'USDT', before: accountUsdtBefore.toString(), after: accountUsdtAfter.toString() },
+    { address: prelude.account, asset: 'POL', before: accountPolBefore.toString(), after: accountPolAfter.toString() }
   ]
 }
 
@@ -1132,9 +1446,12 @@ function assertSaleShape (row) {
   if (!row || typeof row !== 'object') throw new CheckError('backend-shape', 'record is not an object')
   if (row.type !== 'Sell') throw new CheckError('backend-shape', 'type is not Sell')
   if (row.inputAsset !== asset.symbol) throw new CheckError('backend-shape', `asset is not ${asset.symbol}`)
-  if (row.inputBlockchain !== 'Sepolia') throw new CheckError('backend-shape', 'blockchain is not Sepolia')
+  const chainName = productionTarget() ? 'Polygon' : 'Sepolia'
+  if (row.inputBlockchain !== chainName) throw new CheckError('backend-shape', `blockchain is not ${chainName}`)
   if (asset.symbol === 'USDT') {
-    if (!amountIsOne(row.inputAmount)) throw new CheckError('backend-shape', 'amount is not 1')
+    if (productionTarget()) {
+      if (!amountIsSale(row.inputAmount)) throw new CheckError('backend-shape', 'amount is not the sale amount')
+    } else if (!amountIsOne(row.inputAmount)) throw new CheckError('backend-shape', 'amount is not 1')
   } else if (!amountIsEthSale(row.inputAmount)) {
     throw new CheckError('backend-shape', 'amount is not 0.0001')
   }
@@ -1159,19 +1476,25 @@ function backendView (row) {
 }
 
 async function sessionFor (seed, rpc) {
+  const production = productionTarget()
+  const key = production ? 'polygon' : 'sepolia'
   const wdk = new WDK(seed)
-    .registerWallet('sepolia', WalletManagerEvm, { provider: rpc })
-    .registerProtocol('sepolia', 'dfx', DfxProtocol, { environment: 'sandbox', network: 'sepolia' })
+    .registerWallet(key, WalletManagerEvm, { provider: rpc })
+    .registerProtocol(key, 'dfx', DfxProtocol, {
+      environment: production ? 'production' : 'sandbox',
+      network: production ? 'polygon' : 'sepolia'
+    })
   state.wdk = wdk
   let sellUrl
   try {
-    const account = await wdk.getAccount('sepolia', 0)
+    const account = await wdk.getAccount(key, 0)
     const fiat = account.getFiatProtocol('dfx')
     state.fiat = fiat
     // sell() is the public call that returns a session. It opens a second sandbox sale.
-    ;({ sellUrl } = await fiat.sell({ cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: USDT_AMOUNT }))
+    const cryptoAmount = production ? state.options.amountBase : USDT_AMOUNT
+    ;({ sellUrl } = await fiat.sell({ cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount }))
   } catch {
-    throw new CheckError('backend-auth', 'sandbox sign-in failed')
+    throw new CheckError('backend-auth', production ? 'production sign-in failed' : 'sandbox sign-in failed')
   }
   rememberSecret(sellUrl)
   let session
@@ -1180,7 +1503,7 @@ async function sessionFor (seed, rpc) {
   } catch {
     session = null
   }
-  if (!session) throw new CheckError('backend-auth', 'sandbox sign-in returned no session')
+  if (!session) throw new CheckError('backend-auth', production ? 'production sign-in returned no session' : 'sandbox sign-in returned no session')
   rememberSecret(session)
   state.session = session
   return session
@@ -1190,7 +1513,7 @@ async function readTransactions (session) {
   state.backendReads++
   let response
   try {
-    response = await fetch(`${API}/v1/transaction`, {
+    response = await fetch(`${apiOrigin()}/v1/transaction`, {
       headers: { authorization: `Bearer ${session}`, accept: 'application/json' },
       redirect: 'error',
       signal: AbortSignal.timeout(30_000)
@@ -1362,7 +1685,7 @@ async function captureExplorer (browser, hash) {
     const deadline = Date.now() + 300_000
     while (Date.now() < deadline) {
       try {
-        await page.goto(`${EXPLORER}/tx/${hash}`, { waitUntil: 'domcontentloaded', timeout: Math.max(1, deadline - Date.now()) })
+        await page.goto(`${explorerOrigin()}/tx/${hash}`, { waitUntil: 'domcontentloaded', timeout: Math.max(1, deadline - Date.now()) })
       } catch (error) {
         if (error.name === 'TimeoutError' && Date.now() >= deadline) break
         throw error
@@ -1401,7 +1724,7 @@ async function captureBooking (browser, session, hash, sale) {
   try {
     context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
     const page = await context.newPage()
-    await page.goto(`${APP}/tx/${encodeURIComponent(String(sale.uid))}?session=${encodeURIComponent(session)}&lang=en`)
+    await page.goto(`${appOrigin()}/tx/${encodeURIComponent(String(sale.uid))}?session=${encodeURIComponent(session)}&lang=en`)
     try {
       await page.waitForFunction(({ id, inputTx: shownHash, stateText: shownState }) => {
         const lines = (globalThis.document.body?.innerText || '').split('\n').map(line => line.trim()).filter(Boolean)
@@ -1473,7 +1796,8 @@ function sendFlowEnv (depositRaw) {
     ASSET_TESTID: asset.assetTestId,
     AMOUNT_TEXT: asset.amountText,
     SYMBOL: asset.symbol,
-    REVIEW_AMOUNT: asset.reviewAmount
+    REVIEW_AMOUNT: asset.reviewAmount,
+    NETWORK_TEXT: productionTarget() ? 'Polygon' : 'Ethereum \\(Sepolia\\)'
   }
 }
 
@@ -1663,16 +1987,16 @@ async function rejectTransfer (prelude, depositAddress, depositRaw) {
 async function sendAndCheck (prelude) {
   const options = state.options
   await copySeed(options.seedFile)
-  const iban = inventedIban()
+  const production = productionTarget()
+  const iban = production ? prelude.activeIban : inventedIban()
   state.saleIban = iban
   rememberIban(iban)
   if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
   state.flow1Started = true
-  const flow1 = await runFlow(join(flowDir, 'sell-1-widget.yaml'), {
-    IBAN: iban,
-    IBAN_PATTERN: `.*${[...iban].join(' ?')}.*`,
-    SELL_ENTRY: selectedAsset().sellEntry
-  })
+  const flow1Env = production
+    ? { IBAN_PATTERN: `.*${[...iban].join(' ?')}.*`, SELL_ENTRY: 'sell-entry', SELL_AMOUNT: String(options.amountBase) }
+    : { IBAN: iban, IBAN_PATTERN: `.*${[...iban].join(' ?')}.*`, SELL_ENTRY: selectedAsset().sellEntry }
+  const flow1 = await runFlow(join(flowDir, production ? 'sell-1-widget-saved-iban.yaml' : 'sell-1-widget.yaml'), flow1Env)
   const flow1Code = flow1.code
   flow1.stdout = ''
   if (flow1Code !== 0) throw new CheckError('flow-1', 'nothing sent', state.failedStep)
@@ -1703,16 +2027,19 @@ async function sendAndCheck (prelude) {
     throw new CheckError('wallet-confirmations', `completed send-confirm taps: ${confirmations}`, state.failedStep)
   }
   const hash = await readSuccessHash()
-  state.evidence.hash = hash
+  if (productionTarget()) state.evidence.userOperationHash = hash
+  else state.evidence.hash = hash
   if (flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed after send-confirm', state.failedStep)
-  if (selectedAsset().symbol === 'ETH') await checkEthChain(prelude, hash, depositAddress)
+  if (productionTarget()) await checkSponsoredChain(prelude, hash, depositAddress)
+  else if (selectedAsset().symbol === 'ETH') await checkEthChain(prelude, hash, depositAddress)
   else await checkChain(prelude, hash, depositAddress)
+  const chainHash = productionTarget() ? state.evidence.hash : hash
   const session = await sessionFor(prelude.seed, options.rpc)
-  const sale = await followBackend(session, hash, options.follow)
+  const sale = await followBackend(session, chainHash, options.follow)
   await assertModuleStatus(sale)
-  await captureEvidence(session, hash, sale)
+  await captureEvidence(session, chainHash, sale)
   await assertClosed(prelude)
-  const explorerName = explorerShotName(hash)
+  const explorerName = explorerShotName(chainHash)
   const bookingName = bookingShotName(sale.uid, session)
   const expectedShots = [...FLOW_SHOTS, explorerName, bookingName]
   const shots = state.screenshots.map(item => {
@@ -1777,7 +2104,9 @@ function assertPass (body) {
   }
   if (body.dirty !== false) throw new CheckError('dirty-tree', 'the module tree is not clean')
   if (body.walletInterface !== WALLET_INTERFACE) throw new CheckError('record', 'walletInterface changed')
-  if (body.ibanCountryAndClearing !== IBAN_LABEL) throw new CheckError('record', 'iban label changed')
+  const ibanLabel = productionTarget() ? PRODUCTION_IBAN_LABEL : IBAN_LABEL
+  if (body.ibanCountryAndClearing !== ibanLabel) throw new CheckError('record', 'iban label changed')
+  if (productionTarget() && body.feePaidBy !== 'paymaster') throw new CheckError('record', 'feePaidBy is not paymaster')
   if (body.mode === 'rejected') {
     assertRejectedPass(body)
     return
@@ -1966,9 +2295,13 @@ async function main () {
     walletInterface: WALLET_INTERFACE,
     backendCommitStart: prelude.backendCommitStart,
     account: prelude.account,
-    ibanCountryAndClearing: IBAN_LABEL,
+    ibanCountryAndClearing: productionTarget(options) ? PRODUCTION_IBAN_LABEL : IBAN_LABEL,
     asset: selectedAsset().symbol,
     mode: options.reject ? 'rejected' : 'sale'
+  }
+  if (productionTarget(options)) {
+    state.evidence.bundlerHost = prelude.bundlerHost
+    state.evidence.polBalance = prelude.polBalance.toString()
   }
   try {
     await sendAndCheck(prelude)
