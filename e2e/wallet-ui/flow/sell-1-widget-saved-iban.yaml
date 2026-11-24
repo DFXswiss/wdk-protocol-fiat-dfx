@@ -42,6 +42,12 @@ appId: io.tether.wdk.starter.reactnative
     timeout: 60000
 # The sale screen is opened by link because the Sell button has no amount. The screen, the module call and the widget are the same as after the button.
 - openLink: "wdkstarterreactnative://sell?amount=${SELL_AMOUNT}"
+# iOS asks once whether to open the deep link in the app; accept it so the widget can appear.
+- runFlow:
+    when:
+      visible: "(?i)open in .*wdk-starter-react-native.*"
+    commands:
+      - tapOn: "Open"
 # sell() already puts the amount of the chosen asset on the widget URL. The page opens on the
 # bank step. The saved account is selected after the open screenshot.
 - extendedWaitUntil:
