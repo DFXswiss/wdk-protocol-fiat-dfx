@@ -50,7 +50,12 @@ git clone --quiet https://github.com/tetherto/wdk-starter-react-native.git "$STA
 git -C "$STARTER" checkout --detach "$STARTER_COMMIT"
 git -C "$STARTER" apply --index "$ROOT/starter.patch"
 cp "$STARTER/.env.example" "$STARTER/.env"
+chmod 600 "$STARTER/.env"
 printf '\nEXPO_PUBLIC_DFX_TARGET=%s\n' "$DFX_TARGET" >> "$STARTER/.env"
+xtrace_was_on=0
+case $- in
+  *x*) xtrace_was_on=1; set +x ;;
+esac
 if [[ -n "${PIMLICO_API_KEY_FILE:-}" ]]; then
   # The key is read into a shell variable and passed in the environment, never on argv, and is never printed.
   key_status=0
@@ -62,9 +67,9 @@ try {
   fd = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
   const st = fs.fstatSync(fd)
   if (!st.isFile() || st.uid !== process.getuid()) process.exit(1)
-  const mode = st.mode & 0o777
+  const mode = st.mode & 0o7777
   if (mode !== 0o600 && mode !== 0o400) process.exit(1)
-  if (st.size > 4096) process.exit(2)
+  if (st.size > 65536) process.exit(3)
   const text = fs.readFileSync(fd, "utf8").trim()
   if (!/^[A-Za-z0-9_]{8,128}$/.test(text)) process.exit(2)
   process.stdout.write(text)
@@ -78,6 +83,8 @@ try {
     unset pimlico_key
     if [[ "$key_status" -eq 2 ]]; then
       echo "PIMLICO_API_KEY_FILE content is not a Pimlico key" >&2
+    elif [[ "$key_status" -eq 3 ]]; then
+      echo "PIMLICO_API_KEY_FILE is too large" >&2
     else
       echo "PIMLICO_API_KEY_FILE must be a regular non-symlink file owned by the current user with mode 0600 or 0400" >&2
     fi
@@ -94,8 +101,25 @@ const fs = require("fs")
 const key = process.env.PIMLICO_API_KEY
 const path = process.argv[process.argv.length - 1]
 if (typeof key !== "string" || !/^[A-Za-z0-9_]{8,128}$/.test(key)) process.exit(1)
-const text = fs.readFileSync(path, "utf8")
-fs.writeFileSync(path, text.split("YOUR_PIMLICO_KEY").join(key))
+let fd
+try {
+  fd = fs.openSync(path, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW)
+  const st = fs.fstatSync(fd)
+  if (!st.isFile()) process.exit(1)
+  const text = fs.readFileSync(fd, "utf8")
+  const next = Buffer.from(text.split("YOUR_PIMLICO_KEY").join(key), "utf8")
+  fs.ftruncateSync(fd, 0)
+  let offset = 0
+  while (offset < next.length) {
+    const wrote = fs.writeSync(fd, next, offset, next.length - offset, offset)
+    if (wrote <= 0) process.exit(1)
+    offset += wrote
+  }
+} catch {
+  process.exit(1)
+} finally {
+  if (fd !== undefined) fs.closeSync(fd)
+}
 ' -- "$STARTER/.env"; then
     unset pimlico_key
     echo "could not write the Pimlico key into the starter .env" >&2
@@ -138,6 +162,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     provider="${line#*=}"
   fi
 done < "$STARTER/.env"
+unset line
 if [[ -z "$provider" ]]; then
   echo "Ethereum provider missing in .env" >&2
   exit 1
@@ -163,6 +188,7 @@ if [[ "$DFX_TARGET" == "production-polygon" ]]; then
       polygon_provider="${line#*=}"
     fi
   done < "$STARTER/.env"
+  unset line
   if [[ -z "$polygon_provider" ]]; then
     echo "Polygon provider missing in .env" >&2
     exit 1
@@ -177,6 +203,9 @@ if [[ "$DFX_TARGET" == "production-polygon" ]]; then
     exit 1
   fi
   echo "Polygon provider chain: $chain"
+fi
+if [[ "$xtrace_was_on" -eq 1 ]]; then
+  set -x
 fi
 printf 'install-links=true\n' > "$STARTER/.npmrc"
 (cd "$STARTER" && npm install)
