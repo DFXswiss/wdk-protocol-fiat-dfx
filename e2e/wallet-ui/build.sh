@@ -26,6 +26,11 @@ if [[ "$DFX_TARGET" != "sandbox-sepolia" && "$DFX_TARGET" != "production-polygon
   echo "DFX_TARGET must be sandbox-sepolia or production-polygon" >&2
   exit 2
 fi
+pimlico_key_source="placeholder"
+if [[ "$DFX_TARGET" == "production-polygon" && -z "${PIMLICO_API_KEY_FILE:-}" ]]; then
+  echo "PIMLICO_API_KEY_FILE is required for DFX_TARGET=production-polygon" >&2
+  exit 1
+fi
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 MODULE="$(cd "$ROOT/../.." && pwd)"
@@ -46,6 +51,83 @@ git -C "$STARTER" checkout --detach "$STARTER_COMMIT"
 git -C "$STARTER" apply --index "$ROOT/starter.patch"
 cp "$STARTER/.env.example" "$STARTER/.env"
 printf '\nEXPO_PUBLIC_DFX_TARGET=%s\n' "$DFX_TARGET" >> "$STARTER/.env"
+if [[ -n "${PIMLICO_API_KEY_FILE:-}" ]]; then
+  # The key is read into a shell variable and passed in the environment, never on argv, and is never printed.
+  key_status=0
+  pimlico_key="$(node -e '
+const fs = require("fs")
+const path = process.argv[process.argv.length - 1]
+let fd
+try {
+  fd = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
+  const st = fs.fstatSync(fd)
+  if (!st.isFile() || st.uid !== process.getuid()) process.exit(1)
+  const mode = st.mode & 0o777
+  if (mode !== 0o600 && mode !== 0o400) process.exit(1)
+  if (st.size > 4096) process.exit(2)
+  const text = fs.readFileSync(fd, "utf8").trim()
+  if (!/^[A-Za-z0-9_]{8,128}$/.test(text)) process.exit(2)
+  process.stdout.write(text)
+} catch {
+  process.exit(1)
+} finally {
+  if (fd !== undefined) fs.closeSync(fd)
+}
+' -- "$PIMLICO_API_KEY_FILE")" || key_status=$?
+  if [[ "$key_status" -ne 0 ]]; then
+    unset pimlico_key
+    if [[ "$key_status" -eq 2 ]]; then
+      echo "PIMLICO_API_KEY_FILE content is not a Pimlico key" >&2
+    else
+      echo "PIMLICO_API_KEY_FILE must be a regular non-symlink file owned by the current user with mode 0600 or 0400" >&2
+    fi
+    exit 1
+  fi
+  pimlico_key_re='^[A-Za-z0-9_]{8,128}$'
+  if [[ ! "$pimlico_key" =~ $pimlico_key_re ]]; then
+    unset pimlico_key
+    echo "PIMLICO_API_KEY_FILE content is not a Pimlico key" >&2
+    exit 1
+  fi
+  if ! PIMLICO_API_KEY="$pimlico_key" node -e '
+const fs = require("fs")
+const key = process.env.PIMLICO_API_KEY
+const path = process.argv[process.argv.length - 1]
+if (typeof key !== "string" || !/^[A-Za-z0-9_]{8,128}$/.test(key)) process.exit(1)
+const text = fs.readFileSync(path, "utf8")
+fs.writeFileSync(path, text.split("YOUR_PIMLICO_KEY").join(key))
+' -- "$STARTER/.env"; then
+    unset pimlico_key
+    echo "could not write the Pimlico key into the starter .env" >&2
+    exit 1
+  fi
+  unset pimlico_key
+  chmod 600 "$STARTER/.env"
+  pimlico_key_source="file"
+fi
+if [[ "$DFX_TARGET" == "production-polygon" ]]; then
+  bundler_seen=0
+  paymaster_seen=0
+  placeholder_left=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == EXPO_PUBLIC_EVM_POLYGON_BUNDLER_URL=* ]]; then
+      bundler_seen=$((bundler_seen + 1))
+      if [[ "$line" == *YOUR_PIMLICO_KEY* ]]; then
+        placeholder_left=1
+      fi
+    elif [[ "$line" == EXPO_PUBLIC_EVM_POLYGON_PAYMASTER_URL=* ]]; then
+      paymaster_seen=$((paymaster_seen + 1))
+      if [[ "$line" == *YOUR_PIMLICO_KEY* ]]; then
+        placeholder_left=1
+      fi
+    fi
+  done < "$STARTER/.env"
+  unset line
+  if [[ "$placeholder_left" -ne 0 || "$bundler_seen" -eq 0 || "$paymaster_seen" -eq 0 ]]; then
+    echo "Polygon bundler or paymaster line is missing or still contains YOUR_PIMLICO_KEY" >&2
+    exit 1
+  fi
+fi
 provider=""
 while IFS= read -r line || [[ -n "$line" ]]; do
   if [[ "$line" == EXPO_PUBLIC_EVM_ETHEREUM_PROVIDER=* ]]; then
@@ -189,6 +271,7 @@ cat > "$ROOT/out/build.json" <<EOF
   "moduleDirty": false,
   "starterCommit": "${starter_head}",
   "target": "${DFX_TARGET}",
+  "pimlicoKey": "${pimlico_key_source}",
   "patchSha256": "${patch_sha}",
   "mainJsbundleSha256": "${bundle_sha}"
 }

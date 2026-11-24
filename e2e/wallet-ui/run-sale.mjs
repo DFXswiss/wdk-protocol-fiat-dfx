@@ -729,6 +729,33 @@ function readPolygonBundler () {
   return parsed.host
 }
 
+async function assertPolygonBundlerAnswers () {
+  let body
+  try {
+    const response = await fetch(state.bundlerUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_supportedEntryPoints', params: [] }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000)
+    })
+    if (!response.ok) {
+      await response.body.cancel()
+      throw new Error('status')
+    }
+    body = await response.json()
+  } catch {
+    throw new NotRunError('not run: Polygon bundler does not answer')
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body) || body.error) {
+    throw new NotRunError('not run: Polygon bundler does not answer')
+  }
+  if (!Array.isArray(body.result)) throw new NotRunError('not run: Polygon bundler does not answer')
+  const wanted = ENTRY_POINT.toLowerCase()
+  const listed = body.result.some(item => typeof item === 'string' && item.trim().toLowerCase() === wanted)
+  if (!listed) throw new NotRunError('not run: Polygon bundler does not answer')
+}
+
 async function readActiveIban (session) {
   let response
   try {
@@ -875,6 +902,7 @@ async function preflight (options) {
     rememberIban(activeIban)
     state.saleIban = activeIban
     const bundlerHost = readPolygonBundler()
+    await assertPolygonBundlerAnswers()
     return {
       seed, moduleHead, build, maestroVersion, simulatorRuntime, backendCommitStart, account, provider, usdt,
       polBalance: ethBalance, activeIban, bundlerHost
