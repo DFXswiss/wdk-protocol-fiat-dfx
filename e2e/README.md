@@ -14,7 +14,9 @@ Node.js 22 or newer. Do not print a seed. A seed file must be a non-empty regula
 
 ## live-matrix.mjs
 
-Live matrix for ethereum, polygon, arbitrum, base, optimism, bsc, sepolia, polygon-4337, base-4337, tron, solana, bitcoin and spark. Each case registers WDK and reads catalogs; cases with listed assets also quote, ask for an unknown transaction id, and open buy and sell widget URLs. Bitcoin with an empty catalog checks four `Missing decimals` rejections instead. It sends no on-chain transaction. Output: `out/matrix-results-sandbox.json` or `out/matrix-results-production.json`. Session URLs are redacted in that file. Exit 0 only when every step passed; exit 2 for an unknown chain or more than one argument; otherwise exit 1.
+Live matrix for ethereum, polygon, arbitrum, base, optimism, bsc, sepolia, polygon-4337, base-4337, tron, solana, bitcoin and spark. Each case registers WDK and then signs in: `getTransactionDetail` of an unknown id must throw `NoSuchElementError` after auth. Sign-in runs for every chain, including one with no tradable asset. The script loads `GET /v1/asset` once, without auth. For each case it takes rows whose `blockchain` lowercases to that case's network and whose `buyable` or `sellable` flag is true. Each of those assets must appear in `getSupportedCryptoAssets()` for that network. A gap is a failed step named `catalog: <Blockchain>/<name> tradable in the API but missing in the module`. Buy steps use the preferred buyable asset and sell steps the preferred sellable asset, in this order: USDT, USDC, EURC, ZCHF, ETH, POL, SOL, TRX, BTC, BNB, otherwise the first asset in that direction. Sell amounts are 50 units. One direction with no asset is one skip, `buy: no buyable asset on <network> in the API catalog` or `sell: no sellable asset on <network> in the API catalog`. When the preferred buy asset is not sellable, `quoteSell` of that asset must throw `ValueError` with message `Unsupported sell asset or network: <code>`. When the preferred sell asset is not buyable, `quoteBuy` must throw `Unsupported buy asset or network: <code>`. Those rejections count as passed steps. The script sends no on-chain transaction.
+
+Output is `out/matrix-results-sandbox.json` or `out/matrix-results-production.json`. The first object is `meta`: `env`, `head` (`git rev-parse HEAD` of this module), `dirty` (true when `git status --porcelain` is non-empty), `apiVersionStart`, `apiVersionEnd` (text of `GET /version` at the start and the end), `startedAt` and `finishedAt`. A version that changes during the run is a failed step. Session URLs, the seed and JWTs are redacted. The summary line is `SUMMARY: <ok>/<ok+fail> steps ok, <skip> skipped`, then each failure and each skip. Exit 0 only when no step failed. Exit 2 is an unknown chain or more than one argument. Any failed step exits 1.
 
 ```sh
 node live-matrix.mjs
@@ -26,11 +28,11 @@ An optional argument limits the run to one `chain` value from the script.
 
 Before network access, the installed module copy is compared with the working tree; a mismatch exits 1 and requires `npm ci` in `e2e`.
 
-Recorded sandbox: 178/186 steps on 2026-10-29 and again on 2026-11-05. Recorded production: 182/187 on 2026-10-29 and 177/178 on 2026-11-05. See [TESTING.md](../TESTING.md#current-state--measured).
+Recorded sandbox: 178/186 steps on 2026-10-29 and again on 2026-11-05. Recorded production: 182/187 on 2026-10-29 and 177/178 on 2026-11-05. Those counts are earlier runs, before buy and sell were taken from the live catalog. See [TESTING.md](../TESTING.md#current-state--measured).
 
 ## native-quotes.mjs
 
-Read-only probe of Bitcoin, Lightning, Arkade and Firo. It sends no on-chain transaction. The sandbox is expected to list only Firo; production is expected to list none of the four. Unlisted assets must be rejected with `Missing decimals`. Exit code 1 on a mismatch.
+Read-only probe of Bitcoin, Lightning, Arkade and Firo. It sends no on-chain transaction. A listed asset must quote for buy and for sell (`cryptoAmount` is a bigint). These four keys are in the native decimals table, so a null or absent API `decimals` uses 8 and an API value wins. An unlisted asset is rejected as unsupported (`Unsupported buy asset or network` or `Unsupported sell asset or network`), not with `Missing decimals`. Exit code 1 on a mismatch. The probe does not cover `BitcoinTestnet4/BTC`.
 
 Before network access, the installed module copy is compared with the working tree; a mismatch exits 1 and requires `npm ci` in `e2e`.
 

@@ -3,6 +3,8 @@
 
 // Live matrix against the DFX sandbox by default. It sends no on-chain transaction.
 // POST /v1/auth creates DFX users; production requires DFX_ENV=production.
+// Buy and sell assets come from the raw GET /v1/asset catalog for each network.
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { closeSync, constants, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -93,6 +95,70 @@ async function userCheck (token, address) {
   return { status: res.status, addressInProfile: body.toLowerCase().includes(address.toLowerCase()) }
 }
 
+const PREFERRED_ASSETS = ['USDT', 'USDC', 'EURC', 'ZCHF', 'ETH', 'POL', 'SOL', 'TRX', 'BTC', 'BNB']
+
+function git (args) {
+  return execFileSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  }).trim()
+}
+
+async function apiVersion () {
+  const response = await fetch(`${API}/version`)
+  return (await response.text()).trim()
+}
+
+function preferred (rows) {
+  if (!rows.length) return undefined
+  const code = PREFERRED_ASSETS.find(name => rows.some(row => row.name === name))
+  return code === undefined ? rows[0] : rows.find(row => row.name === code)
+}
+
+function cryptoUnits (asset, listedRows) {
+  const listedRow = listedRows.find(row => row.code === asset.name)
+  const source = listedRow ? listedRow.decimals : asset.decimals
+  if (typeof source === 'number' && Number.isInteger(source) && source >= 0 && source <= 255) {
+    return 50n * 10n ** BigInt(source)
+  }
+  return 50n
+}
+
+function skip (chain, name, reason) {
+  results.push({ chain, name, skipped: true, reason })
+  log(`  SKIP ${name}: ${reason}`)
+}
+
+async function sessionStep (chain, kind, url, address) {
+  if (!url) return
+  await step(chain, `${kind}Url session valid at /v2/user`, async () => {
+    const u = new URL(url)
+    const session = u.searchParams.get('session')
+    if (!session) throw new Error(`${kind} URL has no session parameter`)
+    const user = await userCheck(session, address)
+    if (user.status !== 200) throw new Error(`${kind} session returned HTTP ${user.status} at /v2/user`)
+    if (!user.addressInProfile) throw new Error(`${kind} session profile does not match the wallet address`)
+    const params = Object.fromEntries([...u.searchParams].filter(([k]) => k !== 'session'))
+    return { ...user, origin: u.origin, path: u.pathname, params }
+  })
+}
+
+async function expectUnsupported (chain, fiat, direction, code, fiatCurrency, cryptoAmount) {
+  const message = `Unsupported ${direction} asset or network: ${code}`
+  const method = direction === 'sell' ? 'quoteSell' : 'quoteBuy'
+  await step(chain, `${method} ${code} -> ValueError ${message}`, async () => {
+    try {
+      if (direction === 'sell') await fiat.quoteSell({ cryptoAsset: code, fiatCurrency, cryptoAmount })
+      else await fiat.quoteBuy({ cryptoAsset: code, fiatCurrency, fiatAmount: 10000n })
+    } catch (e) {
+      if (e?.constructor?.name === 'ValueError' && e.message === message) return err(e)
+      throw e
+    }
+    throw new Error('NOT REJECTED')
+  })
+}
+
 const CASES = [
   { chain: 'ethereum', Manager: WalletManagerEvm, cfg: { provider: 'https://ethereum-rpc.publicnode.com' }, network: 'ethereum' },
   { chain: 'polygon', Manager: WalletManagerEvm, cfg: { provider: 'https://polygon-bor-rpc.publicnode.com' }, network: 'polygon' },
@@ -133,6 +199,23 @@ if (dfxWalletPath !== wdkWalletPath) {
 }
 const seed = WDK.getRandomSeedPhrase()
 mkdirSync(OUT, { recursive: true })
+const startedAt = new Date().toISOString()
+const head = git(['rev-parse', 'HEAD'])
+const dirty = git(['status', '--porcelain']) !== ''
+const apiVersionStart = await apiVersion()
+log(`start env=${ENV} head=${head} dirty=${dirty} apiVersion=${apiVersionStart} at ${startedAt}`)
+
+let rawCatalog = []
+const catalogOk = await step('run', 'fetch raw catalog', async () => {
+  const response = await fetch(`${API}/v1/asset`)
+  const text = await response.text()
+  if (!response.ok) throw new Error(`HTTP ${response.status} from /v1/asset`)
+  const body = JSON.parse(text)
+  if (!Array.isArray(body)) throw new Error('/v1/asset did not return an array')
+  rawCatalog = body
+  return `${body.length} rows`
+})
+
 for (const c of CASES.filter(c => !only || c.chain === only)) {
   log(`\n=== ${c.chain} (network ${c.network})`)
   let fiat, account, address
@@ -148,49 +231,7 @@ for (const c of CASES.filter(c => !only || c.chain === only)) {
   })
   if (!ok) continue
 
-  const assets = await step(c.chain, 'getSupportedCryptoAssets (this network)', async () =>
-    (await fiat.getSupportedCryptoAssets()).filter(a => a.networkCode === c.network).map(a => `${a.code}/${a.decimals}`))
-  const fiats = await step(c.chain, 'getSupportedFiatCurrencies', async () => (await fiat.getSupportedFiatCurrencies()).map(f => f.code).join(','))
-  await step(c.chain, 'getSupportedCountries (bank allowed)', async () => (await fiat.getSupportedCountries()).filter(x => x.isBuyAllowed).length)
-
-  // Pick an asset on this network; prefer stablecoins.
-  if (assets === undefined) {
-    await step(c.chain, 'select listed asset', async () => { throw new Error('Asset catalog request failed') })
-    continue
-  }
-  const codes = (assets ?? []).map(s => s.split('/')[0])
-  const cur = fiats?.includes('EUR') ? 'EUR' : 'CHF'
-  if (!codes.length && c.chain === 'bitcoin') {
-    for (const [method, input] of [
-      ['quoteBuy', { cryptoAsset: 'BTC', fiatCurrency: cur, fiatAmount: 10000n }],
-      ['buy', { cryptoAsset: 'BTC', fiatCurrency: cur, fiatAmount: 10000n }],
-      ['quoteSell', { cryptoAsset: 'BTC', fiatCurrency: cur, cryptoAmount: 100000000n }],
-      ['sell', { cryptoAsset: 'BTC', fiatCurrency: cur, cryptoAmount: 100000000n }]
-    ]) {
-      await step(c.chain, `${method} -> missing decimals ValueError`, async () => {
-        try { await fiat[method](input) } catch (e) {
-          if (e?.constructor?.name === 'ValueError' && e.message === 'Missing decimals for Bitcoin/BTC') return err(e)
-          throw e
-        }
-        throw new Error('Bitcoin without API decimals was not rejected')
-      })
-    }
-    continue
-  }
-  const code = ['USDT', 'USDC', 'EURC', 'ZCHF', 'ETH', 'POL', 'SOL', 'TRX', 'BTC', 'BNB'].find(x => codes.includes(x)) ?? codes[0]
-  const selectedAsset = (assets ?? []).find(s => s.startsWith(code + '/'))
-  if (!selectedAsset) {
-    await step(c.chain, 'select listed asset', async () => { throw new Error('No listed asset with decimals') })
-    continue
-  }
-  const dec = Number(selectedAsset.split('/')[1])
-  const cryptoAmount = 50n * 10n ** BigInt(dec) // 50 units
-  log(`  -- pair ${code}/${cur}, crypto decimals ${dec}`)
-
-  await step(c.chain, `quoteBuy ${cur}->${code} fiatAmount 100`, () => fiat.quoteBuy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n }))
-  await step(c.chain, `quoteSell ${code}->${cur} cryptoAmount 50`, () => fiat.quoteSell({ cryptoAsset: code, fiatCurrency: cur, cryptoAmount }))
-
-  const tx = await step(c.chain, 'getTransactionDetail(unknown uid) -> expects NoSuchElementError after auth', async () => {
+  const tx = await step(c.chain, 'getTransactionDetail(unknown uid) -> NoSuchElementError after auth', async () => {
     try {
       await fiat.getTransactionDetail('MATRIX-NONEXISTENT-UID')
       throw new Error('NOT REJECTED')
@@ -199,71 +240,119 @@ for (const c of CASES.filter(c => !only || c.chain === only)) {
       throw e
     }
   })
+  if (tx === undefined) log('  (auth did not succeed, or an unknown uid returned a transaction)')
 
-  const buy = await step(c.chain, `buy ${cur}->${code} fiatAmount 100`, async () => {
-    const url = (await fiat.buy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n })).buyUrl
-    if (!url) throw new Error('buy returned no widget URL')
-    return url
+  let listed = []
+  const listedStep = await step(c.chain, 'getSupportedCryptoAssets (this network)', async () => {
+    listed = (await fiat.getSupportedCryptoAssets()).filter(a => a.networkCode === c.network)
+    return listed.map(a => `${a.code}/${a.decimals}`)
   })
-  const sell = await step(c.chain, `sell ${code}->${cur} cryptoAmount 50`, async () => {
-    const url = (await fiat.sell({ cryptoAsset: code, fiatCurrency: cur, cryptoAmount })).sellUrl
-    if (!url) throw new Error('sell returned no widget URL')
-    return url
-  })
-  for (const [kind, url] of [['buy', buy], ['sell', sell]]) {
-    if (!url) continue
-    await step(c.chain, `${kind}Url session valid at /v2/user`, async () => {
-      const u = new URL(url)
-      const session = u.searchParams.get('session')
-      if (!session) throw new Error(`${kind} URL has no session parameter`)
-      const user = await userCheck(session, address)
-      if (user.status !== 200) throw new Error(`${kind} session returned HTTP ${user.status} at /v2/user`)
-      if (!user.addressInProfile) throw new Error(`${kind} session profile does not match the wallet address`)
-      const params = Object.fromEntries([...u.searchParams].filter(([k]) => k !== 'session'))
-      return { ...user, origin: u.origin, path: u.pathname, params }
-    })
+  const fiats = await step(c.chain, 'getSupportedFiatCurrencies', async () => (await fiat.getSupportedFiatCurrencies()).map(f => f.code).join(','))
+  await step(c.chain, 'getSupportedCountries (bank allowed)', async () => (await fiat.getSupportedCountries()).filter(x => x.isBuyAllowed).length)
+  if (!catalogOk) continue
+
+  const networkRows = rawCatalog.filter(row => row && typeof row.blockchain === 'string' && row.blockchain.toLowerCase() === c.network)
+  const buyable = networkRows.filter(row => row.buyable === true)
+  const sellable = networkRows.filter(row => row.sellable === true)
+  const tradable = networkRows.filter(row => row.buyable === true || row.sellable === true)
+  if (listedStep === undefined) {
+    await step(c.chain, 'catalog cross-check', async () => { throw new Error('module catalog request failed') })
+  } else {
+    const missing = tradable.filter(asset => !listed.some(a => a.code === asset.name))
+    for (const asset of missing) {
+      await step(c.chain, `catalog: ${asset.blockchain}/${asset.name} tradable in the API but missing in the module`, async () => {
+        throw new Error('tradable in the API but missing in the module')
+      })
+    }
+    if (missing.length === 0) {
+      await step(c.chain, 'catalog cross-check', async () => `${tradable.length} tradable API assets present in the module`)
+    }
   }
 
-  // Contract checks as an integrator would hit them.
-  await step(c.chain, 'buy with foreign recipient -> recipient mismatch ValueError', async () => {
-    try {
-      await fiat.buy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n, recipient: 'foreign-address' })
-      throw new Error('NOT REJECTED')
-    } catch (e) {
-      if (e?.constructor?.name === 'ValueError' && e.message === 'recipient must match the account address') return err(e)
-      throw e
-    }
-  })
-  await step(c.chain, 'buy with read-only account -> AccountRequiredError', async () => {
-    const ro = new DfxProtocol(await account.toReadOnlyAccount(), { environment: ENV, network: c.network })
-    try {
-      await ro.buy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n })
-      throw new Error('NOT REJECTED')
-    } catch (e) {
-      if (e?.constructor?.name === 'AccountRequiredError') return err(e)
-      throw e
-    }
-  })
-  const ext = `matrix-${c.chain}-${Date.now()}`
-  await step(c.chain, 'buy with externalTransactionId -> URL param', async () => {
-    const u = new URL((await fiat.buy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n, config: { externalTransactionId: ext } })).buyUrl)
-    if (u.searchParams.get('external-transaction-id') !== ext) throw new Error('external-transaction-id missing')
-    return 'external-transaction-id present'
-  })
-  await step(c.chain, 'getTransactionDetail(externalId) before any payment -> NoSuchElementError', async () => {
-    try {
-      await fiat.getTransactionDetail(ext, { idType: 'externalTransactionId' })
-      throw new Error('NOT REJECTED')
-    } catch (e) {
-      if (e?.constructor?.name === 'NoSuchElementError') return 'NoSuchElementError (no transaction registered yet)'
-      throw e
-    }
-  })
-  if (tx === undefined) log('  (auth did not succeed, or an unknown uid returned a transaction)')
+  const cur = fiats?.includes('EUR') ? 'EUR' : 'CHF'
+  const buyAsset = preferred(buyable)
+  const sellAsset = preferred(sellable)
+  log(`  -- buy ${buyAsset ? buyAsset.name : 'none'} / sell ${sellAsset ? sellAsset.name : 'none'} / ${cur}`)
+
+  if (!buyAsset) {
+    skip(c.chain, 'buy', `no buyable asset on ${c.network} in the API catalog`)
+  } else {
+    const code = buyAsset.name
+    await step(c.chain, `quoteBuy ${cur}->${code} fiatAmount 100`, () => fiat.quoteBuy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n }))
+    const buy = await step(c.chain, `buy ${cur}->${code} fiatAmount 100`, async () => {
+      const url = (await fiat.buy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n })).buyUrl
+      if (!url) throw new Error('buy returned no widget URL')
+      return url
+    })
+    await sessionStep(c.chain, 'buy', buy, address)
+    // Contract checks as an integrator would hit them.
+    await step(c.chain, 'buy with foreign recipient -> recipient mismatch ValueError', async () => {
+      try {
+        await fiat.buy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n, recipient: 'foreign-address' })
+        throw new Error('NOT REJECTED')
+      } catch (e) {
+        if (e?.constructor?.name === 'ValueError' && e.message === 'recipient must match the account address') return err(e)
+        throw e
+      }
+    })
+    await step(c.chain, 'buy with read-only account -> AccountRequiredError', async () => {
+      const ro = new DfxProtocol(await account.toReadOnlyAccount(), { environment: ENV, network: c.network })
+      try {
+        await ro.buy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n })
+        throw new Error('NOT REJECTED')
+      } catch (e) {
+        if (e?.constructor?.name === 'AccountRequiredError') return err(e)
+        throw e
+      }
+    })
+    const ext = `matrix-${c.chain}-${Date.now()}`
+    await step(c.chain, 'buy with externalTransactionId -> URL param', async () => {
+      const u = new URL((await fiat.buy({ cryptoAsset: code, fiatCurrency: cur, fiatAmount: 10000n, config: { externalTransactionId: ext } })).buyUrl)
+      if (u.searchParams.get('external-transaction-id') !== ext) throw new Error('external-transaction-id missing')
+      return 'external-transaction-id present'
+    })
+    await step(c.chain, 'getTransactionDetail(externalId) before any payment -> NoSuchElementError', async () => {
+      try {
+        await fiat.getTransactionDetail(ext, { idType: 'externalTransactionId' })
+        throw new Error('NOT REJECTED')
+      } catch (e) {
+        if (e?.constructor?.name === 'NoSuchElementError') return 'NoSuchElementError (no transaction registered yet)'
+        throw e
+      }
+    })
+    if (buyAsset.sellable !== true) await expectUnsupported(c.chain, fiat, 'sell', code, cur, cryptoUnits(buyAsset, listed))
+  }
+
+  if (!sellAsset) {
+    skip(c.chain, 'sell', `no sellable asset on ${c.network} in the API catalog`)
+  } else {
+    const code = sellAsset.name
+    const cryptoAmount = cryptoUnits(sellAsset, listed)
+    await step(c.chain, `quoteSell ${code}->${cur} cryptoAmount 50`, () => fiat.quoteSell({ cryptoAsset: code, fiatCurrency: cur, cryptoAmount }))
+    const sell = await step(c.chain, `sell ${code}->${cur} cryptoAmount 50`, async () => {
+      const url = (await fiat.sell({ cryptoAsset: code, fiatCurrency: cur, cryptoAmount })).sellUrl
+      if (!url) throw new Error('sell returned no widget URL')
+      return url
+    })
+    await sessionStep(c.chain, 'sell', sell, address)
+    if (sellAsset.buyable !== true) await expectUnsupported(c.chain, fiat, 'buy', code, cur)
+  }
 }
 
-writeFileSync(new URL(`matrix-results-${ENV}.json`, OUT), masked(j(results)))
-const fails = results.filter(r => !r.ok)
-log(`\nSUMMARY: ${results.length - fails.length}/${results.length} steps ok`)
+const apiVersionEnd = await apiVersion()
+const finishedAt = new Date().toISOString()
+if (apiVersionStart !== apiVersionEnd) {
+  const error = masked(`${apiVersionStart} -> ${apiVersionEnd}`)
+  results.push({ chain: 'run', name: 'api version changed during the run', ok: false, error })
+  log(`  FAIL api version changed during the run ${error}`)
+}
+const meta = { env: ENV, head, dirty, apiVersionStart, apiVersionEnd, startedAt, finishedAt }
+writeFileSync(new URL(`matrix-results-${ENV}.json`, OUT), masked(j([{ meta }, ...results])))
+log(`META ${j(meta)}`)
+const fails = results.filter(r => r.ok === false)
+const skips = results.filter(r => r.skipped === true)
+const passed = results.filter(r => r.ok === true).length
+log(`\nSUMMARY: ${passed}/${passed + fails.length} steps ok, ${skips.length} skipped`)
 for (const f of fails) log(`  FAIL [${f.chain}] ${f.name}: ${f.error}`)
+for (const s of skips) log(`  SKIP [${s.chain}] ${s.name}: ${s.reason}`)
 process.exit(fails.length === 0 ? 0 : 1)
