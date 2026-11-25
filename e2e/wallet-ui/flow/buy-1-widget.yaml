@@ -1,0 +1,60 @@
+appId: io.tether.wdk.starter.reactnative
+---
+# The seed is on the clipboard, no IBAN is typed, and the account holder's saved account is selected.
+# This flow never contains the seed and takes no screenshot before the wallet tab is shown.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- tapOn: "Import Existing Wallet"
+- tapOn:
+    id: "import-seed"
+- longPressOn:
+    id: "import-seed"
+- tapOn: "Paste"
+# Enter dismisses the keyboard that was covering import-submit. A tap
+# through that keyboard typed into field 1.
+- waitForAnimationToEnd
+- pressKey: Enter
+- waitForAnimationToEnd
+- tapOn:
+    id: "import-submit"
+- extendedWaitUntil:
+    visible:
+      id: "password-input"
+    timeout: 60000
+- tapOn:
+    id: "password-input"
+- inputText: "starter-wallet"
+- tapOn:
+    id: "password-confirm"
+- inputText: "starter-wallet"
+- pressKey: Enter
+- waitForAnimationToEnd
+- tapOn:
+    id: "password-submit"
+- tapOn: "(?i)I prefer to backup manually"
+- extendedWaitUntil:
+    visible:
+      id: "wallet-buy"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Couldn't load"
+    timeout: 60000
+# The purchase screen is opened by link because the home button opens /buy?amount=1100 with no external id. The link carries the amount in EUR cents and the per-run external id.
+- openLink: "wdkstarterreactnative://buy?amount=${BUY_CENTS}&ext=${BUY_EXT}"
+# iOS asks once whether to open the deep link in the app; accept it so the widget can appear.
+- runFlow:
+    when:
+      visible: "(?i)open in .*wdk-starter-react-native.*"
+    commands:
+      - tapOn: "Open"
+# buy() puts the amount and the external id on the widget URL. The page opens at the top of the
+# purchase. There is no scroll: the bank details below are DFX's and are not part of the evidence.
+# The screenshot is checked by the runner's OCR guard before it is kept.
+- extendedWaitUntil:
+    visible: "You spend"
+    timeout: 90000
+- extendedWaitUntil:
+    visible: "Payment Information"
+    timeout: 120000
+- takeScreenshot: buy-widget-open

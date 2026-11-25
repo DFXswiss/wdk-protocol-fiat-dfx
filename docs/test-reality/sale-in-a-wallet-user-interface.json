@@ -1,6 +1,6 @@
 {
   "title": "Sale in a wallet user interface",
-  "scope": "e2e/wallet-ui/ runs two targets from the patched starter wallet. The default target sells 1 USDT or 0.0001 ETH on Sepolia. --target production-polygon sells the given USDT amount on Polygon against the production API [ref 2] and binds the runner protocol to environment production [ref 3]. The runner reads the transaction list [ref 0] and keeps the row whose inputTxId is that hash [ref 1]. It does not send the hash in that request. The chain transfer, the wallet send and that recognition are executed. On the default target the entries are the stand-ins around them, except the bank payout, which is switched off. --target production-polygon uses the production API and the account holder's saved bank account [ref 4]; the patched wallet, Maestro, the simulator and the switched-off bank payout remain.",
+  "scope": "e2e/wallet-ui/ runs two targets from the patched starter wallet. The default target sells 1 USDT or 0.0001 ETH on Sepolia. --target production-polygon sells the given USDT amount on Polygon against the production API [ref 2] and binds the runner protocol to environment production [ref 3]. The runner reads the transaction list [ref 0] and keeps the row whose inputTxId is that hash [ref 1]. It does not send the hash in that request. The chain transfer, the wallet send and that recognition are executed. On the default target the entries are the stand-ins around them, except the bank payout, which is switched off. --target production-polygon uses the production API and the account holder's saved bank account [ref 4]; the patched wallet, Maestro, the simulator and the switched-off bank payout remain. The runner also has a purchase mode (--buy) [ref 5] and a read-only rehearsal (--rehearse) [ref 6].",
   "refs": [
     {
       "file": "e2e/wallet-ui/run-sale.mjs",
@@ -59,6 +59,30 @@
         "response = await fetch(`${PRODUCTION_API}/v1/bankAccount`, {"
       ],
       "span": 4,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "function purchaseMode (options = state.options) {",
+        "return options?.buy === true"
+      ],
+      "span": 2,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "function rehearsalMode (options = state.options) {",
+        "return options?.rehearse === true"
+      ],
+      "span": 2,
       "style": {
         "kind": "abs",
         "backtick": true
@@ -345,12 +369,83 @@
         {
           "file": "e2e/wallet-ui/run-sale.mjs",
           "anchor": [
-            "if (hits[0].state === 'PayoutInProgress' || hits[0].state === 'Completed') {",
-            "assertBookedPayout(hits[0])",
-            "return hits[0]",
+            "if (row.state === 'PayoutInProgress' || row.state === 'Completed') {",
+            "assertBookedPayout(row)",
+            "return { row, booked: true }",
             "}"
           ],
           "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Bank transfer of the purchase",
+      "status": "real — the account holder pays the purchase by bank transfer by hand while the runner waits",
+      "statusKind": "real",
+      "mechanism": "[ref 0] prints that the runner is waiting for the account holder's bank transfer. [ref 1] keeps the new purchase row whose externalTransactionId is the id of this run.",
+      "insteadOf": "the wallet user's own bank transfer",
+      "doesNotProve": "A green run does not prove that the purchase works with another bank, amount or transfer type than the one the account holder used.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "console.log(`wallet-ui buy: waiting up to ${options.follow} minutes for the account holder's bank transfer of ${eurText(options.fiatCents)} EUR`)"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "const ours = fresh.filter(row => row.externalTransactionId === externalId)"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Evidence rehearsal",
+      "status": "replay — read-only checks after sending, against a recorded production transaction",
+      "statusKind": "mixed",
+      "mechanism": "The runner marks the record rehearsal [ref 0]. The protocol writer rejects a record that carries rehearsal or whose result is not pass [ref 1]. Balances in a rehearsal come from the archive RPC at block-1 and block.",
+      "insteadOf": "a run that sends",
+      "doesNotProve": "A rehearsal does not prove that the wallet can send or that DFX books a new transaction; it proves only that the checks after sending work on real transactions.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "rehearsal: true,",
+            "rehearsedTransaction: options.buy ? options.rehearseId : options.rehearseUserOp,"
+          ],
+          "span": 2,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/write-protocol.mjs",
+          "anchor": [
+            "function assertRehearsal (record) {",
+            "if (Object.hasOwn(record, 'rehearsal') || record.result !== 'pass') {",
+            "fail('rehearsal', 'record is a rehearsal or not a passing run')"
+          ],
+          "span": 3,
           "style": {
             "kind": "abs",
             "backtick": true

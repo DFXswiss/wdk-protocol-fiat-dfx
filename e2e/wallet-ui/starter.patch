@@ -174,7 +174,7 @@ new file mode 100644
 index 0000000..a08e4b4
 --- /dev/null
 +++ b/src/app/buy/index.tsx
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,122 @@
 +import React, { useEffect, useRef, useState } from 'react';
 +import { View } from 'react-native';
 +import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -194,7 +194,7 @@ index 0000000..a08e4b4
 +    cryptoAsset: string;
 +    fiatCurrency: string;
 +    fiatAmount: number;
-+    config?: { network?: string };
++    config?: { network?: string; externalTransactionId?: string };
 +  }) => Promise<{ buyUrl?: string } | undefined>;
 +};
 +
@@ -217,15 +217,25 @@ index 0000000..a08e4b4
 +  return parsed;
 +}
 +
++function parseExternalId(value: string | string[] | undefined): string | undefined | null {
++  if (value === undefined) return undefined;
++  if (typeof value !== 'string' || !/^[A-Za-z0-9._:-]{1,256}$/.test(value)) return null;
++  return value;
++}
++
 +export default function BuyScreen() {
 +  const router = useRouter();
-+  const amountParam = useLocalSearchParams<{ amount?: string | string[] }>().amount;
++  const params = useLocalSearchParams<{ amount?: string | string[]; ext?: string | string[] }>();
++  const amountParam = params.amount;
 +  const fiatAmount = parseEurCents(amountParam);
-+  const blocked = fiatAmount === null
-+    ? (amountParam === undefined
-+      ? 'Amount is required'
-+      : 'Amount must be a positive safe integer in EUR cents')
-+    : null;
++  const externalId = parseExternalId(params.ext);
++  const blocked = externalId === null
++    ? 'External id must be 1-256 characters from A-Z, a-z, 0-9, dot, underscore, colon and hyphen'
++    : fiatAmount === null
++      ? (amountParam === undefined
++        ? 'Amount is required'
++        : 'Amount must be a positive safe integer in EUR cents')
++      : null;
 +  const activeIndex = useAccounts((s) => s.activeIndex);
 +  const wallet = useAccount({ network: DFX_BINDING.walletKey, accountIndex: activeIndex });
 +  const dfx = useProtocol<BuyCaller>({
@@ -239,13 +249,15 @@ index 0000000..a08e4b4
 +  const [error, setError] = useState<string | null>(null);
 +
 +  useEffect(() => {
-+    if (fiatAmount === null || !wallet.address || started.current) return;
++    if (fiatAmount === null || externalId === null || !wallet.address || started.current) return;
 +    started.current = true;
 +    dfx.buy({
 +      cryptoAsset: 'USDT',
 +      fiatCurrency: 'EUR',
 +      fiatAmount,
-+      config: { network: DFX_BINDING.network },
++      config: externalId === undefined
++        ? { network: DFX_BINDING.network }
++        : { network: DFX_BINDING.network, externalTransactionId: externalId },
 +    }).then((result) => {
 +      const url = typeof result?.buyUrl === 'string' ? result.buyUrl : '';
 +      if (!url) {
@@ -256,7 +268,7 @@ index 0000000..a08e4b4
 +    }).catch((caught: unknown) => {
 +      setError(buyErrorText(caught));
 +    });
-+  }, [wallet.address, dfx, fiatAmount]);
++  }, [wallet.address, dfx, fiatAmount, externalId]);
 +
 +  const done = () => {
 +    router.dismissTo('/(app)/(tabs)/wallet');

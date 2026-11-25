@@ -3,10 +3,13 @@
 
 // Sepolia sale of 1 USDT or 0.0001 ETH for EUR, or the same transfer rejected on the review screen.
 // --target production-polygon sells a given USDT amount on Polygon mainnet against the production API.
+// --target production-polygon --buy buys USDT on Polygon for EUR cents. The account holder pays by bank transfer.
+// --buy --rehearse replays the purchase checks against an existing buy. It does not pay and it does not open an order.
+// --rehearse replays the production sale checks against an existing sponsored sale. It does not send and it does not open an order.
 // The WDK starter wallet on the iOS simulator confirms the send, or leaves the review screen.
 // Without --send, only the preflight runs and the app is not driven.
 import { execFileSync, spawn } from 'node:child_process'
-import { createHash, randomInt } from 'node:crypto'
+import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { closeSync, constants, copyFileSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, rmdirSync, unlinkSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -33,6 +36,10 @@ const EXPLORER = 'https://eth-sepolia.blockscout.com'
 const PRODUCTION_EXPLORER = 'https://polygon.blockscout.com'
 const DEFAULT_RPC = 'https://ethereum-sepolia-rpc.publicnode.com'
 const PRODUCTION_RPC = 'https://polygon-bor-rpc.publicnode.com'
+// The default Polygon RPC refuses historical state. A purchase and a rehearsal read those blocks here.
+const ARCHIVE_RPC = 'https://polygon.gateway.tenderly.co'
+const BASELINE_SOURCE = 'archive block-1 via polygon.gateway.tenderly.co'
+const PURCHASE_BASELINE_SOURCE = 'preflight latest; archive block-1 and block via polygon.gateway.tenderly.co'
 const BUNDLE_ID = 'io.tether.wdk.starter.reactnative'
 const CHAIN_ID = 11155111n
 const PRODUCTION_CHAIN_ID = 137n
@@ -75,6 +82,7 @@ const IBAN_LABEL = 'CH 00000 (invented per run)'
 const PRODUCTION_IBAN_LABEL = 'account holder\'s active bank account (not recorded)'
 const FLOW_SHOTS = ['sell-widget-open.png', 'send-review.png', 'send-success.png']
 const REJECT_FLOW_SHOTS = ['sell-widget-open.png', 'send-review.png', 'send-rejected.png']
+const BUY_FLOW_SHOTS = ['buy-widget-open.png']
 // Short transaction id in explorer-<hash>.png: 10 hex digits, no 0x prefix.
 const HASH_SHORT = 10
 const SALE_RECORD_FIELDS = [
@@ -91,6 +99,52 @@ const PRODUCTION_RECORD_FIELDS = [
   'userOperationHash', 'hash', 'block', 'paymaster', 'actualGasCost', 'actualGasUsed', 'feePaidBy', 'bundlerHost', 'polBalance',
   'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
   'screenshots'
+]
+const PURCHASE_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
+  'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'ibanCountryAndClearing', 'asset', 'mode', 'fiatCents', 'externalTransactionId', 'quote',
+  'hash', 'block', 'payoutFrom', 'value', 'balances', 'backend', 'moduleStatus', 'humanStep', 'waitedSeconds',
+  'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
+  'baselineSource', 'screenshots'
+]
+// Purchase fields that a read-only rehearsal can fill, plus the fields a later sale rehearsal reuses.
+const REHEARSAL_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'ibanCountryAndClearing', 'asset', 'mode', 'fiatCents', 'externalTransactionId',
+  'hash', 'block', 'payoutFrom', 'value', 'balances', 'backend', 'moduleStatus',
+  'backendReads', 'rpcReadRetries', 'explorerReloads',
+  'rehearsal', 'rehearsedTransaction', 'notRehearsed', 'baselineSource',
+  'screenshots'
+]
+// Production-sale fields a read-only rehearsal can fill. The wallet, the build and the preflight balance are not among them.
+const SALE_REHEARSAL_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'depositAddress', 'ibanCountryAndClearing', 'asset', 'mode',
+  'userOperationHash', 'hash', 'block', 'paymaster', 'actualGasCost', 'actualGasUsed', 'feePaidBy', 'bundlerHost',
+  'balances', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads',
+  'rehearsal', 'rehearsedTransaction', 'notRehearsed', 'amountSource', 'baselineSource',
+  'screenshots'
+]
+// Steps of a production sale that this rehearsal does not run.
+const SALE_NOT_REHEARSED = [
+  'module-copy',
+  'build-record',
+  'maestro',
+  'simulator',
+  'tesseract',
+  'preflight-balance',
+  'sell-quote',
+  'bundler-entry-points',
+  'wallet-lock',
+  'clipboard',
+  'wallet-ui-flow',
+  'send-review-screenshot',
+  'send-success-screenshot',
+  'wallet-confirmation-count',
+  'backend-wait',
+  'installed-bundle',
+  'wallet-state'
 ]
 const REJECT_RECORD_FIELDS = [
   'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
@@ -316,6 +370,14 @@ function productionTarget (options = state.options) {
   return options?.target === 'production-polygon'
 }
 
+function purchaseMode (options = state.options) {
+  return options?.buy === true
+}
+
+function rehearsalMode (options = state.options) {
+  return options?.rehearse === true
+}
+
 function displayAmount (text) {
   if (!text.includes('.')) return text
   return text.replace(/0+$/, '').replace(/\.$/, '')
@@ -325,6 +387,10 @@ function selectedAsset () {
   const asset = lookupAsset(state.options.asset)
   if (!productionTarget()) return asset
   const amountText = state.options.amount
+  // A sale rehearsal learns the amount from the chain and has no --amount text.
+  const reviewAmount = typeof amountText === 'string'
+    ? `^${displayAmount(amountText).replace(/\./g, '[.]')} USDT$`
+    : ''
   return {
     ...asset,
     baseUnits: state.options.amountBase,
@@ -332,12 +398,14 @@ function selectedAsset () {
     sellEntry: 'sell-entry',
     assetTestId: 'send-asset-usdt-polygon',
     amountText,
-    reviewAmount: `^${displayAmount(amountText).replace(/\./g, '[.]')} USDT$`
+    reviewAmount
   }
 }
 
 function recordFields () {
+  if (rehearsalMode()) return purchaseMode() ? REHEARSAL_RECORD_FIELDS : SALE_REHEARSAL_RECORD_FIELDS
   if (state.options && state.options.reject) return REJECT_RECORD_FIELDS
+  if (purchaseMode()) return PURCHASE_RECORD_FIELDS
   if (productionTarget()) return PRODUCTION_RECORD_FIELDS
   return SALE_RECORD_FIELDS
 }
@@ -390,6 +458,16 @@ function roundedSaleBase (base) {
   return kept * (10n ** BigInt(exponent))
 }
 
+function amountCents (value) {
+  const text = typeof value === 'number' && Number.isFinite(value) ? String(value) : typeof value === 'string' ? value.trim() : ''
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return null
+  const [whole, frac = ''] = text.split('.')
+  if (frac.length > 2 && !/^0+$/.test(frac.slice(2))) return null
+  const cents = Number(whole) * 100 + Number((frac + '00').slice(0, 2))
+  if (!Number.isSafeInteger(cents)) return null
+  return cents
+}
+
 function amountIsSale (value) {
   const expected = roundedSaleBase(state.options.amountBase)
   if (typeof value === 'string') {
@@ -405,8 +483,43 @@ function amountIsSale (value) {
   return false
 }
 
+function assertRehearseUsage (options) {
+  // --rehearse is shared. --buy selects the purchase rehearsal; without it, the sale rehearsal.
+  if (!options.rehearse) {
+    if (options.rehearseId != null) throw new UsageError('--rehearse-id requires --buy --rehearse')
+    throw new UsageError('--rehearse-user-op requires --rehearse')
+  }
+  if (options.send) throw new UsageError('--rehearse cannot be combined with --send')
+  if (options.confirm) throw new UsageError('--rehearse cannot be combined with --confirm')
+  if (options.reject) throw new UsageError('--rehearse cannot be combined with --reject')
+  if (options.amount != null) throw new UsageError('--rehearse cannot be combined with --amount')
+  if (options.fiatCents != null) throw new UsageError('--rehearse cannot be combined with --fiat-cents')
+  if (options.follow != null) throw new UsageError('--rehearse cannot be combined with --follow')
+  if (options.udid) throw new UsageError('--rehearse cannot be combined with --udid')
+  if (options.asset === 'eth') throw new UsageError('--asset eth is not valid with --rehearse')
+  if (options.target !== 'production-polygon') throw new UsageError('--rehearse is only valid for --target production-polygon')
+  if (options.buy) {
+    if (options.rehearseUserOp != null) throw new UsageError('--rehearse-user-op cannot be combined with --buy')
+    if (options.rehearseId == null) throw new UsageError('Required argument missing: --rehearse-id <DFX id>')
+    if (!/^[1-9]\d*$/.test(options.rehearseId) || !Number.isSafeInteger(Number(options.rehearseId))) {
+      throw new UsageError('--rehearse-id must be a positive integer')
+    }
+    options.rehearseId = Number(options.rehearseId)
+  } else {
+    if (options.rehearseId != null) throw new UsageError('--rehearse-id requires --buy --rehearse')
+    if (options.rehearseUserOp == null) throw new UsageError('Required argument missing: --rehearse-user-op <hash>')
+    if (!/^0x[0-9a-fA-F]{64}$/.test(options.rehearseUserOp)) {
+      throw new UsageError('--rehearse-user-op must be a 32-byte hex hash')
+    }
+    options.rehearseUserOp = options.rehearseUserOp.toLowerCase()
+  }
+  if (!options.screenshots) throw new UsageError('Required argument missing: --screenshots <dir>')
+  if (!options.record) throw new UsageError('Required argument missing: --record <file>')
+  if (!basename(options.record).includes('rehearsal')) throw new UsageError('--record file name must contain rehearsal')
+}
+
 function parseArgs (args) {
-  const options = { rpc: DEFAULT_RPC, send: false, confirm: false, reject: false, asset: 'usdt', target: 'sandbox-sepolia' }
+  const options = { rpc: DEFAULT_RPC, send: false, confirm: false, reject: false, buy: false, rehearse: false, asset: 'usdt', target: 'sandbox-sepolia' }
   const valued = new Map([
     ['--seed-file', 'seedFile'],
     ['--udid', 'udid'],
@@ -416,12 +529,15 @@ function parseArgs (args) {
     ['--rpc', 'rpc'],
     ['--asset', 'asset'],
     ['--target', 'target'],
-    ['--amount', 'amount']
+    ['--amount', 'amount'],
+    ['--fiat-cents', 'fiatCents'],
+    ['--rehearse-id', 'rehearseId'],
+    ['--rehearse-user-op', 'rehearseUserOp']
   ])
   const seen = new Set()
   for (let i = 0; i < args.length; i++) {
     const name = args[i]
-    if (name === '--send' || name === '--confirm' || name === '--reject') {
+    if (name === '--send' || name === '--confirm' || name === '--reject' || name === '--buy' || name === '--rehearse') {
       if (seen.has(name)) throw new UsageError(`Duplicate argument: ${name}`)
       seen.add(name)
       options[name.slice(2)] = true
@@ -436,16 +552,35 @@ function parseArgs (args) {
     }
   }
   if (!options.seedFile) throw new UsageError('Required argument missing: --seed-file <path>')
-  if (!options.udid) throw new UsageError('Required argument missing: --udid <id>')
+  if (options.rehearse || options.rehearseId != null || options.rehearseUserOp != null) assertRehearseUsage(options)
+  else if (!options.udid) throw new UsageError('Required argument missing: --udid <id>')
   lookupAsset(options.asset)
   if (options.target !== 'sandbox-sepolia' && options.target !== 'production-polygon') {
     throw new UsageError('--target must be sandbox-sepolia or production-polygon')
   }
+  if (options.buy) {
+    if (options.target !== 'production-polygon') throw new UsageError('--buy is only valid for --target production-polygon')
+    if (options.asset !== 'usdt') throw new UsageError('--asset eth is not valid with --buy')
+    if (options.reject) throw new UsageError('--buy and --reject cannot be combined')
+    if (options.amount != null) throw new UsageError('--buy and --amount cannot be combined')
+    if (!options.rehearse) {
+      if (options.fiatCents == null) throw new UsageError('Required argument missing: --fiat-cents <int>')
+      const cents = Number(options.fiatCents)
+      if (!/^[1-9]\d*$/.test(options.fiatCents) || !Number.isSafeInteger(cents) || String(cents) !== options.fiatCents) {
+        throw new UsageError('--fiat-cents must be a positive integer of EUR cents')
+      }
+      options.fiatCents = cents
+    }
+  } else if (options.fiatCents != null) {
+    throw new UsageError('--fiat-cents requires --buy')
+  }
   if (options.target === 'production-polygon') {
     if (options.asset !== 'usdt') throw new UsageError('--asset eth is not valid for --target production-polygon')
     if (options.reject) throw new UsageError('--reject is not valid for --target production-polygon')
-    if (options.amount == null) throw new UsageError('Required argument missing: --amount <USDT>')
-    options.amountBase = parseSaleAmount(options.amount)
+    if (!options.buy && !options.rehearse) {
+      if (options.amount == null) throw new UsageError('Required argument missing: --amount <USDT>')
+      options.amountBase = parseSaleAmount(options.amount)
+    }
     if (!seen.has('--rpc')) options.rpc = PRODUCTION_RPC
   } else if (options.amount != null) {
     throw new UsageError('--amount is only valid for --target production-polygon')
@@ -799,10 +934,14 @@ async function readActiveIban (session) {
   return iban
 }
 
-async function productionQuoteAndIban (seed, rpc, amountBase) {
-  const wdk = new WDK(seed)
+function productionWdk (seed, rpc) {
+  return new WDK(seed)
     .registerWallet('polygon', WalletManagerEvm, { provider: rpc })
     .registerProtocol('polygon', 'dfx', DfxProtocol, { environment: 'production', network: 'polygon' })
+}
+
+async function productionQuoteAndIban (seed, rpc, amountBase) {
+  const wdk = productionWdk(seed, rpc)
   try {
     const account = await wdk.getAccount('polygon', 0)
     const fiat = account.getFiatProtocol('dfx')
@@ -833,7 +972,151 @@ async function productionQuoteAndIban (seed, rpc, amountBase) {
   }
 }
 
+// quoteBuy's cryptoAmount is the estimated USDT in base units. A valid quote does not
+// report the provider minimum; AmountTooLow puts that limit on the thrown error.
+function usdtDecimal (base) {
+  const whole = base / 1000000n
+  const frac = (base % 1000000n).toString().padStart(6, '0').replace(/0+$/, '')
+  return frac === '' ? whole.toString() : `${whole}.${frac}`
+}
+
+function purchaseQuoteRecord (quote) {
+  return {
+    estimatedUsdt: usdtDecimal(quote.cryptoAmount),
+    estimatedUsdtBase: quote.cryptoAmount.toString(),
+    fiatAmount: quote.fiatAmount.toString(),
+    fee: quote.fee.toString(),
+    rate: quote.rate
+  }
+}
+
+function buyQuoteAccepts (quote, fiatAmount) {
+  return Boolean(quote) &&
+    typeof quote.cryptoAmount === 'bigint' && quote.cryptoAmount > 0n &&
+    quote.fiatAmount === fiatAmount &&
+    typeof quote.fee === 'bigint' && quote.fee >= 0n &&
+    typeof quote.rate === 'string' && quote.rate !== ''
+}
+
+async function purchaseQuoteAndBaseline (seed, rpc, fiatCents) {
+  const wdk = productionWdk(seed, rpc)
+  try {
+    const account = await wdk.getAccount('polygon', 0)
+    const fiat = account.getFiatProtocol('dfx')
+    const fiatAmount = BigInt(fiatCents)
+    let buyUrl
+    try {
+      ;({ buyUrl } = await fiat.buy({
+        cryptoAsset: 'USDT',
+        fiatCurrency: 'EUR',
+        fiatAmount,
+        config: { network: 'polygon' }
+      }))
+    } catch {
+      throw new NotRunError('not run: production sign-in failed')
+    }
+    rememberSecret(buyUrl)
+    let session
+    try {
+      session = new URL(buyUrl).searchParams.get('session')
+    } catch {
+      session = null
+    }
+    if (!session) throw new NotRunError('not run: production sign-in returned no session')
+    rememberSecret(session)
+    const iban = await readActiveIban(session)
+    let quote
+    try {
+      quote = await fiat.quoteBuy({
+        cryptoAsset: 'USDT',
+        fiatCurrency: 'EUR',
+        fiatAmount,
+        config: { network: 'polygon' }
+      })
+    } catch (error) {
+      if (error instanceof NotRunError) throw error
+      throw new NotRunError(`not run: buy quote is not valid (${redact(error?.message ?? error)})`)
+    }
+    if (!buyQuoteAccepts(quote, fiatAmount)) throw new NotRunError('not run: buy quote is not valid')
+    const rows = await readTransactions(session, true)
+    const buyBaseline = new Set()
+    for (const row of rows) {
+      if (row && row.type === 'Buy' && row.id != null) buyBaseline.add(String(row.id))
+    }
+    return { iban, quote: purchaseQuoteRecord(quote), buyBaseline }
+  } finally {
+    await wdk.dispose?.()
+  }
+}
+
+async function rehearsePreflight (options) {
+  let porcelain
+  let moduleHead
+  try {
+    porcelain = git(['status', '--porcelain'])
+    moduleHead = git(['rev-parse', 'HEAD'])
+  } catch {
+    throw new NotRunError('not run: git failed')
+  }
+  if (porcelain !== '') throw new NotRunError('not run: the module working tree is not clean')
+  const backendCommitStart = await readVersion(true)
+  const provider = new JsonRpcProvider(options.rpc)
+  state.provider = provider
+  let network
+  try {
+    network = await provider.getNetwork()
+  } catch {
+    throw new NotRunError('not run: RPC unreachable')
+  }
+  if (network.chainId !== PRODUCTION_CHAIN_ID) throw new NotRunError(`not run: chain id is ${network.chainId}`)
+  const seed = await readPrivateFile(options.seedFile)
+  rememberSecret(seed)
+  let account
+  try {
+    account = await deriveAccount(seed, options.rpc)
+  } catch {
+    throw new NotRunError('not run: account could not be derived')
+  }
+  if (options.buy) {
+    // buy() returns a widget URL and does not create an order. The amount is only amount-in on that URL.
+    try {
+      await purchaseSession(seed, options.rpc, 1)
+    } catch (error) {
+      if (error instanceof CheckError) throw new NotRunError(`not run: ${error.message}`)
+      throw error
+    }
+  } else {
+    // sell() returns a widget URL and does not create an order. The amount is only amount-in on that URL.
+    try {
+      await saleSession(seed, options.rpc)
+    } catch (error) {
+      if (error instanceof CheckError) throw new NotRunError(`not run: ${error.message}`)
+      throw error
+    }
+  }
+  const iban = await readActiveIban(state.session)
+  rememberIban(iban)
+  state.saleIban = iban
+  if (options.buy) return { seed, moduleHead, backendCommitStart, account, provider, activeIban: iban }
+  const bundlerHost = readPolygonBundler()
+  const archive = new JsonRpcProvider(ARCHIVE_RPC, 137, { staticNetwork: true })
+  state.provider = archive
+  try { provider.destroy() } catch { /* closing the chain-id provider is not a chain check */ }
+  return {
+    seed,
+    moduleHead,
+    backendCommitStart,
+    account,
+    provider: archive,
+    usdt: new Contract(PRODUCTION_USDT, ERC20_ABI, archive),
+    activeIban: iban,
+    archive: true,
+    bundlerHost
+  }
+}
+
 async function preflight (options) {
+  if (options.rehearse) return rehearsePreflight(options)
   let porcelain
   let moduleHead
   try {
@@ -913,6 +1196,16 @@ async function preflight (options) {
   }
   const asset = lookupAsset(options.asset)
   if (productionTarget(options)) {
+    if (options.buy) {
+      readPolygonBundler()
+      const purchase = await purchaseQuoteAndBaseline(seed, options.rpc, options.fiatCents)
+      rememberIban(purchase.iban)
+      state.saleIban = purchase.iban
+      return {
+        seed, moduleHead, build, maestroVersion, simulatorRuntime, backendCommitStart, account, provider, usdt,
+        polBalance: ethBalance, usdtBalance, activeIban: purchase.iban, quote: purchase.quote, buyBaseline: purchase.buyBaseline
+      }
+    }
     if (usdtBalance < options.amountBase) throw new NotRunError('not run: account has less USDT than --amount')
     const activeIban = await productionQuoteAndIban(seed, options.rpc, options.amountBase)
     rememberIban(activeIban)
@@ -944,6 +1237,7 @@ function failedStep (stdout) {
 }
 
 function saleFlowShots () {
+  if (purchaseMode()) return BUY_FLOW_SHOTS
   if (productionTarget()) return ['send-review.png', 'send-success.png']
   return FLOW_SHOTS
 }
@@ -1045,8 +1339,9 @@ async function runFlow (file, env, secrets) {
       copied = await copyShots(outDir, state.options.screenshots)
     } catch (error) {
       if (error instanceof CheckError) throw error
+      const unpaid = purchaseMode() ? 'nothing paid' : 'nothing sent'
       const step = state.evidence.depositAddress && confirmationCount(result.stdout) === 1 ? undefined : state.failedStep
-      throw new CheckError('screenshots', `screenshot copy failed${state.evidence.depositAddress ? '' : '; nothing sent'}`, step)
+      throw new CheckError('screenshots', `screenshot copy failed${state.evidence.depositAddress ? '' : `; ${unpaid}`}`, step)
     }
     state.screenshots.push(...copied)
     return { code: result.code, stdout: result.stdout }
@@ -1376,6 +1671,16 @@ async function checkSponsoredChain (prelude, userOpHash, depositAddress) {
   if (paymaster === getAddress('0x0000000000000000000000000000000000000000')) {
     throw new CheckError('userop-event', 'paymaster is zero')
   }
+  // The account that sends is not the paymaster, and a paymaster is a contract.
+  let eventSender
+  try {
+    eventSender = getAddress(decoded.args.sender)
+  } catch {
+    throw new CheckError('userop-event', 'sender is not an address')
+  }
+  if (paymaster === eventSender || paymaster.toLowerCase() === String(prelude.account).toLowerCase()) {
+    throw new CheckError('userop-event', 'paymaster is the sender or the account')
+  }
   const actualGasCost = decoded.args.actualGasCost
   const actualGasUsed = decoded.args.actualGasUsed
   if (typeof actualGasCost !== 'bigint' || typeof actualGasUsed !== 'bigint') {
@@ -1394,6 +1699,16 @@ async function checkSponsoredChain (prelude, userOpHash, depositAddress) {
   if (transfers.length !== 1) throw new CheckError('transfer', `found ${transfers.length} USDT Transfer logs from the account to the deposit address`)
   const block = Number(quantity(raw.blockNumber, 'receipt'))
   if (!Number.isSafeInteger(block) || block < 1) throw new CheckError('receipt', 'block number is not usable')
+  let paymasterCode
+  try {
+    // prelude.provider is the archive provider in a rehearsal, and the sale RPC otherwise.
+    paymasterCode = await readAtBlock(block, () => prelude.provider.getCode(paymaster, block))
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError('userop-event', 'paymaster code read failed')
+  }
+  if (typeof paymasterCode !== 'string') throw new CheckError('userop-event', 'paymaster code read failed')
+  if (paymasterCode === '0x') throw new CheckError('userop-event', 'paymaster has no code')
   const accountUsdtBefore = await tokenBalanceAt(prelude, prelude.account, block - 1, 'balance-account-usdt')
   const accountUsdtAfter = await tokenBalanceAt(prelude, prelude.account, block, 'balance-account-usdt')
   if (accountUsdtBefore - accountUsdtAfter !== amount) {
@@ -1436,7 +1751,10 @@ async function readTransaction (provider, hash) {
 
 async function etherBalanceAt (prelude, address, blockNumber, failedCheck) {
   try {
-    const value = await readAtBlock(blockNumber, () => prelude.provider.getBalance(address, blockNumber))
+    const read = () => prelude.provider.getBalance(address, blockNumber)
+    // The archive RPC is the only reader that still serves a block from a finished sale.
+    if (prelude.archive) return readArchiveQuantity(read, failedCheck)
+    const value = await readAtBlock(blockNumber, read)
     return BigInt(value)
   } catch (error) {
     if (error instanceof CheckError) throw error
@@ -1446,7 +1764,9 @@ async function etherBalanceAt (prelude, address, blockNumber, failedCheck) {
 
 async function tokenBalanceAt (prelude, address, blockNumber, failedCheck) {
   try {
-    const value = await readAtBlock(blockNumber, () => prelude.usdt.balanceOf(address, { blockTag: blockNumber }))
+    const read = () => prelude.usdt.balanceOf(address, { blockTag: blockNumber })
+    if (prelude.archive) return readArchiveQuantity(read, failedCheck)
+    const value = await readAtBlock(blockNumber, read)
     return BigInt(value)
   } catch (error) {
     if (error instanceof CheckError) throw error
@@ -1639,7 +1959,11 @@ async function sessionFor (seed, rpc) {
   return session
 }
 
-async function readTransactions (session) {
+async function readTransactions (session, preflight = false) {
+  const fail = (check, message) => {
+    if (preflight) throw new NotRunError(`not run: ${message}`)
+    throw new CheckError(check, message)
+  }
   state.backendReads++
   let response
   try {
@@ -1649,38 +1973,45 @@ async function readTransactions (session) {
       signal: AbortSignal.timeout(30_000)
     })
   } catch {
-    throw new CheckError('backend-read', 'transaction list unreachable')
+    fail('backend-read', 'transaction list unreachable')
   }
-  if (!response.ok) throw new CheckError('backend-read', `transaction list returned HTTP ${response.status}`)
+  if (!response.ok) fail('backend-read', `transaction list returned HTTP ${response.status}`)
   let body
   try {
     body = await response.json()
   } catch {
-    throw new CheckError('backend-read', 'transaction list was not JSON')
+    fail('backend-read', 'transaction list was not JSON')
   }
-  if (!Array.isArray(body)) throw new CheckError('backend-shape', 'transaction list was not an array')
+  if (!Array.isArray(body)) fail('backend-shape', 'transaction list was not an array')
   return body
+}
+
+// One pass of the sale follow: the row whose inputTxId is the transaction hash, its shape, and its state.
+// A booked row is returned. A failed state is red. Anything else is not booked and is not waited on here.
+function inspectSaleRows (rows, hash) {
+  const hits = rows.filter(row => String(row?.inputTxId ?? '').toLowerCase() === hash)
+  if (hits.length > 1) throw new CheckError('backend-count', `found ${hits.length} records`)
+  if (hits.length !== 1) return { row: null, booked: false }
+  const row = hits[0]
+  assertSaleShape(row)
+  state.evidence.backend = backendView(row)
+  if (row.state === 'PayoutInProgress' || row.state === 'Completed') {
+    assertBookedPayout(row)
+    return { row, booked: true }
+  }
+  if (FAILED_STATES.has(row.state)) {
+    throw new CheckError('backend-state', `state ${row.state}; reason ${row.reason ?? 'none'}`)
+  }
+  return { row, booked: false }
 }
 
 async function followBackend (session, hash, followMinutes) {
   const deadline = Date.now() + followMinutes * 60_000
   let last = null
   while (true) {
-    const rows = await readTransactions(session)
-    const hits = rows.filter(row => String(row?.inputTxId ?? '').toLowerCase() === hash)
-    if (hits.length > 1) throw new CheckError('backend-count', `found ${hits.length} records`)
-    if (hits.length === 1) {
-      assertSaleShape(hits[0])
-      last = hits[0]
-      state.evidence.backend = backendView(hits[0])
-      if (hits[0].state === 'PayoutInProgress' || hits[0].state === 'Completed') {
-        assertBookedPayout(hits[0])
-        return hits[0]
-      }
-      if (FAILED_STATES.has(hits[0].state)) {
-        throw new CheckError('backend-state', `state ${hits[0].state}; reason ${hits[0].reason ?? 'none'}`)
-      }
-    }
+    const found = inspectSaleRows(await readTransactions(session), hash)
+    if (found.row) last = found.row
+    if (found.booked) return found.row
     if (Date.now() + 20_000 > deadline) {
       const reason = last?.reason ?? 'none'
       const current = last?.state ?? 'none'
@@ -1844,19 +2175,20 @@ async function captureExplorer (browser, hash) {
   }
 }
 
-async function captureBooking (browser, session, hash, sale) {
-  const name = bookingShotName(sale.uid, session)
+function shortenedTx (hash) {
+  return (hash.slice(0, 24) + '...' + hash.slice(-22)).toLowerCase()
+}
+
+async function captureBookingPage (browser, session, uid, expected, keep) {
+  const name = bookingShotName(uid, session)
   const filePath = absentShot(name, 'booking-capture')
-  const stateText = sale.state === 'Completed' ? 'Completed' : 'Payout in progress'
-  const inputTx = (hash.slice(0, 24) + '...' + hash.slice(-22)).toLowerCase()
-  const keep = [String(sale.id), 'Sell', stateText, inputTx]
   let context
   try {
     context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
     const page = await context.newPage()
-    await page.goto(`${appOrigin()}/tx/${encodeURIComponent(String(sale.uid))}?session=${encodeURIComponent(session)}&lang=en`)
+    await page.goto(`${appOrigin()}/tx/${encodeURIComponent(String(uid))}?session=${encodeURIComponent(session)}&lang=en`)
     try {
-      await page.waitForFunction(({ id, inputTx: shownHash, stateText: shownState }) => {
+      await page.waitForFunction(checks => {
         const lines = (globalThis.document.body?.innerText || '').split('\n').map(line => line.trim()).filter(Boolean)
         const matches = (label, value, lowercase = false) => {
           const indexes = lines.flatMap((line, index) => line === label ? [index] : [])
@@ -1864,8 +2196,8 @@ async function captureBooking (browser, session, hash, sale) {
           const next = lines[indexes[0] + 1]
           return lowercase ? next?.toLowerCase() === value : next === value
         }
-        return matches('ID', id) && matches('Type', 'Sell') && matches('State', shownState) && matches('Input TX', shownHash, true)
-      }, { id: String(sale.id), inputTx, stateText }, { timeout: 60_000 })
+        return checks.every(item => matches(item.label, item.value, item.lowercase === true))
+      }, expected, { timeout: 60_000 })
     } catch (error) {
       if (error.name !== 'TimeoutError') throw error
       throw new CheckError('booking-capture', 'Booking page did not show id, hash and state within 60 seconds')
@@ -1878,6 +2210,27 @@ async function captureBooking (browser, session, hash, sale) {
   } finally {
     if (context) await context.close().catch(() => {})
   }
+}
+
+async function captureBooking (browser, session, hash, sale) {
+  const stateText = sale.state === 'Completed' ? 'Completed' : 'Payout in progress'
+  const inputTx = shortenedTx(hash)
+  await captureBookingPage(browser, session, sale.uid, [
+    { label: 'ID', value: String(sale.id) },
+    { label: 'Type', value: 'Sell' },
+    { label: 'State', value: stateText },
+    { label: 'Input TX', value: inputTx, lowercase: true }
+  ], [String(sale.id), 'Sell', stateText, inputTx])
+}
+
+async function capturePurchaseBooking (browser, session, hash, row) {
+  const outputTx = shortenedTx(hash)
+  await captureBookingPage(browser, session, row.uid, [
+    { label: 'ID', value: String(row.id) },
+    { label: 'Type', value: 'Buy' },
+    { label: 'State', value: 'Completed' },
+    { label: 'Output TX', value: outputTx, lowercase: true }
+  ], [String(row.id), 'Buy', 'Completed', outputTx])
 }
 
 async function captureEvidence (session, hash, sale) {
@@ -1931,8 +2284,7 @@ function sendFlowEnv (depositRaw) {
   }
 }
 
-async function assertClosed (prelude) {
-  const options = state.options
+async function assertClosedBackendAndTree (prelude) {
   const backendCommitEnd = await readVersion(false)
   if (backendCommitEnd !== prelude.backendCommitStart) {
     throw new CheckError('backend-commit', 'backend commit changed during the run')
@@ -1951,6 +2303,11 @@ async function assertClosed (prelude) {
   if (porcelain !== '' || head !== prelude.moduleHead) {
     throw new CheckError('dirty-tree', 'the module tree changed during the run')
   }
+}
+
+async function assertClosed (prelude) {
+  await assertClosedBackendAndTree(prelude)
+  const options = state.options
   let bundleSha
   try {
     bundleSha = installedBundleSha(options.udid)
@@ -2114,6 +2471,475 @@ async function rejectTransfer (prelude, depositAddress, depositRaw) {
   await rejectShotSet(REJECT_FLOW_SHOTS)
 }
 
+function eurText (cents) {
+  const whole = Math.trunc(cents / 100)
+  const frac = String(cents % 100).padStart(2, '0')
+  return `${whole}.${frac}`
+}
+
+function purchaseExternalId (moduleHead) {
+  const now = new Date()
+  const pad = value => String(value).padStart(2, '0')
+  const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`
+  const id = `wdk-e2e-buy-${moduleHead.slice(0, 8)}-${stamp}-${randomBytes(4).toString('hex')}`
+  if (!/^[A-Za-z0-9._:-]{1,256}$/.test(id)) throw new CheckError('record', 'externalTransactionId is not valid')
+  return id
+}
+
+function assertBuyFlowShots () {
+  const shots = state.screenshots.map(item => {
+    if (sha256File(join(state.options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    return item
+  })
+  const byName = new Map(shots.map(item => [item.file, item]))
+  if (byName.size !== shots.length || BUY_FLOW_SHOTS.some(name => !byName.has(name)) || byName.size !== BUY_FLOW_SHOTS.length) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+}
+
+async function saleSession (seed, rpc) {
+  const wdk = productionWdk(seed, rpc)
+  state.wdk = wdk
+  let sellUrl
+  try {
+    const account = await wdk.getAccount('polygon', 0)
+    const fiat = account.getFiatProtocol('dfx')
+    state.fiat = fiat
+    // sell() returns a widget URL and does not create an order, and it does not call paymentInfos.
+    // The amount is only amount-in on that URL. The rehearsed sale amount comes from the chain, later.
+    ;({ sellUrl } = await fiat.sell({ cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: USDT_AMOUNT }))
+  } catch {
+    throw new CheckError('backend-auth', 'production sign-in failed')
+  }
+  rememberSecret(sellUrl)
+  let session
+  try {
+    session = new URL(sellUrl).searchParams.get('session')
+  } catch {
+    session = null
+  }
+  if (!session) throw new CheckError('backend-auth', 'production sign-in returned no session')
+  rememberSecret(session)
+  state.session = session
+  return session
+}
+
+async function purchaseSession (seed, rpc, fiatCents) {
+  const wdk = productionWdk(seed, rpc)
+  state.wdk = wdk
+  let buyUrl
+  try {
+    const account = await wdk.getAccount('polygon', 0)
+    const fiat = account.getFiatProtocol('dfx')
+    state.fiat = fiat
+    ;({ buyUrl } = await fiat.buy({
+      cryptoAsset: 'USDT',
+      fiatCurrency: 'EUR',
+      fiatAmount: BigInt(fiatCents),
+      config: { network: 'polygon' }
+    }))
+  } catch {
+    throw new CheckError('backend-auth', 'production sign-in failed')
+  }
+  rememberSecret(buyUrl)
+  let session
+  try {
+    session = new URL(buyUrl).searchParams.get('session')
+  } catch {
+    session = null
+  }
+  if (!session) throw new CheckError('backend-auth', 'production sign-in returned no session')
+  rememberSecret(session)
+  state.session = session
+  return session
+}
+
+async function followPurchase (session, externalId, baseline, followMinutes) {
+  const deadline = Date.now() + followMinutes * 60_000
+  const started = Date.now()
+  let last = null
+  try {
+    while (true) {
+      if (state.interrupted) throw new CheckError('interrupted', 'nothing paid')
+      const rows = await readTransactions(session)
+      const fresh = rows.filter(row => row && row.type === 'Buy' && row.id != null && !baseline.has(String(row.id)))
+      const foreign = fresh.filter(row => row.externalTransactionId !== externalId)
+      if (foreign.length > 0) throw new CheckError('backend-match', `found ${foreign.length} new buy records with a different external id`)
+      const ours = fresh.filter(row => row.externalTransactionId === externalId)
+      if (ours.length > 1) throw new CheckError('backend-count', `found ${ours.length} records`)
+      if (ours.length === 1) {
+        last = ours[0]
+        if (FAILED_STATES.has(last.state)) {
+          throw new CheckError('backend-state', `state ${last.state}; reason ${last.reason ?? 'none'}`)
+        }
+        if (last.state === 'Completed' && /^0x[0-9a-fA-F]{64}$/.test(String(last.outputTxId ?? ''))) return last
+      }
+      if (Date.now() + 30_000 > deadline) {
+        throw new CheckError('backend-deadline', `last state ${last?.state ?? 'none'}`)
+      }
+      await delay(30_000)
+    }
+  } finally {
+    state.evidence.waitedSeconds = Math.max(0, Math.round((Date.now() - started) / 1000))
+  }
+}
+
+function assertPurchaseShape (row, fiatCents) {
+  if (!row || typeof row !== 'object') throw new CheckError('backend-shape', 'record is not an object')
+  if (row.inputAsset !== 'EUR') throw new CheckError('backend-shape', 'inputAsset is not EUR')
+  const cents = amountCents(row.inputAmount)
+  if (cents == null || cents !== fiatCents) throw new CheckError('backend-shape', 'inputAmount is not the fiat amount')
+  if (row.outputAsset !== 'USDT') throw new CheckError('backend-shape', 'outputAsset is not USDT')
+  if (row.outputBlockchain !== 'Polygon') throw new CheckError('backend-shape', 'outputBlockchain is not Polygon')
+  if (typeof row.outputAmount !== 'number' || !Number.isFinite(row.outputAmount) || !(row.outputAmount > 0)) {
+    throw new CheckError('backend-shape', 'outputAmount is not a finite number greater than 0')
+  }
+}
+
+function purchaseBackend (row) {
+  return purchaseBackendFields(row, plain(row.externalTransactionId, 'backend-shape'))
+}
+
+function purchaseBackendFields (row, externalTransactionId) {
+  return {
+    id: plain(row.id, 'backend-shape'),
+    uid: plain(row.uid, 'backend-shape'),
+    state: plain(row.state, 'backend-shape'),
+    inputAmount: plain(row.inputAmount, 'backend-shape'),
+    outputAmount: plain(row.outputAmount, 'backend-shape'),
+    outputAsset: plain(row.outputAsset, 'backend-shape'),
+    externalTransactionId
+  }
+}
+
+async function checkPurchaseChain (prelude, row) {
+  const hash = String(row.outputTxId).toLowerCase()
+  let raw
+  try {
+    raw = await readReceipt(prelude.provider, hash)
+  } catch (error) {
+    if (error instanceof CheckError) throw new CheckError('chain', error.message)
+    throw new CheckError('chain', 'receipt read failed')
+  }
+  const status = quantity(raw.status, 'chain')
+  if (status !== 1n) throw new CheckError('chain', `status is ${status}`)
+  const logs = Array.isArray(raw.logs) ? raw.logs.filter(log => {
+    try {
+      if (getAddress(log.address) !== PRODUCTION_USDT) return false
+      if (String(log.topics?.[0] ?? '').toLowerCase() !== TRANSFER_TOPIC) return false
+      return addressFromTopic(log.topics?.[2], 'chain') === prelude.account
+    } catch (error) {
+      if (error instanceof CheckError) throw error
+      return false
+    }
+  }) : []
+  if (logs.length !== 1) throw new CheckError('chain', `found ${logs.length} USDT Transfer logs to the wallet`)
+  const transfer = logs[0]
+  const payoutFrom = addressFromTopic(transfer.topics?.[1], 'chain')
+  const value = quantity(transfer.data, 'chain')
+  const expected = scaled6(String(row.outputAmount))
+  if (expected == null || roundedSaleBase(value) !== expected) {
+    throw new CheckError('chain', 'USDT Transfer value does not match outputAmount')
+  }
+  const block = Number(quantity(raw.blockNumber, 'chain'))
+  if (!Number.isSafeInteger(block) || block < 1) throw new CheckError('chain', 'block number is not usable')
+  state.evidence.payoutFrom = payoutFrom
+  state.evidence.block = block
+  state.evidence.value = value.toString()
+  state.evidence.hash = hash
+  return { hash, block, value }
+}
+
+function assertPurchaseBalanceDelta (checks) {
+  for (const check of checks) {
+    const ok = check.value === undefined ? check.after === check.before : check.after === check.before + check.value
+    if (!ok) throw new CheckError('balance', check.message)
+  }
+}
+
+async function readArchiveQuantity (read, failedCheck) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return BigInt(await read())
+    } catch {
+      if (attempt >= 5) {
+        throw new CheckError(failedCheck || 'balance', failedCheck ? 'balance read failed' : 'archive balance read failed')
+      }
+      await delay(2_000)
+      state.rpcReadRetries++
+      state.evidence.rpcReadRetries = (state.evidence.rpcReadRetries ?? 0) + 1
+    }
+  }
+}
+
+async function archiveBalances (account, block) {
+  // A static network stops ethers from probing this node with eth_chainId.
+  const archive = new JsonRpcProvider(ARCHIVE_RPC, 137, { staticNetwork: true })
+  try {
+    const usdt = new Contract(PRODUCTION_USDT, ERC20_ABI, archive)
+    const usdtBefore = await readArchiveQuantity(() => usdt.balanceOf(account, { blockTag: block - 1 }))
+    const usdtAfter = await readArchiveQuantity(() => usdt.balanceOf(account, { blockTag: block }))
+    const polBefore = await readArchiveQuantity(() => archive.getBalance(account, block - 1))
+    const polAfter = await readArchiveQuantity(() => archive.getBalance(account, block))
+    return { usdtBefore, usdtAfter, polBefore, polAfter }
+  } finally {
+    try { archive.destroy() } catch { /* closing the provider is not a balance check */ }
+  }
+}
+
+async function checkPurchaseBalance (prelude, block, value, baselineUsdt, baselinePol) {
+  let archived
+  let usdtLatest
+  let polLatest
+  try {
+    archived = await archiveBalances(prelude.account, block)
+    usdtLatest = BigInt(await prelude.usdt.balanceOf(prelude.account))
+    polLatest = BigInt(await prelude.provider.getBalance(prelude.account))
+  } catch (error) {
+    if (error instanceof CheckError && error.failedCheck === 'balance') throw error
+    throw new CheckError('balance', 'balance read failed')
+  }
+  assertPurchaseBalanceDelta([
+    { before: baselineUsdt, after: archived.usdtBefore, message: 'USDT balance before the payout is not the preflight baseline' },
+    { before: baselineUsdt, after: archived.usdtAfter, value, message: 'USDT balance at the receipt block is not the baseline plus the payout' },
+    { before: baselineUsdt, after: usdtLatest, value, message: 'USDT balance is not the baseline plus the payout' },
+    { before: baselinePol, after: archived.polBefore, message: 'POL balance before the payout is not the preflight baseline' },
+    { before: baselinePol, after: archived.polAfter, message: 'POL balance at the receipt block is not the preflight baseline' },
+    { before: baselinePol, after: polLatest, message: 'POL balance changed' }
+  ])
+  state.evidence.baselineSource = PURCHASE_BASELINE_SOURCE
+  state.evidence.balances = [
+    { address: prelude.account, asset: 'USDT', before: baselineUsdt.toString(), after: usdtLatest.toString() },
+    { address: prelude.account, asset: 'POL', before: baselinePol.toString(), after: polLatest.toString() }
+  ]
+}
+
+function purchaseDetailIsCompleted (detail) {
+  return detail?.cryptoAsset === 'USDT' && detail?.fiatCurrency === 'EUR' && detail?.status === 'completed'
+}
+
+function purchaseDetailView (detail) {
+  return {
+    cryptoAsset: detail.cryptoAsset,
+    fiatCurrency: detail.fiatCurrency,
+    status: detail.status
+  }
+}
+
+async function purchaseDetailByExternalId (externalTransactionId) {
+  let detail
+  try {
+    detail = await state.fiat.getTransactionDetail(externalTransactionId, { idType: 'externalTransactionId' })
+  } catch {
+    throw new CheckError('module-status', 'module detail failed')
+  }
+  if (!purchaseDetailIsCompleted(detail)) {
+    throw new CheckError('module-status', 'module status does not match the purchase')
+  }
+  return detail
+}
+
+async function purchaseDetailByUid (row) {
+  let detail
+  try {
+    detail = await state.fiat.getTransactionDetail(String(row.uid))
+  } catch {
+    throw new CheckError('module-status', 'module detail failed')
+  }
+  if (!purchaseDetailIsCompleted(detail)) {
+    throw new CheckError('module-status', 'module status does not match the purchase')
+  }
+  return detail
+}
+
+async function assertPurchaseModuleStatus (row, externalTransactionId) {
+  const byExternalId = await purchaseDetailByExternalId(externalTransactionId)
+  const byUid = await purchaseDetailByUid(row)
+  state.evidence.moduleStatus = {
+    byExternalId: purchaseDetailView(byExternalId),
+    byUid: purchaseDetailView(byUid)
+  }
+}
+
+async function capturePurchaseEvidence (session, hash, row) {
+  let browser
+  try {
+    try {
+      browser = await chromium.launch({ headless: true })
+    } catch {
+      throw new CheckError('explorer-capture', 'explorer capture failed')
+    }
+    state.browser = browser
+    await captureExplorer(browser, hash)
+    await capturePurchaseBooking(browser, session, hash, row)
+  } finally {
+    state.browser = null
+    if (browser) await browser.close().catch(() => {})
+  }
+}
+
+async function buyAndCheck (prelude) {
+  const options = state.options
+  await copySeed(options.seedFile)
+  const iban = prelude.activeIban
+  state.saleIban = iban
+  rememberIban(iban)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing paid')
+  const externalId = purchaseExternalId(prelude.moduleHead)
+  state.evidence.externalTransactionId = externalId
+  const secret = { IBAN_PATTERN: `.*${[...iban].join(' ?')}.*` }
+  state.flow1Started = true
+  const flow = await runFlow(join(flowDir, 'buy-1-widget.yaml'), {
+    BUY_CENTS: String(options.fiatCents),
+    BUY_EXT: externalId
+  }, secret)
+  const flowCode = flow.code
+  flow.stdout = ''
+  if (flowCode !== 0) throw new CheckError('flow-buy', 'nothing paid', state.failedStep)
+  assertBuyFlowShots()
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing paid')
+  const session = await purchaseSession(prelude.seed, options.rpc, options.fiatCents)
+  console.log(`wallet-ui buy: waiting up to ${options.follow} minutes for the account holder's bank transfer of ${eurText(options.fiatCents)} EUR`)
+  const row = await followPurchase(session, externalId, prelude.buyBaseline, options.follow)
+  state.evidence.backend = purchaseBackend(row)
+  assertPurchaseShape(row, options.fiatCents)
+  const chain = await checkPurchaseChain(prelude, row)
+  await checkPurchaseBalance(prelude, chain.block, chain.value, prelude.usdtBalance, prelude.polBalance)
+  await assertPurchaseModuleStatus(row, externalId)
+  await capturePurchaseEvidence(session, chain.hash, row)
+  await assertClosed(prelude)
+  const explorerName = explorerShotName(chain.hash)
+  const bookingName = bookingShotName(row.uid, session)
+  assertCapturedShots(BUY_FLOW_SHOTS, explorerName, bookingName)
+}
+
+function assertCapturedShots (flowShots, explorerName, bookingName) {
+  const shots = state.screenshots.map(item => {
+    if (sha256File(join(state.options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    return item
+  })
+  const byName = new Map(shots.map(item => [item.file, item]))
+  if (byName.size !== shots.length || flowShots.some(name => !byName.has(name))) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+  if (!byName.has(explorerName)) throw new CheckError('explorer-capture', 'explorer screenshot missing')
+  if (!byName.has(bookingName)) throw new CheckError('booking-capture', 'booking screenshot missing')
+  const expectedShots = [...flowShots, explorerName, bookingName]
+  if (byName.size !== expectedShots.length) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+  state.evidence.screenshots = expectedShots.map(name => byName.get(name))
+}
+
+function sameTransactionId (value, id) {
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return value === id
+  if (typeof value === 'string' && /^[1-9]\d*$/.test(value)) return value === String(id)
+  return false
+}
+
+function selectRehearsalPurchase (rows, id) {
+  const hits = rows.filter(row => row && typeof row === 'object' && sameTransactionId(row.id, id))
+  if (hits.length !== 1) throw new CheckError('backend-match', `found ${hits.length} records`)
+  const row = hits[0]
+  if (row.type !== 'Buy') throw new CheckError('backend-match', 'type is not Buy')
+  if (row.state !== 'Completed') throw new CheckError('backend-match', 'state is not Completed')
+  if (typeof row.outputTxId !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(row.outputTxId)) {
+    throw new CheckError('backend-match', 'outputTxId is not a 32-byte hash')
+  }
+  return row
+}
+
+async function checkRehearsalBalance (prelude, block, value) {
+  const archived = await archiveBalances(prelude.account, block)
+  assertPurchaseBalanceDelta([
+    { before: archived.usdtBefore, after: archived.usdtAfter, value, message: 'USDT balance at the receipt block is not the baseline plus the payout' },
+    { before: archived.polBefore, after: archived.polAfter, message: 'POL balance changed' }
+  ])
+  state.evidence.baselineSource = BASELINE_SOURCE
+  state.evidence.balances = [
+    { address: prelude.account, asset: 'USDT', before: archived.usdtBefore.toString(), after: archived.usdtAfter.toString() },
+    { address: prelude.account, asset: 'POL', before: archived.polBefore.toString(), after: archived.polAfter.toString() }
+  ]
+}
+
+async function readSaleTransfer (prelude, userOpHash) {
+  const userOp = await readUserOperationReceipt(userOpHash)
+  const txHashRaw = userOp.receipt && userOp.receipt.transactionHash
+  if (typeof txHashRaw !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHashRaw)) {
+    throw new CheckError('userop-receipt', 'user operation receipt has no transaction hash')
+  }
+  const raw = await readReceipt(prelude.provider, txHashRaw.toLowerCase())
+  const logs = Array.isArray(raw.logs) ? raw.logs.filter(log => {
+    try {
+      if (getAddress(log.address) !== PRODUCTION_USDT || String(log.topics?.[0] ?? '').toLowerCase() !== TRANSFER_TOPIC) return false
+      return addressFromTopic(log.topics?.[1], 'transfer') === prelude.account
+    } catch {
+      return false
+    }
+  }) : []
+  if (logs.length !== 1) throw new CheckError('transfer', `found ${logs.length} USDT Transfer logs from the account`)
+  return {
+    depositAddress: addressFromTopic(logs[0].topics?.[2], 'transfer'),
+    amount: quantity(logs[0].data, 'transfer')
+  }
+}
+
+async function rehearseSale (prelude) {
+  const session = state.session
+  const userOpHash = state.options.rehearseUserOp
+  const transfer = await readSaleTransfer(prelude, userOpHash)
+  state.options.amountBase = transfer.amount
+  state.evidence.amountSource = 'chain transfer log'
+  state.evidence.depositAddress = transfer.depositAddress
+  await checkSponsoredChain(prelude, userOpHash, transfer.depositAddress)
+  state.evidence.baselineSource = BASELINE_SOURCE
+  const found = inspectSaleRows(await readTransactions(session), state.evidence.hash)
+  if (!found.booked) {
+    if (!found.row) throw new CheckError('backend-count', 'found 0 records')
+    throw new CheckError('backend-state', `state ${found.row.state}; reason ${found.row.reason ?? 'none'}`)
+  }
+  const sale = found.row
+  await assertModuleStatus(sale)
+  await captureEvidence(session, state.evidence.hash, sale)
+  await assertClosedBackendAndTree(prelude)
+  assertCapturedShots([], explorerShotName(state.evidence.hash), bookingShotName(sale.uid, session))
+}
+
+async function rehearsePurchase (prelude) {
+  const session = state.session
+  const rows = await readTransactions(session)
+  const row = selectRehearsalPurchase(rows, state.options.rehearseId)
+  const externalId = row.externalTransactionId
+  if (externalId === null) {
+    state.evidence.backend = purchaseBackendFields(row, null)
+    state.evidence.externalTransactionId = null
+    state.evidence.notRehearsed = ['external-id-match', 'module-status-by-external-id']
+  } else if (typeof externalId === 'string') {
+    state.evidence.backend = purchaseBackend(row)
+    state.evidence.externalTransactionId = state.evidence.backend.externalTransactionId
+    state.evidence.notRehearsed = []
+    if (state.evidence.externalTransactionId !== externalId) {
+      throw new CheckError('backend-match', 'externalTransactionId does not match')
+    }
+  } else {
+    throw new CheckError('backend-match', 'externalTransactionId is not a string or null')
+  }
+  const fiatCents = amountCents(row.inputAmount)
+  state.evidence.fiatCents = fiatCents
+  assertPurchaseShape(row, fiatCents)
+  const chain = await checkPurchaseChain(prelude, row)
+  await checkRehearsalBalance(prelude, chain.block, chain.value)
+  if (externalId === null) {
+    const byUid = await purchaseDetailByUid(row)
+    state.evidence.moduleStatus = { byExternalId: null, byUid: purchaseDetailView(byUid) }
+  } else {
+    await assertPurchaseModuleStatus(row, externalId)
+  }
+  await capturePurchaseEvidence(session, chain.hash, row)
+  await assertClosedBackendAndTree(prelude)
+  assertCapturedShots([], explorerShotName(chain.hash), bookingShotName(row.uid, session))
+}
+
 async function sendAndCheck (prelude) {
   const options = state.options
   await copySeed(options.seedFile)
@@ -2230,6 +3056,121 @@ function assertRejectedPass (body) {
   }
 }
 
+function assertSaleRehearsalPass (body) {
+  for (const key of SALE_REHEARSAL_RECORD_FIELDS) {
+    if (body[key] === undefined) throw new CheckError('record', `missing ${key}`)
+  }
+  if (body.rehearsal !== true) throw new CheckError('record', 'rehearsal is not true')
+  if (body.result !== 'rehearsal-pass') throw new CheckError('record', 'result is not rehearsal-pass')
+  if (body.humanStep !== undefined) throw new CheckError('record', 'humanStep is present')
+  if (body.dirty !== false) throw new CheckError('dirty-tree', 'the module tree is not clean')
+  const asset = selectedAsset()
+  if (body.asset !== asset.symbol || body.mode !== 'sale') throw new CheckError('record', 'asset or mode is wrong')
+  if (body.rehearsedTransaction !== state.options.rehearseUserOp) throw new CheckError('record', 'rehearsedTransaction is wrong')
+  if (body.userOperationHash !== state.options.rehearseUserOp) throw new CheckError('record', 'userOperationHash is wrong')
+  if (body.amountSource !== 'chain transfer log') throw new CheckError('record', 'amountSource is wrong')
+  if (body.baselineSource !== BASELINE_SOURCE) throw new CheckError('record', 'baselineSource is wrong')
+  if (body.ibanCountryAndClearing !== PRODUCTION_IBAN_LABEL) throw new CheckError('record', 'iban label changed')
+  if (body.feePaidBy !== 'paymaster') throw new CheckError('record', 'feePaidBy is not paymaster')
+  let paymaster
+  try {
+    paymaster = getAddress(body.paymaster)
+  } catch {
+    throw new CheckError('userop-event', 'paymaster is not an address')
+  }
+  if (paymaster === getAddress('0x0000000000000000000000000000000000000000')) {
+    throw new CheckError('userop-event', 'paymaster is zero')
+  }
+  if (String(body.paymaster).toLowerCase() === String(body.account).toLowerCase()) {
+    throw new CheckError('userop-event', 'paymaster is the account')
+  }
+  const pol = Array.isArray(body.balances)
+    ? body.balances.filter(row => row && row.asset === 'POL' && row.address === body.account)
+    : []
+  if (pol.length !== 1 || pol[0].before !== pol[0].after) {
+    throw new CheckError('balance-account-pol', 'account POL balance changed')
+  }
+  if (!body.backend || (body.backend.state !== 'PayoutInProgress' && body.backend.state !== 'Completed')) {
+    throw new CheckError('backend-state', 'backend state is not booked')
+  }
+  if (body.backend.uid == null || body.backend.uid === '') throw new CheckError('backend-shape', 'backend uid is missing')
+  const expectedStatus = body.backend.state === 'Completed' ? 'completed' : 'in_progress'
+  if (!body.moduleStatus || body.moduleStatus.cryptoAsset !== asset.symbol || body.moduleStatus.fiatCurrency !== 'EUR' || body.moduleStatus.status !== expectedStatus) {
+    throw new CheckError('module-status', 'module status does not match the sale')
+  }
+  const skipped = body.notRehearsed
+  if (!Array.isArray(skipped) || skipped.length !== SALE_NOT_REHEARSED.length || SALE_NOT_REHEARSED.some((name, index) => skipped[index] !== name)) {
+    throw new CheckError('record', 'notRehearsed is wrong')
+  }
+  const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
+  const expectedNames = [explorerShotName(body.hash), bookingShotName(body.backend.uid, state.session)]
+  if (names.length !== expectedNames.length || expectedNames.some((name, index) => names[index] !== name)) {
+    throw new CheckError('screenshots', 'screenshot set changed')
+  }
+}
+
+function assertRehearsalPass (body) {
+  if (body.mode === 'sale') {
+    assertSaleRehearsalPass(body)
+    return
+  }
+  for (const key of REHEARSAL_RECORD_FIELDS) {
+    if (body[key] === undefined) throw new CheckError('record', `missing ${key}`)
+  }
+  if (body.rehearsal !== true) throw new CheckError('record', 'rehearsal is not true')
+  if (body.result !== 'rehearsal-pass') throw new CheckError('record', 'result is not rehearsal-pass')
+  if (body.humanStep !== undefined) throw new CheckError('record', 'humanStep is present')
+  if (body.dirty !== false) throw new CheckError('dirty-tree', 'the module tree is not clean')
+  if (body.asset !== 'USDT' || body.mode !== 'purchase') throw new CheckError('record', 'asset or mode is wrong')
+  if (body.rehearsedTransaction !== state.options.rehearseId) throw new CheckError('record', 'rehearsedTransaction is wrong')
+  if (body.baselineSource !== BASELINE_SOURCE) throw new CheckError('record', 'baselineSource is wrong')
+  if (!body.backend || body.backend.state !== 'Completed') throw new CheckError('backend-state', 'backend state is not Completed')
+  const skipped = body.notRehearsed
+  if (body.externalTransactionId === null) {
+    if (!Array.isArray(skipped) || skipped.length !== 2 || skipped[0] !== 'external-id-match' || skipped[1] !== 'module-status-by-external-id') {
+      throw new CheckError('record', 'notRehearsed is wrong')
+    }
+    if (!body.moduleStatus || body.moduleStatus.byExternalId !== null) {
+      throw new CheckError('module-status', 'module status by external id ran')
+    }
+  } else {
+    if (!Array.isArray(skipped) || skipped.length !== 0) throw new CheckError('record', 'notRehearsed is wrong')
+    if (typeof body.externalTransactionId !== 'string' || body.backend.externalTransactionId !== body.externalTransactionId) {
+      throw new CheckError('backend-match', 'externalTransactionId does not match')
+    }
+    if (!purchaseDetailIsCompleted(body.moduleStatus?.byExternalId)) {
+      throw new CheckError('module-status', 'module status does not match the purchase')
+    }
+  }
+  if (!purchaseDetailIsCompleted(body.moduleStatus?.byUid)) {
+    throw new CheckError('module-status', 'module status does not match the purchase')
+  }
+  const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
+  const expectedNames = [explorerShotName(body.hash), bookingShotName(body.backend.uid, state.session)]
+  if (names.length !== expectedNames.length || expectedNames.some((name, index) => names[index] !== name)) {
+    throw new CheckError('screenshots', 'screenshot set changed')
+  }
+}
+
+function assertPurchasePass (body) {
+  if (body.walletStateCleared !== true) throw new CheckError('cleanup', 'wallet state was not cleared')
+  if (body.asset !== 'USDT' || body.mode !== 'purchase') throw new CheckError('record', 'asset or mode is wrong')
+  if (body.baselineSource !== PURCHASE_BASELINE_SOURCE) throw new CheckError('record', 'baselineSource is wrong')
+  if (body.humanStep !== 'bank transfer by the account holder') throw new CheckError('record', 'humanStep is wrong')
+  if (!body.backend || body.backend.state !== 'Completed') throw new CheckError('backend-state', 'backend state is not Completed')
+  if (body.backend.externalTransactionId !== body.externalTransactionId) {
+    throw new CheckError('backend-match', 'externalTransactionId does not match')
+  }
+  if (!purchaseDetailIsCompleted(body.moduleStatus?.byExternalId) || !purchaseDetailIsCompleted(body.moduleStatus?.byUid)) {
+    throw new CheckError('module-status', 'module status does not match the purchase')
+  }
+  const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
+  const expectedNames = [...BUY_FLOW_SHOTS, explorerShotName(body.hash), bookingShotName(body.backend.uid, state.session)]
+  if (names.length !== expectedNames.length || expectedNames.some((name, index) => names[index] !== name)) {
+    throw new CheckError('screenshots', 'screenshot set changed')
+  }
+}
+
 function assertPass (body) {
   for (const key of recordFields()) {
     if (body[key] === undefined) throw new CheckError('record', `missing ${key}`)
@@ -2238,9 +3179,16 @@ function assertPass (body) {
   if (body.walletInterface !== WALLET_INTERFACE) throw new CheckError('record', 'walletInterface changed')
   const ibanLabel = productionTarget() ? PRODUCTION_IBAN_LABEL : IBAN_LABEL
   if (body.ibanCountryAndClearing !== ibanLabel) throw new CheckError('record', 'iban label changed')
-  if (productionTarget() && body.feePaidBy !== 'paymaster') throw new CheckError('record', 'feePaidBy is not paymaster')
+  if (productionTarget() && body.mode !== 'purchase' && body.feePaidBy !== 'paymaster') throw new CheckError('record', 'feePaidBy is not paymaster')
+  if (productionTarget() && body.mode === 'sale' && String(body.paymaster).toLowerCase() === String(body.account).toLowerCase()) {
+    throw new CheckError('userop-event', 'paymaster is the account')
+  }
   if (body.mode === 'rejected') {
     assertRejectedPass(body)
+    return
+  }
+  if (body.mode === 'purchase') {
+    assertPurchasePass(body)
     return
   }
   if (body.walletConfirmations !== 1) throw new CheckError('wallet-confirmations', 'walletConfirmations is not 1')
@@ -2285,7 +3233,7 @@ async function writeFail (error) {
   if (state.recordWritten || !state.options?.record) return
   const failedCheck = error instanceof CheckError ? error.failedCheck : 'run'
   const body = measuredRecord()
-  body.result = 'fail'
+  body.result = rehearsalMode() ? 'rehearsal-fail' : 'fail'
   body.failedCheck = failedCheck
   try {
     state.recordPromise = writeRecord(body)
@@ -2394,9 +3342,11 @@ async function main () {
   state.options = options
   state.udid = options.udid
   if (options.screenshots) prepareScreenshots(options.screenshots)
+  if (options.rehearse) assertRecordPath(options.record, options.seedFile, options.screenshots)
   if (options.send) {
     assertRecordPath(options.record, options.seedFile, options.screenshots)
-    for (const name of (options.reject ? REJECT_FLOW_SHOTS : FLOW_SHOTS)) {
+    const reservedShots = options.buy ? BUY_FLOW_SHOTS : options.reject ? REJECT_FLOW_SHOTS : FLOW_SHOTS
+    for (const name of reservedShots) {
       try {
         lstatSync(join(options.screenshots, name))
       } catch (error) {
@@ -2412,31 +3362,67 @@ async function main () {
   }
   const prelude = await preflight(options)
   if (state.interrupted) await state.signalPromise
-  if (!options.send) {
+  if (!options.send && !options.rehearse) {
     console.log('wallet-ui preflight ok')
     return
   }
-  state.evidence = {
-    moduleHead: prelude.moduleHead,
-    dirty: false,
-    starterCommit: prelude.build.starterCommit,
-    patchSha256: prelude.build.patchSha256,
-    mainJsbundleSha256: prelude.build.mainJsbundleSha256,
-    maestroVersion: prelude.maestroVersion,
-    simulatorRuntime: prelude.simulatorRuntime,
-    walletInterface: WALLET_INTERFACE,
-    backendCommitStart: prelude.backendCommitStart,
-    account: prelude.account,
-    ibanCountryAndClearing: productionTarget(options) ? PRODUCTION_IBAN_LABEL : IBAN_LABEL,
-    asset: selectedAsset().symbol,
-    mode: options.reject ? 'rejected' : 'sale'
-  }
-  if (productionTarget(options)) {
-    state.evidence.bundlerHost = prelude.bundlerHost
-    state.evidence.polBalance = prelude.polBalance.toString()
+  if (options.rehearse) {
+    state.evidence = {
+      rehearsal: true,
+      rehearsedTransaction: options.buy ? options.rehearseId : options.rehearseUserOp,
+      moduleHead: prelude.moduleHead,
+      dirty: false,
+      backendCommitStart: prelude.backendCommitStart,
+      account: prelude.account,
+      ibanCountryAndClearing: PRODUCTION_IBAN_LABEL,
+      asset: 'USDT',
+      mode: options.buy ? 'purchase' : 'sale'
+    }
+    if (!options.buy) {
+      state.evidence.userOperationHash = options.rehearseUserOp
+      state.evidence.bundlerHost = prelude.bundlerHost
+      state.evidence.notRehearsed = SALE_NOT_REHEARSED
+    }
+  } else {
+    state.evidence = {
+      moduleHead: prelude.moduleHead,
+      dirty: false,
+      starterCommit: prelude.build.starterCommit,
+      patchSha256: prelude.build.patchSha256,
+      mainJsbundleSha256: prelude.build.mainJsbundleSha256,
+      maestroVersion: prelude.maestroVersion,
+      simulatorRuntime: prelude.simulatorRuntime,
+      walletInterface: WALLET_INTERFACE,
+      backendCommitStart: prelude.backendCommitStart,
+      account: prelude.account,
+      ibanCountryAndClearing: productionTarget(options) ? PRODUCTION_IBAN_LABEL : IBAN_LABEL,
+      asset: options.buy ? 'USDT' : selectedAsset().symbol,
+      mode: options.buy ? 'purchase' : options.reject ? 'rejected' : 'sale'
+    }
+    if (productionTarget(options) && !options.buy) {
+      state.evidence.bundlerHost = prelude.bundlerHost
+      state.evidence.polBalance = prelude.polBalance.toString()
+    }
+    if (options.buy) {
+      state.evidence.fiatCents = options.fiatCents
+      state.evidence.quote = prelude.quote
+      state.evidence.humanStep = 'bank transfer by the account holder'
+    }
   }
   try {
-    await sendAndCheck(prelude)
+    if (options.rehearse) {
+      if (options.buy) await rehearsePurchase(prelude)
+      else await rehearseSale(prelude)
+      const body = measuredRecord()
+      body.result = 'rehearsal-pass'
+      assertRehearsalPass(body)
+      state.recordPromise = writeRecord(body)
+      await state.recordPromise
+      console.log('wallet-ui rehearsal: pass (read-only; not a run)')
+      return
+    }
+    if (options.buy) await buyAndCheck(prelude)
+    else await sendAndCheck(prelude)
     await clearClipboard()
     await clearWalletState()
     if (installedBundleSha(options.udid) !== prelude.build.mainJsbundleSha256) throw new CheckError('bundle', 'installed main.jsbundle changed during cleanup')
@@ -2455,17 +3441,19 @@ async function main () {
       await state.signalPromise
       return
     }
-    if (state.clipboard && !state.clipboardClearAttempted) {
-      try {
-        await clearClipboard()
-      } catch (clipboardError) {
-        console.error(`wallet-ui failed: ${redact(clipboardError.message)}`)
+    if (!options.rehearse) {
+      if (state.clipboard && !state.clipboardClearAttempted) {
+        try {
+          await clearClipboard()
+        } catch (clipboardError) {
+          console.error(`wallet-ui failed: ${redact(clipboardError.message)}`)
+        }
       }
-    }
-    try {
-      await clearWalletState()
-    } catch (cleanupError) {
-      console.error(`wallet-ui failed: ${redact(cleanupError.message)}`)
+      try {
+        await clearWalletState()
+      } catch (cleanupError) {
+        console.error(`wallet-ui failed: ${redact(cleanupError.message)}`)
+      }
     }
     if (state.interrupted) {
       await state.signalPromise
@@ -2495,6 +3483,9 @@ try {
   if (error instanceof UsageError) process.exitCode = 2
   else if (error instanceof NotRunError) process.exitCode = 3
   else process.exitCode = 1
+  if (rehearsalMode() && !(error instanceof UsageError) && !(error instanceof NotRunError)) {
+    console.log('wallet-ui rehearsal: fail (read-only; not a run)')
+  }
 } finally {
   if (state.interrupted) await state.signalPromise
   await releaseResources()

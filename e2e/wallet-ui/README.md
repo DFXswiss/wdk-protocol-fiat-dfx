@@ -2,7 +2,7 @@
 
 A Sepolia sale of 1 USDT or 0.0001 ETH for EUR, or the same transfer left on the review screen. The patched WDK starter wallet, installed on the iOS simulator, confirms the send or goes back. A confirmed run requires the sandbox to recognize that hash by itself and book the sale through `PayoutInProgress` or `Completed`. At that state `outputAmount` must be a finite number greater than 0 and `outputAsset` must be EUR. Before that state `outputAmount` may be absent.
 
-This does not cover a smart account, a purchase, or the bank payout. The wallet runs in a simulator, not on a device, and Maestro taps the controls. It does not cover an unpatched or released wallet. A confirmed run saves `sell-widget-open`, `send-review`, and `send-success`. A rejected run saves `sell-widget-open`, `send-review`, and `send-rejected`. The payment-information step is not captured, because that page prints the payout IBAN next to the deposit address. After a confirmed sale is booked, the runner saves the block explorer page and the booking page. A rejected run has no transaction, so it saves neither. The booking can stay in `Processing` on the sandbox; a confirmed run is then red and is recorded as red.
+The default Sepolia target does not cover a smart account or a purchase, the production target sells from a sponsored smart account and has a purchase mode, and neither target covers the bank payout. The wallet runs in a simulator, not on a device, and Maestro taps the controls. It does not cover an unpatched or released wallet. A confirmed run saves `sell-widget-open`, `send-review`, and `send-success`. A rejected run saves `sell-widget-open`, `send-review`, and `send-rejected`. The payment-information step is not captured, because that page prints the payout IBAN next to the deposit address. After a confirmed sale is booked, the runner saves the block explorer page and the booking page. A rejected run has no transaction, so it saves neither. The booking can stay in `Processing` on the sandbox; a confirmed run is then red and is recorded as red.
 
 The starter is not upstream. `build.sh` checks out commit `031e210` and applies `starter.patch`. `ethereum` is switched from the gasless wallet package to the plain EVM wallet (`@tetherto/wdk-wallet-evm`) so a Sepolia account can sign the transfer. Arbitrum and Polygon stay gasless. The confirmation logic is unchanged: `sendAsset` and `onConfirm` still send the amount from the route, and `disabled` at `src/app/send/review.tsx:220` in the starter is unchanged. An Ethereum token fee is display-only and is not added to the token total. A native ETH fee is in ETH and is included in the total.
 
@@ -88,6 +88,10 @@ The seed file is given to the simulator clipboard through a file descriptor. On 
 
 A production sale is `node wallet-ui/run-sale.mjs --target production-polygon --amount <USDT>`. Flow 1 is `flow/sell-1-widget-saved-iban.yaml`. The flow opens the sale screen by link with the amount. The payout goes to the account holder's single active bank account. That account is never typed, printed, or recorded. The send is an EIP-7702 gasless user operation. There is no rejection run on production. The widget preselects that saved account, so the flow continues when the account is already selected and taps `Add or select your IBAN` only when that step is shown; it does not take `sell-widget-open`, and the recorded production shots are the review and success screens, the explorer page and the masked app transaction page. On this target the guard OCRs each Maestro screenshot of a production sale before it is kept, fails the run and keeps nothing when the normalized OCR text contains the last 10 characters of the payout IBAN or the screenshot cannot be read, an OCR miss cannot be excluded, and preflight ends as not run when `tesseract --version` does not exit 0. The production build needs `PIMLICO_API_KEY_FILE`, a path to a private file with the Pimlico key. The key is never printed. Preflight checks the Polygon bundler with `eth_supportedEntryPoints` and ends as not run when the bundler does not answer. The bundler URL and the response are not printed or recorded; the record keeps only the host. The record amount is compared to the sale amount after the backend's rounding to 5 significant digits, half up.
 
+## Production purchase
+
+The flow is `flow/buy-1-widget.yaml`. The run opens the purchase by link with an amount in EUR cents and a per-run external id, takes one screenshot of the top of the purchase page, then waits for the account holder's bank transfer, the one human step, and matches the DFX record by that external id. USDT and POL are read at the block before the payout and at the payout block from the archive RPC `https://polygon.gateway.tenderly.co` and compared with the preflight balances. The record stores the preflight balance as before and the latest balance as after.
+
 ## Traps
 
 The send and cleanup flows are `flow/sell-1-widget.yaml`, `flow/sell-2-send.yaml`, `flow/sell-2-reject.yaml`, and `flow/cleanup.yaml`. The production sale uses `flow/sell-1-widget-saved-iban.yaml` in place of `flow/sell-1-widget.yaml`. Flow 1 taps `${SELL_ENTRY}` (`sell-entry` or `sell-eth-entry`). Flow 2 taps the asset row, types the amount, and opens review. `sell-2-send.yaml` taps `send-confirm` once. `sell-2-reject.yaml` taps `Go back` and does not tap `send-confirm`.
@@ -118,3 +122,34 @@ Each row holds for the module head it names. The runner, the build script, the p
 The records are in [../evidence/2026-11-12-wallet-ui-sale.jsonl](../evidence/2026-11-12-wallet-ui-sale.jsonl). On the same day each of fifteen checks in `run-sale.mjs` was changed once to a plausible wrong version and the run repeated: 15/15 runs exited 1 at the changed check (12 at `2feecb3`; 3 at `bb00b51`; 14 of them sent 1 USDT first; the record of one of the 14 has no hash because its changed check failed before the hash was stored), see [../evidence/2026-11-12-wallet-ui-sale-mutations.jsonl](../evidence/2026-11-12-wallet-ui-sale-mutations.jsonl). Two further runs ended red for other reasons, see [../evidence/2026-11-12-wallet-ui-sale-red.jsonl](../evidence/2026-11-12-wallet-ui-sale-red.jsonl).
 
 The 2026-11-16 records are in [../evidence/2026-11-16-wallet-ui-runs.jsonl](../evidence/2026-11-16-wallet-ui-runs.jsonl). At `6150990` each of nineteen checks added for the ETH sale and for `--reject` was changed once to a plausible wrong version and the run repeated: 19/19 runs exited 1 at the changed check. The twelve ETH-sale mutants each sent 0.0001 ETH first; the seven `--reject` mutants sent nothing. See [../evidence/2026-11-16-wallet-ui-mutations.jsonl](../evidence/2026-11-16-wallet-ui-mutations.jsonl). Two runs ended red for other reasons: the ETH sale at `9375cd1`, whose check required a receipt without logs (0.0001 ETH sent), and a first run of mutant `e06` in which the sell page did not show the bank step (nothing sent). See [../evidence/2026-11-16-wallet-ui-red.jsonl](../evidence/2026-11-16-wallet-ui-red.jsonl).
+
+## Run protocol
+
+From `e2e/`:
+
+```sh
+node wallet-ui/write-protocol.mjs --purchase-record <file> --purchase-screenshots <dir> \
+  --sale-record <file> --sale-screenshots <dir>
+```
+
+The script reads the one-line records of a passing production purchase and a passing production sale. It checks that both passed on the same clean module head, account, starter build and backend commit, that the purchase finished before the sale, and that the purchase USDT balance after is the sale USDT balance before. The sale must be one paymaster-sponsored confirmation, with an unchanged POL balance, booked to `PayoutInProgress` or `Completed`. The purchase must be `Completed`. The record holds `moduleStatus.byExternalId` and `moduleStatus.byUid`, each USDT / EUR / `completed`, and the writer requires both. The writer refuses rehearsal records. It re-reads `https://api.dfx.swiss/version` and the two Polygon receipts, and it checks each screenshot's file type, PNG signature and SHA-256. Any mismatch prints the check name and exits 1 with nothing written. The script does not sign in and does not send a transaction.
+
+On success it copies the screenshots to `e2e/wallet-ui/out/evidence/<module head>/purchase/` and `.../sale/` (mode `0700`; refused if that directory exists) and writes `echter-lauf.json` version 2 to the path from `git rev-parse --git-path echter-lauf.json` (mode `0600`; refused if the file exists).
+
+## Evidence rehearsal
+
+A rehearsal is a read-only replay of the checks after sending. It checks an existing production purchase by DFX id, or an existing production sale by user operation hash. It creates no order and sends nothing. The seed signs the account in, and the runner derives the account address from it; the seed is not pasted into a wallet. A sale rehearsal reads the Polygon bundler URL from the built starter and uses the starter for nothing else. A purchase rehearsal does not read the built starter. USDT and POL balances are read at block-1 and at the receipt block from the archive RPC `https://polygon.gateway.tenderly.co`. The written record has `rehearsal` `true` and `result` `rehearsal-pass` or `rehearsal-fail`. `write-protocol.mjs` refuses that record.
+
+From `e2e/`:
+
+```sh
+node wallet-ui/run-sale.mjs --target production-polygon --buy --rehearse \
+  --rehearse-id <DFX id> --seed-file <path> --screenshots <dir> --record <file>
+```
+
+```sh
+node wallet-ui/run-sale.mjs --target production-polygon --rehearse \
+  --rehearse-user-op <user operation hash> --seed-file <path> --screenshots <dir> --record <file>
+```
+
+The `--record` file name must contain `rehearsal`. A sale record lists what the rehearsal does not run in `notRehearsed`: `module-copy`, `build-record`, `maestro`, `simulator`, `tesseract`, `preflight-balance`, `sell-quote`, `bundler-entry-points`, `wallet-lock`, `clipboard`, `wallet-ui-flow`, `send-review-screenshot`, `send-success-screenshot`, `wallet-confirmation-count`, `backend-wait`, `installed-bundle`, `wallet-state`. A purchase whose recorded buy has no `externalTransactionId` lists `external-id-match` and `module-status-by-external-id`. A purchase whose buy has one lists nothing.
