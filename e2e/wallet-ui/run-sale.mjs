@@ -374,17 +374,33 @@ function scaled6 (text) {
   return BigInt(`${whole}${frac.slice(0, 6).padEnd(6, '0')}`)
 }
 
+// Backend Util.roundReadable → roundByPrecision(amount, 5), ROUND_HALF_UP.
+function roundedSaleBase (base) {
+  let scale = 6
+  let coeff = base
+  while (coeff > 0n && coeff % 10n === 0n) {
+    coeff /= 10n
+    scale -= 1
+  }
+  const digits = coeff.toString()
+  if (digits.length <= 5) return base
+  let kept = BigInt(digits.slice(0, 5))
+  if (digits[5] >= '5') kept += 1n
+  const exponent = digits.length - 5 - scale + 6
+  return kept * (10n ** BigInt(exponent))
+}
+
 function amountIsSale (value) {
-  const base = state.options.amountBase
+  const expected = roundedSaleBase(state.options.amountBase)
   if (typeof value === 'string') {
     const text = value.trim()
     if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return false
-    return scaled6(text) === base
+    return scaled6(text) === expected
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
     const text = String(value)
     if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return false
-    return scaled6(text) === base
+    return scaled6(text) === expected
   }
   return false
 }
