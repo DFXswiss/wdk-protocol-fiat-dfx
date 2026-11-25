@@ -1,0 +1,179 @@
+# Testing
+
+The canonical description of the layers is `docs/test-architecture.md` in `DFXswiss/backend`.
+This file describes the layers this repository owns. Current state and target are separate.
+Nothing here describes a capability as existing when it does not.
+
+## The layers this repository owns
+
+| Layer | Lives in | What it proves | What it cannot prove | Runs in CI |
+| --- | --- | --- | --- | --- |
+| Unit | `tests/`, excluding `tests/integration/` | Public methods against injected HTTP responses, including status mapping and input validation | The live DFX API, a chain, or a wallet user interface | Yes, `npm run test:coverage`, which runs this layer and the recorded-response integration layer (`jest.coverage.config.js`) |
+| Recorded-response integration | `tests/integration/` | Catalogs, quotes and authenticated URLs and details against a local server that replays a sandbox recording | The live DFX API as it answers today | Yes, `npm run test:coverage`, which runs this layer and the unit layer (`jest.coverage.config.js`) |
+| Live API checks | `e2e/live-matrix.mjs`, `e2e/signature-diff.mjs`, `e2e/native-quotes.mjs`, `e2e/bare-smoke.mjs` | Live matrix and native quotes call the live sandbox or production API. Signature diff compares normalization locally. Bare smoke loads the Bare entry | An on-chain deposit. The matrix and native quotes send none. Bare smoke does not call the DFX API | No |
+| Hybrid real runs | `e2e/real-sell.mjs`, `e2e/real-buy.mjs`, `e2e/bundler-send.mjs`, `e2e/safe-rescue.mjs` | For a passing sell, a deposit sent by the script, one sandbox row for that hash, and at `PayoutInProgress` or `Completed` a finite `outputAmount` greater than 0 with `outputAsset` EUR. A passing buy compares the payout transfer with the balance change, and the USDC transfer rounded to 5 significant digits half up equals `outputAmount`. Bundler send and safe rescue move a Base balance when `--send` is set | That a wallet user interface confirmed the transaction, or that a bank paid the fiat | No |
+| Real sale in a wallet user interface | `e2e/wallet-ui/` | Default target: the patched starter wallet, in the iOS simulator, confirms 1 USDT or 0.0001 ETH on Sepolia or leaves the review screen, and the sandbox finds that hash itself. `production-polygon` target: the same wallet opens the production DFX purchase for 11.00 EUR and the production sale of USDT on Polygon from the starter's gasless account | On Sepolia: a smart account, a purchase. On production: a completed sale (none has sent yet, see Known gaps). On both: the bank payout, a physical device, or an unpatched wallet | No |
+
+Two rules, from the canonical document, govern where a test belongs:
+
+1. A failure mode is tested at the lowest layer that can express it.
+2. Test code lives in the repository whose code it proves.
+
+The processing behind the DFX API — bank receipt, AML, liquidity, payout and booking — cannot be tested from this repository. The canonical document places that processing in the integration layer of `DFXswiss/backend`.
+
+## Current state — measured
+
+Measured on `9d31db0`, 2026-11-25, macpro, Node v22.22.0, clean tree, after `npm ci`.
+
+| Command | Result |
+| --- | --- |
+| `npm test` | 804/804 tests in 2 suites |
+| `npm run test:integration` | 35/35 tests in 1 suite |
+| `npm run test:coverage` | 839/839 tests in 3 suites; 100% statements, branches, functions and lines |
+| `npm run lint` | No findings (`standard`, then `npm run docs:reality:check`) |
+| `npm run build:types` | exit 0 |
+| `npm audit --audit-level=critical` | 0 vulnerabilities |
+
+The three jest commands were run as the script lines they name (`NODE_OPTIONS=--experimental-vm-modules` and the same jest arguments), because on macpro a shell function in front of `npm` refuses runners it does not recognize.
+
+Older unit and coverage counts in previous revisions of this file had no recorded commit. They are not repeated here.
+
+Live probes below have a date. A row without a recorded commit says `commit not recorded`.
+
+| Probe | Result | Date | Commit |
+| --- | --- | --- | --- |
+| `e2e/live-matrix.mjs`, sandbox | 178/186 steps | 2026-10-29, and the same count on 2026-11-05 | commit not recorded |
+| `e2e/live-matrix.mjs`, production | 182/187 steps | 2026-10-29 | commit not recorded |
+| `e2e/live-matrix.mjs`, production | 177/178 steps | 2026-11-05 | commit not recorded |
+| `e2e/signature-diff.mjs` | 0 mismatches in 20,000 Solana and 5,000 Spark signatures, including a re-run | 2026-11-05 | commit not recorded |
+| `e2e/native-quotes.mjs` | Historical, before the native decimals fallback: sandbox listed only Firo among Bitcoin, Lightning, Arkade and Firo; production listed none; unlisted assets were rejected with `Missing decimals`. The production run after the fallback is the 2026-11-24 `DFX_ENV=production node native-quotes.mjs` row | re-run 2026-11-05 | commit not recorded |
+| `e2e/bare-smoke.mjs` | 4/4. Bare runtime v1.35.0, with `bare@1.34.1` | 2026-10-20 | commit not recorded |
+| `e2e/bare-smoke.mjs` | 4/4. Bare runtime v1.36.0, with `bare@1.34.1` | 2026-11-05 | commit not recorded |
+| `GET https://api.dfx.swiss/v1/asset` | `Bitcoin/BTC` decimals null, buyable true, sellable true; `Lightning/BTC` null, true, true; `Arkade/BTC` null, false, false; `BitcoinTestnet4/BTC` null, false, false; `Firo/FIRO` null, false, false | 2026-11-24 | `f9cacbc` |
+| `DFX_ENV=production node native-quotes.mjs` | exit 0. bitcoin listed, quoteBuy and quoteSell quoted; lightning listed, both quoted; arkade not listed, both rejected with `Unsupported buy/sell asset or network: BTC`; firo not listed, both rejected with `Unsupported buy/sell asset or network: FIRO` | 2026-11-24 | `f9cacbc` |
+| `DFX_ENV=production node live-matrix.mjs` | exit 1, `172/176 steps ok, 7 skipped`. Sign-in succeeded on 12 of 13 cases. The 4 FAILs are all in the solana case: `ProviderError UNAUTHORIZED Invalid signature` on the sign-in step and the three steps that sign in again. Skips: sepolia, tron and spark buy and sell (no buyable and no sellable asset on that network in the API catalog); solana sell (no sellable asset on solana in the API catalog) | 2026-11-24 | `f9cacbc` |
+| `DFX_ENV=production node native-quotes.mjs` | exit 0. bitcoin listed, quoteBuy and quoteSell quoted; lightning listed, both quoted; arkade not listed, both rejected with `Unsupported buy asset or network: BTC` and `Unsupported sell asset or network: BTC`; firo not listed, both rejected the same way for `FIRO` | 2026-11-25 | `9d31db0` |
+| `DFX_ENV=production node live-matrix.mjs` | exit 0, `177/177 steps ok, 7 skipped`. No FAIL, also none in the solana case with this run's random seed. Skips: sepolia, tron and spark buy and sell, and solana sell, each because the API catalog lists no buyable or sellable asset on that network | 2026-11-25 | `9d31db0` |
+
+The three 2026-11-24 production rows were measured on macpro, Node v22.22.0, module commit `f9cacbca2fdf685defc797ed7268c0163779e954`, clean tree. Production API `/version` commit `7d14468756fe7ae6c346679424c7c3ed01783454` was the same at start and end.
+
+The two 2026-11-25 production rows were measured on macpro, Node v22.22.0, module commit `9d31db0f4d042e2fab0f1c1af480748167c310d9`, clean tree. Production API `/version` commit `159b090033215e6cf4b885e765b73d2726449a44` was the same at start and end of the live matrix.
+
+`e2e/out/matrix-results-sandbox.json` in this tree has no commit and is not the 178/186 record. `e2e/evidence/` holds the real-run rows in the table further down. Those rows name a date. Of the wallet-ui rows, the 2026-11-12 sales and the 2026-11-16 runs name module heads, and the 2026-11-16 red row names the head of its ETH sale; the mutation rows and the 2026-11-12 red row do not.
+
+## E2E requirement
+
+The requirement taken from the review on `DFXswiss/app` #1595: a real wallet with a user interface sends a real transaction on a real chain, the DFX API recognizes that deposit, nothing in between is stubbed, and no API response is rewritten. One test each for an ERC-20 transfer, a native transfer, a rejected network switch and a rejected transfer. Proof that the API recognized the deposit. One test for the core feature. A documented run at the final head. CI is not required.
+
+| Requirement | Status at this head | Evidence |
+| --- | --- | --- |
+| Real wallet user interface, real chain transaction, API recognizes the deposit, nothing stubbed, no rewritten API response | Partial. The wallet-ui sale sends on Sepolia and the sandbox finds the hash. The #1595 review names "a testnet or a local fork" and "for example the MetaMask extension driven by Synpress"; Maestro, the simulator and the sandbox host are declared. The open point is the wallet itself: the starter is patched and sends Ethereum through the plain EVM wallet instead of its gasless package | `e2e/wallet-ui/`, `docs/test-reality/sale-in-a-wallet-user-interface.json` |
+| ERC-20 transfer, 1 USDT | Covered | 2026-11-16, module head `6150990`, sandbox id 10090, `PayoutInProgress`. Also 2026-11-12 at `97f9e71` and `2feecb3`. See the evidence table |
+| Native transfer, 0.0001 ETH | Covered | 2026-11-16, module head `6150990`, sandbox id 10089, `PayoutInProgress` |
+| Rejected network switch | Not applicable | The sell page is a `WebView` with no injected provider (`e2e/wallet-ui/starter.patch`, `src/app/sell/index.tsx`). This repository has no `wallet_switchEthereumChain` call. The transfer is sent from the wallet's own send screen |
+| Rejected transfer | Covered | 2026-11-16, `--reject`, at `9375cd1` and again at `6150990`. No confirm tap, nonce and balances unchanged, no new sale |
+| API recognition | Covered for the sandbox. The runner does not submit the hash. The sandbox list is read and matched on `inputTxId` | `e2e/wallet-ui/run-sale.mjs` |
+| Core feature | Sale covered on the Sepolia sandbox. Purchase covered once on production, Polygon, with real money (below). Sale on production from the starter's gasless account sent and booked once, but its run ended red on the runner's own amount check (below). A sale from a smart account on Sepolia is not covered | Known gaps |
+| Purchase on production, Polygon, 11.00 EUR | Covered once. The `production-polygon` build opened the production DFX purchase from the wallet's Buy screen (quote 8.5872 USDT to the wallet's own address on Polygon). The account holder paid by bank transfer. DFX paid out 8.587415 USDT: receipt status 1, block 97883043, one USDT `Transfer` of 8587415 base units from `0x94e603327e0ef5f95f2b4ddf4a0788e9718bb714` to the wallet `0x2a59bDB8Bb9bB462aEd705CBC21b775D752A1A62`. DFX transaction 349796 read `Completed` with that hash on 2026-11-24. The wallet USDT balance went from 0 to 8587415 base units between the polls at 14:20:19Z and 14:21:19Z | [Polygonscan](https://polygonscan.com/tx/0x9773cedac1f43a3210be68e7bce21b1acdf16cb9ab5a41a04dadd1a9f0f3fceb), 2026-11-24. The build was an uncommitted tree on top of `b4e1354` (rebased: `301db07`); the buy screen was committed later in `ee330b0` (rebased: `fa18f8d`). This purchase therefore documents no commit and is not a run at the final head |
+| Sale on production, Polygon, 8.587415 USDT, gas paid by the paymaster | Sent and booked once, run red. `wallet-ui/run-sale.mjs --target production-polygon --amount 8.587415 --send --confirm` at module head `e38500d`, clean tree, installed bundle `a75b1564…cbb4c` equal to the build. One Confirm tap sent one user operation: `UserOperationEvent` success true, paymaster `0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402`, `actualGasCost` 81854496527216100 wei; receipt status 1, block 97937958, one USDT `Transfer` of 8587415 base units from the wallet to the DFX deposit address `0x91bedD5b263eAe1D8973846317eF8FCDf73605E6`. USDT went from 8587415 to 0, POL stayed 0, nonce went from 0 to 1. The backend found the hash on the first read: DFX transaction 350180, `Sell`, USDT, Polygon. The run then exited 1 at `backend-shape: amount is not the sale amount`: the API returns `inputAmount` 8.5874, because it rounds asset amounts to 5 significant digits (`Util.roundReadable` → `roundByPrecision(amount, 5)`, `ROUND_HALF_UP`, API commit `159b090`), while the check expected 8.587415. A read after the run, outside the runner, showed `PayoutInProgress`, 7.69 EUR, at 13:16:28Z. API commit `159b090` at start and end. The run wrote no `echter-lauf.json` and no explorer or app page screenshot, because those steps follow the failed check. It was not repeated | [Polygonscan](https://polygonscan.com/tx/0xc08a5ae612e4132783280f492cf1503ba9122c3c6fb0b1da7855d987544d161f), 2026-11-25; [e2e/evidence/2026-11-25-production-polygon-wallet-ui-sale.jsonl](e2e/evidence/2026-11-25-production-polygon-wallet-ui-sale.jsonl) |
+| Checks after sending, replayed on production | Rehearsed, not a run. At `d656a27`, clean tree, `wallet-ui/run-sale.mjs --rehearse` replayed the checks that follow the payout and the send against DFX purchase 349796 and against the sale's user operation `0x59f6fb24…1378`, read-only: no order, no transfer, balances at block-1 and block from the archive RPC `polygon.gateway.tenderly.co`. Both ended `rehearsal-pass` with 0 read retries, API commit `159b090` at start and end. 17 plausible-wrong changes of those checks (8 purchase, 9 sale) each ended `rehearsal-fail` at the changed check. `wallet-ui/write-protocol.mjs` refuses rehearsal records. Fed reshaped copies of the two rehearsal records, it wrote a protocol that the e2e evidence gate accepted, and each of 24 changed record fields made it exit 1 at its check | [e2e/evidence/2026-11-25-production-polygon-wallet-ui-rehearsal.jsonl](e2e/evidence/2026-11-25-production-polygon-wallet-ui-rehearsal.jsonl), [e2e/evidence/2026-11-25-production-polygon-protocol-writer-probe.jsonl](e2e/evidence/2026-11-25-production-polygon-protocol-writer-probe.jsonl) |
+| Documented run at the final head | Not in this file. The pull request carries it. The rows below are earlier heads, not `9d31db0` | Evidence table |
+| CI | Not required, and this run is not in CI | No workflow under `.github/` names `wallet-ui`, `live-matrix` or `real-sell` |
+
+## Reality declaration
+
+Declarations live in [`docs/test-reality/`](docs/test-reality/), one JSON record per area. Each entry states the component, the status, the mechanism with file citations, what stands there in production, and one sentence for what a green run does not prove.
+
+`npm run docs:reality:check` checks those records. `npm run lint` runs it after `standard`. The checker is `scripts/test-reality/check.js` and `scripts/test-reality/lib.js`, copied unchanged from `DFXswiss/backend` `scripts/test-reality/` at `36dfb41`. This package is `"type": "module"`, so `scripts/test-reality/package.json` sets `"type": "commonjs"` and the two copied files stay byte-identical to that commit.
+
+A run whose fakes are not declared is an incomplete result.
+
+## Known gaps
+
+- **Purchase in a wallet user interface on Sepolia.** On 2026-11-17 the sandbox reported all four Sepolia assets with `buyable: false`, measured with `GET /v1/asset?blockchains=Sepolia`, 2026-11-17, no module commit involved (`commit not recorded`). This repository does not call `PUT /v1/buy/:id/simulatePayment`. A simulated bank receipt through that route would be a declared fake. The one real purchase is the production row in the E2E requirement table, and it ran on an uncommitted tree.
+- **Green sale run on production.** The one production sale on 2026-11-25 sent, was found by the backend and reached `PayoutInProgress`, but the runner ended red on its own amount check, so no run on production has ended green and no `echter-lauf.json` exists for it. The check now compares against the backend's 5-significant-digit rounding. That fix and every check after it ran against this real sale in the read-only rehearsal at `d656a27` and passed, but no sending run has exercised them: the wallet holds no USDT. The account holder decided on one final paid purchase, followed by the sale of what arrives.
+- **Sale attempts on production before the paymaster was funded.** Four attempts on 2026-11-24 sent nothing (`e2e/evidence/2026-11-24-production-polygon-wallet-ui-red.jsonl`). The first two stopped in flow 1 because the widget preselects the holder's saved payout account. The last two tapped Confirm once and got no hash: the third had the starter's `YOUR_PIMLICO_KEY` placeholder in the bundler and paymaster URLs; the fourth had a working key, and Pimlico's `pm_getPaymasterData` refused with `Insufficient Pimlico balance for sponsorship … Balance available: 0 USD`. The same call still answered that on 2026-11-25 with that key; a funded Pimlico account then sponsored the 2026-11-25 sale. Across the four runs the process probe sampled Maestro 369, 353, 126 and 129 times and found the payout IBAN on no command line. After the fourth run the wallet still held 8587415 base units of USDT and 0 POL, with nonce 0 and no code (read 2026-11-25).
+- **Payout account on a command line during the 2026-11-25 production sale.** The runner passes the account pattern to Maestro only in the child environment (`MAESTRO_IBAN_PATTERN` through `runFlow`, `e2e/wallet-ui/run-sale.mjs`), not as an argument. A process probe outside the runner sampled every 2 seconds during that sale: 88 samples showed Maestro running, and 2 samples showed a command line containing the variable name `IBAN_PATTERN`. The probe counted the name only. It did not record which process that was, or whether the account value was on that line. The cause is not known.
+- **Sale from a smart account in a wallet user interface.** The patched starter registers Ethereum as a plain EVM account, not an ERC-4337 account. A hybrid sandbox sale from a fresh Safe, id 10035, reached `Processing` and the follow timed out (`e2e/evidence/2026-11-09-sandbox-real-sell-pimlico.jsonl`, run `red6-18f0acf-safe-sell-stays-processing`, commit `78264680`, 2026-11-09).
+- **Bank payout.** This repository does not pay out from a bank. `e2e/real-sell.mjs` and the wallet-ui runner return when the sandbox state is `PayoutInProgress` or `Completed` and do not read a bank debit. Recorded wallet-ui sales stopped at `PayoutInProgress`.
+- **The wallet-ui run does not run in CI.** A weekly run outside CI that repeats it is not in this repository.
+- **Solana sign-in when the address matches the Bitcoin format.** This is a DFX API defect, not a module defect. Measured the same day, 2026-11-24. The DFX API detects the chain of a sign-in address by regular expressions in a fixed order and tests the Bitcoin format `([13]|bc1)[a-zA-HJ-NP-Z0-9]{25,62}` before the Solana format, so a Solana address that begins with `1` or `3` is verified as a Bitcoin address and rejected. 174 of 3000 random WDK Solana addresses (5.80 %) match that Bitcoin format. A targeted production sign-in with a Solana address beginning with `3` returned `Invalid signature`; one beginning with `9` signed in. The module's signature for both is valid (offline ed25519 verification, 200 of 200), and the earlier 2026-11-24 production run at the uncommitted tree signed in on all 13 cases with another random seed. `DFX_ENV=production node live-matrix.mjs` at `f9cacbc` exited 1, `172/176 steps ok, 7 skipped`. Sign-in succeeded on 12 of 13 cases. The 4 FAILs are all in the solana case: `ProviderError UNAUTHORIZED Invalid signature` on the sign-in step and the three steps that sign in again. The live matrix uses a random seed per run, so its solana case fails in about 6 % of runs until the DFX API checks the Solana format before the Bitcoin format. The 2026-11-25 run at `9d31db0` had no solana FAIL.
+
+## Target
+
+_Target — not built._
+
+1. A purchase confirmed in a wallet user interface at a committed head.
+2. A sale on production, Polygon, from the starter's gasless account, booked to `PayoutInProgress` or `Completed`.
+3. A sale from a smart account confirmed in a wallet user interface on Sepolia.
+
+## How to run
+
+```sh
+npm run lint && npm test
+npm run test:integration
+npm run test:coverage
+(cd e2e && node signature-diff.mjs)
+(cd e2e && node native-quotes.mjs)
+(cd e2e && DFX_ENV=sandbox node live-matrix.mjs)
+(cd e2e && npx --yes bare@1.34.1 bare-smoke.mjs)
+```
+
+`npm run lint` is `standard` and then `npm run docs:reality:check`. The counts in [Current state](#current-state--measured) are the ones measured on `9d31db0`. The live-probe sentences there name the date and, where no commit was recorded, say so.
+
+Sell and buy commands, flags and exit codes are in [e2e/README.md](e2e/README.md). A sell or buy record (`dfx-real-run/v1`) is written only after a passing run with a clean tree, to the file given by `--record`.
+
+## Real-run evidence
+
+| Date | Script | Network | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| 2026-10-30 | one-off script, not in this tree; same WDK calls as `bundler-send.mjs` | Base | three UserOperations from an account that had no code; the first deployed it; each receipt status 1 and `UserOperationEvent` `success` true | [e2e/evidence/2026-10-30-bundler-sends.jsonl](e2e/evidence/2026-10-30-bundler-sends.jsonl) |
+| 2026-10-30 | `bundler-send.mjs` | Base | 1 USDC and remaining ETH (`--all`), each exit 0 | [e2e/evidence/2026-10-30-bundler-send-script.jsonl](e2e/evidence/2026-10-30-bundler-send-script.jsonl) |
+| 2026-11-02 | `real-sell.mjs` | Sepolia sandbox | exit 0; 1 USDT and 0.0001 ETH; each receipt status 1; sandbox recognized each hash; module `in_progress` | [e2e/evidence/2026-11-02-sandbox-real-sell.jsonl](e2e/evidence/2026-11-02-sandbox-real-sell.jsonl) |
+| 2026-11-02 | `real-sell.mjs` | Sepolia sandbox | exit 1 at the receipt check after 1 USDT (no `gasUsed` or `effectiveGasPrice` in the receipt) | [e2e/evidence/2026-11-02-sandbox-real-sell-red.jsonl](e2e/evidence/2026-11-02-sandbox-real-sell-red.jsonl) |
+| 2026-11-02 | `real-sell.mjs` | Sepolia sandbox | 6/6 mutations of its checks detected | [e2e/evidence/2026-11-02-sandbox-real-sell-mutations.jsonl](e2e/evidence/2026-11-02-sandbox-real-sell-mutations.jsonl) |
+| 2026-11-04 | `real-sell.mjs` | Sepolia sandbox | exit 0 for the EOA and for a fresh undeployed Safe; all four deposits (USDT and ETH for each account) recognized | [e2e/evidence/2026-11-04-sandbox-real-sell.jsonl](e2e/evidence/2026-11-04-sandbox-real-sell.jsonl) |
+| 2026-11-04 | `real-sell.mjs` | Sepolia sandbox | exit 1: `block not found` on a read at the receipt block | [e2e/evidence/2026-11-04-sandbox-real-sell-red.jsonl](e2e/evidence/2026-11-04-sandbox-real-sell-red.jsonl) |
+| 2026-11-04 | `real-sell.mjs` | Sepolia sandbox | 12/12 mutations detected | [e2e/evidence/2026-11-04-sandbox-real-sell-mutations.jsonl](e2e/evidence/2026-11-04-sandbox-real-sell-mutations.jsonl) |
+| 2026-11-05 | `real-sell.mjs` | Sepolia sandbox | exit 1: the Safe balance check read a public node that did not yet have the funding block and saw 0 ETH; the file ends at `funding-receipt` because the error was then written only to stderr | [e2e/evidence/2026-11-05-sandbox-real-sell-red.jsonl](e2e/evidence/2026-11-05-sandbox-real-sell-red.jsonl) |
+| 2026-11-05 | `real-sell.mjs` | Sepolia sandbox | exit 1: `header not found` at the receipt block | [e2e/evidence/2026-11-05-sandbox-real-sell-red-2.jsonl](e2e/evidence/2026-11-05-sandbox-real-sell-red-2.jsonl) |
+| 2026-11-05 | `real-sell.mjs` | Sepolia sandbox | twelve mutations; all twelve exited 1 at the changed check, and the three that stop before the sale deposit sent nothing to DFX | [e2e/evidence/2026-11-05-sandbox-real-sell-mutations.jsonl](e2e/evidence/2026-11-05-sandbox-real-sell-mutations.jsonl) |
+| 2026-11-06 | `real-sell.mjs` | Sepolia sandbox | two IBAN-path mutations without `--send`; each exit 1; nothing sent | [e2e/evidence/2026-11-06-sandbox-real-sell-iban.jsonl](e2e/evidence/2026-11-06-sandbox-real-sell-iban.jsonl) |
+| 2026-11-07 | `real-sell.mjs` and `real-buy.mjs` | Sepolia sandbox for the three `real-sell.mjs` mutations; the `real-buy.mjs` mutation used the Sepolia test seed | three mutations of `real-sell.mjs` run against the Sepolia sandbox (one sent 1 USDT and exited 1 at the booking page, one exited 3 before anything was sent, and one exited 3 because the tree was dirty, where exit 2 was expected); one clean-tree mutation of `real-buy.mjs` that exited 3 after the quote and created no purchase URL; two IBAN-mask mutations that exited 1 without sending | [e2e/evidence/2026-11-07-sandbox-real-sell-v2.jsonl](e2e/evidence/2026-11-07-sandbox-real-sell-v2.jsonl) |
+| 2026-11-09 | `real-sell.mjs` | Sepolia sandbox | six runs ended red; two of them were on 2026-11-07 | [e2e/evidence/2026-11-09-sandbox-real-sell-pimlico.jsonl](e2e/evidence/2026-11-09-sandbox-real-sell-pimlico.jsonl) |
+| 2026-11-12 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | exit 0 twice (module heads `97f9e71` and `2feecb3`); each sale of 1 USDT confirmed by one tap in the starter wallet, receipt status 1, found by the sandbox itself and booked to `PayoutInProgress` | [e2e/evidence/2026-11-12-wallet-ui-sale.jsonl](e2e/evidence/2026-11-12-wallet-ui-sale.jsonl) |
+| 2026-11-12 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | 15/15 mutations detected: each run exited 1 at the changed check | [e2e/evidence/2026-11-12-wallet-ui-sale-mutations.jsonl](e2e/evidence/2026-11-12-wallet-ui-sale-mutations.jsonl) |
+| 2026-11-12 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | two runs ended red: a scroll timeout before anything was sent, and HTTP 502 from the sandbox during the wait for the booking | [e2e/evidence/2026-11-12-wallet-ui-sale-red.jsonl](e2e/evidence/2026-11-12-wallet-ui-sale-red.jsonl) |
+| 2026-11-16 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | exit 0 four times: a rejected USDT transfer at `9375cd1`; at `6150990` a sale of 0.0001 ETH (id 10089), a rejected USDT transfer and a sale of 1 USDT (id 10090). Each sale was confirmed by one tap and booked to `PayoutInProgress`; each rejected transfer left the review screen with no confirm tap, the nonce and balances unchanged and no new sale | [e2e/evidence/2026-11-16-wallet-ui-runs.jsonl](e2e/evidence/2026-11-16-wallet-ui-runs.jsonl) |
+| 2026-11-16 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | 19/19 mutations of the ETH-sale and `--reject` checks detected: each run exited 1 at the changed check | [e2e/evidence/2026-11-16-wallet-ui-mutations.jsonl](e2e/evidence/2026-11-16-wallet-ui-mutations.jsonl) |
+| 2026-11-16 | `wallet-ui/run-sale.mjs` | Sepolia sandbox | two runs ended red: the ETH sale at `9375cd1` (its check required a receipt without logs; the native transfer carries one EIP-7708 log), and a mutant run in which the sell page did not show the bank step before anything was sent | [e2e/evidence/2026-11-16-wallet-ui-red.jsonl](e2e/evidence/2026-11-16-wallet-ui-red.jsonl) |
+| 2026-11-24 | production purchase, `production-polygon` build | Polygon, production | 11.00 EUR paid by bank transfer; 8.587415 USDT received in one transfer, receipt status 1, DFX transaction 349796 `Completed`; uncommitted tree on top of `b4e1354` | [Polygonscan](https://polygonscan.com/tx/0x9773cedac1f43a3210be68e7bce21b1acdf16cb9ab5a41a04dadd1a9f0f3fceb) |
+| 2026-11-24 | `wallet-ui/run-sale.mjs --target production-polygon` | Polygon, production | four runs ended red and sent nothing: two in flow 1 at the IBAN step (module heads `7a5521e`, `5743fd7`); two with no hash after one Confirm tap, first with the Pimlico placeholder key (`8051261`), then with a Pimlico account at 0 USD (`ff138a8`) | [e2e/evidence/2026-11-24-production-polygon-wallet-ui-red.jsonl](e2e/evidence/2026-11-24-production-polygon-wallet-ui-red.jsonl) |
+| 2026-11-25 | `wallet-ui/run-sale.mjs --target production-polygon` | Polygon, production | exit 1 after sending: 8.587415 USDT sold in one sponsored user operation at `e38500d`, receipt status 1, DFX transaction 350180 found by the backend itself, then the run's amount check rejected the API's rounded `inputAmount` 8.5874; booked to `PayoutInProgress`, 7.69 EUR, read separately | [e2e/evidence/2026-11-25-production-polygon-wallet-ui-sale.jsonl](e2e/evidence/2026-11-25-production-polygon-wallet-ui-sale.jsonl) |
+| 2026-11-25 | `wallet-ui/run-sale.mjs --rehearse` | Polygon, production, read-only | at `d656a27`: purchase 349796 and sale `0x59f6fb24…1378` each `rehearsal-pass`; 17/17 mutations of the checks after sending (8 purchase, 9 sale) each `rehearsal-fail` at the changed check. A rehearsal sends nothing and is not a run | [e2e/evidence/2026-11-25-production-polygon-wallet-ui-rehearsal.jsonl](e2e/evidence/2026-11-25-production-polygon-wallet-ui-rehearsal.jsonl) |
+| 2026-11-25 | `wallet-ui/write-protocol.mjs` | probe, no run | at `d656a27`: reshaped copies of the two rehearsal records gave a protocol the e2e evidence gate accepted; 24/24 changed record fields each exited 1 at their check; no protocol was kept | [e2e/evidence/2026-11-25-production-polygon-protocol-writer-probe.jsonl](e2e/evidence/2026-11-25-production-polygon-protocol-writer-probe.jsonl) |
+
+## Commits before the 2026-11-25 rebase
+
+On 2026-11-25 this branch was rebased onto `develop` at `967d696`. Commit IDs written into this file, the evidence files and the reality records before that date name the commit before the rebase. Each rebased commit has the same subject and differs from its original only in the two A38 pin lines that `967d696` changed (`.github/workflows/a38-guard.yml` and `CONTRIBUTING.md`), checked with `git diff --name-only <before> <after>`.
+
+| Before | After |
+| --- | --- |
+| `97f9e71` | `e476f88` |
+| `2feecb3` | `614b8ed` |
+| `bb00b51` | `05eaa11` |
+| `9375cd1` | `bb0d292` |
+| `6150990` | `e8cb3f3` |
+| `99ec31e` | `1a9e4e6` |
+| `f9cacbc` | `3d9ce06` |
+| `b4e1354` | `301db07` |
+| `7a5521e` | `f26b033` |
+| `5743fd7` | `f63c0d0` |
+| `8051261` | `6bfcf0b` |
+| `ff138a8` | `4ab14b0` |
+
+## Keeping this document honest
+
+- Every number carries the commit it was measured on, the command that produces it, and the date. A number without a commit says `commit not recorded`.
+- When a layer changes what it proves, this document changes in the same pull request.
+- When a fake is added, removed or altered, its declaration changes in the same pull request.

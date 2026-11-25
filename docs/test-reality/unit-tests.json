@@ -1,0 +1,345 @@
+{
+  "title": "Unit tests",
+  "scope": "tests/dfx-protocol.test.js supplies the HTTP answers. Authenticated calls through setup() use DummyAccount unless a test passes another account. Constructions outside setup() pass DummyAccount or no account. Three tests replace the clock with Jest fake timers. tests/package.test.js has no stand-in and checks only the wallet dependency version bound.",
+  "entries": [
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "DFX HTTP API",
+      "status": "fake — injected responses",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] builds one response object per method and path and passes that function to DfxProtocol as fetch. [ref 1] also replaces globalThis.fetch for the file. In the library, [ref 2] uses the supplied fetch or globalThis.fetch, and [ref 3] sends production calls to https://api.dfx.swiss. The hand-built account and the fixed signature inside [ref 0] have their own entries.",
+      "insteadOf": "the DFX API",
+      "doesNotProve": "A green run does not prove that the DFX API accepts these requests or returns these bodies.",
+      "refs": [
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "function setup (config = {}, overrides = {}, account = new DummyAccount()) {"
+          ],
+          "span": 23,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          },
+          "endAnchor": [
+            "return { protocol: new DfxProtocol(account, { fetch, ...config }), routes }"
+          ]
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "globalThis.fetch = transportMock"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "src/dfx-client.js",
+          "anchor": [
+            "this._fetch = config.fetch ?? globalThis.fetch"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "src/dfx-client.js",
+          "anchor": [
+            "this._base = config.environment === 'local' ? config.apiUrl : config.environment === 'sandbox' ? 'https://dev.api.dfx.swiss' : 'https://api.dfx.swiss'"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Signing account",
+      "status": "fake — hand-built account",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] defines DummyReadOnlyAccount, DummyAccount and DummyTypedAccount. getAddress, sign and signTypedData delegate to jest mocks and do not read a key. [ref 1] passes a new DummyAccount unless the caller supplies another account. [ref 2] passes DummyTypedAccount where the test needs signTypedData. [ref 3] passes DummyReadOnlyAccount where the test needs an account that cannot sign.",
+      "insteadOf": "a WDK account",
+      "doesNotProve": "A green run does not prove that a WDK account returns this address or signs the challenge.",
+      "refs": [
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "class DummyReadOnlyAccount {",
+            "async getAddress (...args) {",
+            "return getAddressMock(...args)",
+            "}",
+            "}",
+            "",
+            "class DummyAccount extends DummyReadOnlyAccount {",
+            "async sign (...args) {",
+            "return signMock(...args)",
+            "}",
+            "}",
+            "",
+            "class DummyTypedAccount extends DummyAccount {",
+            "async signTypedData (...args) {",
+            "return signTypedDataMock(...args)",
+            "}",
+            "}"
+          ],
+          "span": 17,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "function setup (config = {}, overrides = {}, account = new DummyAccount()) {"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "const { protocol } = setup({ network }, routes, new DummyTypedAccount())"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "test('requires a signing account for details with a read-only account', async () => {",
+            "const { protocol } = setup({}, {}, new DummyReadOnlyAccount())"
+          ],
+          "span": 2,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Account signature",
+      "status": "fake — fixed signature",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] resolves sign to the string dummy-signature, which is not a recoverable signature. [ref 1] resolves signTypedData to 65 bytes of ab, and the buy posts that string when Safe prediction throws. [ref 2] resolves sign to one of four unrecoverable strings and posts that string. [ref 3] builds hex and DER-shaped strings that are not produced by a key in the test. [ref 4] resolves sign to the case's string and posts the encoded form. [ref 5] resolves sign to malformed EVM recovery strings, including 65-byte hex, and posts them unchanged.",
+      "insteadOf": "a signature produced by the account's key",
+      "doesNotProve": "A green run does not prove that the account's key produced these signatures.",
+      "refs": [
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "signMock.mockReset().mockResolvedValue('dummy-signature')"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "const SAFE_SIGNATURE = '0x' + 'ab'.repeat(65)",
+            "signTypedDataMock.mockResolvedValue(SAFE_SIGNATURE)"
+          ],
+          "span": 2,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "['0xsig', 'not-a-signature', '0x' + '00'.repeat(65), '0x' + '11'.repeat(64) + '02'].map(DUMMY_SIGNATURE => [...values, DUMMY_SIGNATURE])"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "const DUMMY_SOLANA = '00'.repeat(62) + '0d24'",
+            "const DUMMY_DER = '304402210080' + '00'.repeat(31) + '021f01' + '00'.repeat(30)",
+            "const DUMMY_COMPACT = '80' + '00'.repeat(31) + '0001' + '00'.repeat(30)"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "])('submits the exact %s authentication signature for format %#', async (NETWORK, BLOCKCHAIN, DUMMY_SIGNATURE, EXPECTED_SIGNATURE) => {",
+            "getAddressMock.mockResolvedValue(DUMMY_ADDRESS)",
+            "signMock.mockResolvedValue(DUMMY_SIGNATURE)"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "test.each([",
+            "'', 'invalid', '0x' + '11'.repeat(64), '0x' + 'gg'.repeat(65),"
+          ],
+          "span": 2,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Account address",
+      "status": "fake — fixed address with the shape of an EOA",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] is the default account address, 20 bytes ending in 1, and [ref 1] makes getAddress return it. It is not the address of the public test key used elsewhere in the file. [ref 2] uses the 40-hex string 0xabcdef…abcd, which has the shape of an EOA, as the account address for a matching-case buy or sell. The Tron label on the next line does not have that shape. [ref 3] uses the same 40-hex string as the account address when a challenge differs only by case.",
+      "insteadOf": "the address of the account's key",
+      "doesNotProve": "A green run does not prove that this address belongs to a key or that a chain recognizes it.",
+      "refs": [
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "const DUMMY_ADDRESS = '0x0000000000000000000000000000000000000001'"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "getAddressMock.mockReset().mockResolvedValue(DUMMY_ADDRESS)"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "['0xabcdefabcdefabcdefabcdefabcdefabcdefabcd', '0xAbcdefABCDEFabcdefABCDEFabcdefABCDEFabcd'],",
+            "['TronAddressAbC', 'TronAddressAbC']"
+          ],
+          "span": 2,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "const account = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd'"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Clock",
+      "status": "fake — Jest fake timers",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] installs Jest fake timers around a country read and expects no timer to remain. [ref 1] and [ref 2] install Jest fake timers and replace setTimeout with a spy that calls the fake setTimeout captured after that installation. Those tests advance that clock to the configured deadline and expect the request to abort then. [ref 3] restores the real timers after every test.",
+      "insteadOf": "the process clock",
+      "doesNotProve": "A green run does not prove that these requests abort after the same delay on a real clock.",
+      "refs": [
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "test('clears the request deadline after a response', async () => {",
+            "jest.useFakeTimers()"
+          ],
+          "span": 2,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "test.each([2147483647, 2147483647n])('accepts the maximum timer delay %s without clamping it', async TIMEOUT => {",
+            "jest.useFakeTimers()",
+            "const SET_TIMEOUT = globalThis.setTimeout",
+            "timerMock.mockImplementation((...args) => SET_TIMEOUT(...args))",
+            "jest.spyOn(globalThis, 'setTimeout').mockImplementation(timerMock)"
+          ],
+          "span": 5,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "test.each([[undefined, 30000], [10, 10], [10n, 10]])('aborts requests with the configured deadline %s', async (TIMEOUT, EXPECTED_DELAY) => {",
+            "jest.useFakeTimers()",
+            "const SET_TIMEOUT = globalThis.setTimeout",
+            "timerMock.mockImplementation((...args) => SET_TIMEOUT(...args))",
+            "jest.spyOn(globalThis, 'setTimeout').mockImplementation(timerMock)"
+          ],
+          "span": 5,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "tests/dfx-protocol.test.js",
+          "anchor": [
+            "jest.restoreAllMocks()",
+            "jest.useRealTimers()"
+          ],
+          "span": 2,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    }
+  ]
+}

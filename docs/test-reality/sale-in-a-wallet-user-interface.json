@@ -1,0 +1,457 @@
+{
+  "title": "Sale in a wallet user interface",
+  "scope": "e2e/wallet-ui/ runs two targets from the patched starter wallet. The default target sells 1 USDT or 0.0001 ETH on Sepolia. --target production-polygon sells the given USDT amount on Polygon against the production API [ref 2] and binds the runner protocol to environment production [ref 3]. The runner reads the transaction list [ref 0] and keeps the row whose inputTxId is that hash [ref 1]. It does not send the hash in that request. The chain transfer, the wallet send and that recognition are executed. On the default target the entries are the stand-ins around them, except the bank payout, which is switched off. --target production-polygon uses the production API and the account holder's saved bank account [ref 4]; the patched wallet, Maestro, the simulator and the switched-off bank payout remain. The runner also has a purchase mode (--buy) [ref 5] and a read-only rehearsal (--rehearse) [ref 6].",
+  "refs": [
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "response = await fetch(`${apiOrigin()}/v1/transaction`, {",
+        "headers: { authorization: `Bearer ${session}`, accept: 'application/json' },",
+        "redirect: 'error',",
+        "signal: AbortSignal.timeout(30_000)",
+        "})"
+      ],
+      "span": 5,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "const hits = rows.filter(row => String(row?.inputTxId ?? '').toLowerCase() === hash)"
+      ],
+      "span": 1,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "const PRODUCTION_API = 'https://api.dfx.swiss'"
+      ],
+      "span": 1,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        ".registerProtocol('polygon', 'dfx', DfxProtocol, { environment: 'production', network: 'polygon' })"
+      ],
+      "span": 1,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "async function readActiveIban (session) {",
+        "let response",
+        "try {",
+        "response = await fetch(`${PRODUCTION_API}/v1/bankAccount`, {"
+      ],
+      "span": 4,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "function purchaseMode (options = state.options) {",
+        "return options?.buy === true"
+      ],
+      "span": 2,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    },
+    {
+      "file": "e2e/wallet-ui/run-sale.mjs",
+      "anchor": [
+        "function rehearsalMode (options = state.options) {",
+        "return options?.rehearse === true"
+      ],
+      "span": 2,
+      "style": {
+        "kind": "abs",
+        "backtick": true
+      }
+    }
+  ],
+  "entries": [
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "WDK starter wallet",
+      "status": "fake — patched starter, not the released wallet",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] points Ethereum at @tetherto/wdk-wallet-evm instead of @tetherto/wdk-wallet-evm-7702-gasless. [ref 1] removes the Ethereum bundler and paymaster URLs. [ref 2] adds Sell. [ref 3] opens the sell page in a WebView and does not inject a provider. [ref 4] shows an Ethereum token fee in ETH and does not add it to the token total. [ref 5] adds the confirm test id on the send review button. [ref 6] adds Sell ETH.",
+      "insteadOf": "the unmodified released WDK starter wallet, with Ethereum on the gasless package",
+      "doesNotProve": "A green run does not prove the sale in an unpatched or released wallet.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/starter.patch",
+          "anchor": [
+            "ethereum: {",
+            "-      package: '@tetherto/wdk-wallet-evm-7702-gasless'",
+            "+      package: '@tetherto/wdk-wallet-evm'"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/starter.patch",
+          "anchor": [
+            "provider: process.env.EXPO_PUBLIC_EVM_ETHEREUM_PROVIDER,",
+            "-      bundlerUrl: process.env.EXPO_PUBLIC_EVM_ETHEREUM_BUNDLER_URL,",
+            "-      paymasterUrl: process.env.EXPO_PUBLIC_EVM_ETHEREUM_PAYMASTER_URL,"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/starter.patch",
+          "anchor": [
+            "+            testID=\"sell-entry\"",
+            "+            icon={<Banknote size={moderateScale(20)} color={theme.colors.textPrimary} />}",
+            "+            label=\"Sell\"",
+            "+            onPress={() => router.push('/sell')}"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/starter.patch",
+          "anchor": [
+            "+          <WebView",
+            "+            source={{ uri: sellUrl }}",
+            "+            style={{ flex: 1 }}",
+            "+          />"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/starter.patch",
+          "anchor": [
+            "+ * Ethereum is a plain account: a token send's quoted fee is wei, shown in",
+            "+ * ETH, and is not added to the token total. A native ETH send's fee is in",
+            "+ * ETH and is part of the total. Bitcoin shows its quoted network fee in",
+            "+ * BTC, since Bitcoin has no sponsorship at all."
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/starter.patch",
+          "anchor": [
+            "+        <Button testID=\"send-confirm\" label=\"Confirm\" onPress={onConfirm} loading={isSending} disabled={isQuoting || isSending} />"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/starter.patch",
+          "anchor": [
+            "+            testID=\"sell-eth-entry\"",
+            "+            icon={<Banknote size={moderateScale(20)} color={theme.colors.textPrimary} />}",
+            "+            label=\"Sell ETH\"",
+            "+            onPress={() => router.push('/sell?asset=ETH')}"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "The person tapping the wallet",
+      "status": "fake — Maestro taps the controls",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] requires Maestro 2.10. [ref 1] starts maestro test against the booted simulator.",
+      "insteadOf": "a person tapping the wallet",
+      "doesNotProve": "A green run does not prove that a person can complete the sale without these scripted taps.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "if (!/^2\\.10\\.\\d+$/.test(maestroVersion)) throw new NotRunError(`not run: maestro 2.10 is required, found ${maestroVersion}`)"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "const args = ['--udid', state.udid, 'test']",
+            "for (const [key, value] of Object.entries(env)) args.push('-e', `${key}=${value}`)",
+            "args.push('--debug-output', debugDir, '--test-output-dir', outDir, file)",
+            "try {",
+            "const result = await runCapture('maestro', args, 'ignore', childEnv)"
+          ],
+          "span": 5,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "The phone",
+      "status": "fake — iOS simulator",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] requires the booted simulator runtime com.apple.CoreSimulator.SimRuntime.iOS-26-5.",
+      "insteadOf": "a physical iPhone",
+      "doesNotProve": "A green run does not prove the sale on a physical device.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "if (runtime !== 'com.apple.CoreSimulator.SimRuntime.iOS-26-5') throw new NotRunError(`not run: the simulator runtime is ${runtime}; this run needs iOS 26.5`)"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "DFX API",
+      "status": "mixed — sandbox on the default target, the production API on production-polygon",
+      "statusKind": "mixed",
+      "mechanism": "The default target reads https://dev.api.dfx.swiss [ref 0] and binds the starter's DFX protocol to environment sandbox [ref 1]. --target production-polygon reads the production API [ref 2] and binds the runner protocol to environment production [ref 3].",
+      "insteadOf": "On the default target, the production DFX API at https://api.dfx.swiss. --target production-polygon uses that API and is not a stand-in.",
+      "doesNotProve": "A green default-target run does not prove that production recognizes the deposit or books the sale. A green --target production-polygon run does not prove the sandbox.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "const API = 'https://dev.api.dfx.swiss'"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/starter.patch",
+          "anchor": [
+            "+      target: 'sandbox-sepolia',",
+            "+      walletKey: 'ethereum',",
+            "+      network: 'Sepolia',",
+            "+      environment: 'sandbox',"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "const PRODUCTION_API = 'https://api.dfx.swiss'"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            ".registerProtocol('polygon', 'dfx', DfxProtocol, { environment: 'production', network: 'polygon' })"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Payout IBAN",
+      "status": "mixed — invented per run on the default target, the saved account on production-polygon",
+      "statusKind": "mixed",
+      "mechanism": "On the default target [ref 0] builds a Swiss IBAN. The BBAN starts with clearing 00000 and twelve random digits, and the two check digits are 98 minus the mod-97 remainder of the BBAN followed by 121700. --target production-polygon reads the account holder's active bank account [ref 1] and never invents an IBAN.",
+      "insteadOf": "On the default target, an IBAN of a bank account the seller holds. --target production-polygon uses that saved account and is not a stand-in.",
+      "doesNotProve": "A green default-target run does not prove that a bank would accept the invented number or pay the sale to an account the seller holds. A green --target production-polygon run does not prove a payout to an invented IBAN.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "function inventedIban () {",
+            "const bban = '00000' + Array.from({ length: 12 }, () => String(randomInt(10))).join('')",
+            "const remainder = [...`${bban}121700`].reduce((n, digit) => (n * 10 + Number(digit)) % 97, 0)",
+            "return `CH${String(98 - remainder).padStart(2, '0')}${bban}`",
+            "}"
+          ],
+          "span": 5,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "async function readActiveIban (session) {",
+            "let response",
+            "try {",
+            "response = await fetch(`${PRODUCTION_API}/v1/bankAccount`, {"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Bank payout of the sale",
+      "status": "switched off — the runner stops at PayoutInProgress or Completed",
+      "statusKind": "switched-off",
+      "mechanism": "[ref 0] checks the booked payout and returns when the sale row is PayoutInProgress or Completed. The runner does not read a bank debit.",
+      "insteadOf": "a bank transfer of the fiat amount to the payout account",
+      "doesNotProve": "A green run does not prove that a bank paid the fiat amount.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "if (row.state === 'PayoutInProgress' || row.state === 'Completed') {",
+            "assertBookedPayout(row)",
+            "return { row, booked: true }",
+            "}"
+          ],
+          "span": 4,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Bank transfer of the purchase",
+      "status": "real — the account holder pays the purchase by bank transfer by hand while the runner waits",
+      "statusKind": "real",
+      "mechanism": "[ref 0] prints that the runner is waiting for the account holder's bank transfer. [ref 1] keeps the new purchase row whose externalTransactionId is the id of this run.",
+      "insteadOf": "the wallet user's own bank transfer",
+      "doesNotProve": "A green run does not prove that the purchase works with another bank, amount or transfer type than the one the account holder used.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "console.log(`wallet-ui buy: waiting up to ${options.follow} minutes for the account holder's bank transfer of ${eurText(options.fiatCents)} EUR`)"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "const ours = fresh.filter(row => row.externalTransactionId === externalId)"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Evidence rehearsal",
+      "status": "replay — read-only checks after sending, against a recorded production transaction",
+      "statusKind": "mixed",
+      "mechanism": "The runner marks the record rehearsal [ref 0]. The protocol writer rejects a record that carries rehearsal or whose result is not pass [ref 1]. Balances in a rehearsal come from the archive RPC at block-1 and block.",
+      "insteadOf": "a run that sends",
+      "doesNotProve": "A rehearsal does not prove that the wallet can send or that DFX books a new transaction; it proves only that the checks after sending work on real transactions.",
+      "refs": [
+        {
+          "file": "e2e/wallet-ui/run-sale.mjs",
+          "anchor": [
+            "rehearsal: true,",
+            "rehearsedTransaction: options.buy ? options.rehearseId : options.rehearseUserOp,"
+          ],
+          "span": 2,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/wallet-ui/write-protocol.mjs",
+          "anchor": [
+            "function assertRehearsal (record) {",
+            "if (Object.hasOwn(record, 'rehearsal') || record.result !== 'pass') {",
+            "fail('rehearsal', 'record is a rehearsal or not a passing run')"
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    }
+  ]
+}

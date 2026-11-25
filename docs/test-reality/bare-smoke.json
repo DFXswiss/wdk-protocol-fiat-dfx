@@ -1,0 +1,146 @@
+{
+  "title": "Bare smoke",
+  "scope": "e2e/bare-smoke.mjs loads the Bare entry and signs in through a fetch supplied by the script. The account is built in the script. It opens no network connection.",
+  "entries": [
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "DFX sign-in and transaction detail",
+      "status": "fake — stubbed fetch",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] returns a fixed challenge for the sign-in message, a stub access token for POST /v1/auth, and HTTP 404 for every other path. [ref 1] constructs DfxProtocol with that fetch.",
+      "insteadOf": "the DFX API",
+      "doesNotProve": "A green run does not prove that the DFX API signs this account in or reports a missing transaction this way.",
+      "refs": [
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "const fetch = async (input, init = {}) => {",
+            "const path = new URL(input).pathname",
+            "if ((init.method ?? 'GET') === 'GET' && path === '/v1/auth/signMessage') {",
+            "return reply(200, { message: CHALLENGE })",
+            "}",
+            "if (init.method === 'POST' && path === '/v1/auth') {",
+            "postedAuth = JSON.parse(init.body)",
+            "return reply(201, { accessToken: 'stub' })",
+            "}",
+            "return reply(404, { message: 'Not found' })",
+            "}"
+          ],
+          "span": 11,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "const protocol = new DfxProtocol(account, { environment: 'sandbox', network: 'polygon', fetch })"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Signing account",
+      "status": "fake — hand-built account with fixed signatures",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] says the owner address, the Safe and both signatures were derived ahead of time with an ethers Wallet using private key 2 and abstractionkit SafeAccountV0_3_0 with WDK Safe 0.3.0 parameters. [ref 3] says the owner is public test key 2 and the factory data comes from abstractionkit SafeAccountV0_3_0 with the WDK Safe 0.3.0 parameters, and that the inner signature is 0x + 11 x 64 + 1b. [ref 2] is that pattern, 0x then the characters 11 repeated 64 times then 1b, and it is not a derived signature. [ref 1] returns the Safe from getAddress, returns the fixed owner signature from sign when the message is the challenge and 0x otherwise, and returns that pattern from signTypedData.",
+      "insteadOf": "a WDK account that signs the challenge and the Safe typed data",
+      "doesNotProve": "A green run does not prove that a WDK account produces these signatures.",
+      "refs": [
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "// The deterministic public owner 0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF,",
+            "// Safe and signatures were derived with ethers Wallet using private key 2 and",
+            "// abstractionkit SafeAccountV0_3_0 with WDK Safe 0.3.0 params."
+          ],
+          "span": 3,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "const account = {",
+            "getAddress: async () => SAFE,",
+            "sign: async message => message === CHALLENGE ? OWNER_SIGNATURE : '0x',",
+            "signTypedData: async () => SAFE_SIGNATURE",
+            "}"
+          ],
+          "span": 5,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "const SAFE_SIGNATURE = `0x${'11'.repeat(64)}1b`"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/fixtures/bare-smoke-expected.json",
+          "anchor": [
+            "\"description\": \"Expected ERC-6492 sign-in signature for e2e/bare-smoke.mjs: abi.encode(address factory, bytes factoryData, bytes innerSignature) followed by the 32-byte 0x6492 magic. Owner is the public test key 2; factory data from abstractionkit SafeAccountV0_3_0.createFactoryAddressAndData with the WDK Safe 0.3.0 parameters; inner signature is 0x + 11 x 64 + 1b.\","
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    },
+    {
+      "heading": null,
+      "headingLevel": null,
+      "component": "Safe signature",
+      "status": "fake — a placeholder that looks real",
+      "statusKind": "fake",
+      "mechanism": "[ref 0] sets the Safe signature to 0x, then the characters 11 repeated 64 times, then 1b. That is 65 bytes ending in recovery id 27, the shape of an EOA signature, and it is a repeated pattern rather than a signature derived from the typed data. [ref 1] names that same pattern as the inner signature inside the expected ERC-6492 wrapper.",
+      "insteadOf": "a signature produced for the Safe sign-in typed data",
+      "doesNotProve": "A green run does not prove that this value is a signature a Safe or its owner produced.",
+      "refs": [
+        {
+          "file": "e2e/bare-smoke.mjs",
+          "anchor": [
+            "const SAFE_SIGNATURE = `0x${'11'.repeat(64)}1b`"
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        },
+        {
+          "file": "e2e/fixtures/bare-smoke-expected.json",
+          "anchor": [
+            "\"description\": \"Expected ERC-6492 sign-in signature for e2e/bare-smoke.mjs: abi.encode(address factory, bytes factoryData, bytes innerSignature) followed by the 32-byte 0x6492 magic. Owner is the public test key 2; factory data from abstractionkit SafeAccountV0_3_0.createFactoryAddressAndData with the WDK Safe 0.3.0 parameters; inner signature is 0x + 11 x 64 + 1b.\","
+          ],
+          "span": 1,
+          "style": {
+            "kind": "abs",
+            "backtick": true
+          }
+        }
+      ]
+    }
+  ]
+}

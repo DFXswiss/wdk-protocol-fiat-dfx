@@ -1,0 +1,37 @@
+appId: io.tether.wdk.starter.reactnative
+---
+# Part 2 runs only after the runner has confirmed that the simulator clipboard
+# holds a 20-byte address. DEP_HEAD and DEP_TAIL are the ends of that address.
+- tapOn:
+    id: "send-entry"
+- tapOn:
+    id: "${ASSET_TESTID}"
+- tapOn:
+    id: "send-recipient"
+- longPressOn:
+    id: "send-recipient"
+- tapOn: "Paste"
+- tapOn:
+    id: "send-amount"
+- inputText: "${AMOUNT_TEXT}"
+# The title is above the keyboard and dismisses it before Review.
+- tapOn: "Send ${SYMBOL}"
+- tapOn:
+    id: "send-continue"
+- extendedWaitUntil:
+    visible:
+      id: "send-confirm"
+    timeout: 60000
+- assertVisible: "${REVIEW_AMOUNT}"
+# The runner sets NETWORK_TEXT (Sepolia: Ethereum \(Sepolia\), production: Polygon).
+- assertVisible: "${NETWORK_TEXT}"
+- assertVisible: "${DEP_HEAD}\\.\\.\\.${DEP_TAIL}"
+- takeScreenshot: send-review
+- tapOn:
+    id: "send-confirm"
+    retryTapIfNoChange: false
+- extendedWaitUntil:
+    visible:
+      id: "send-success-hash"
+    timeout: 180000
+- takeScreenshot: send-success

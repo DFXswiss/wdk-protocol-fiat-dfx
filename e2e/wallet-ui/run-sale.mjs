@@ -1,0 +1,3492 @@
+// Copyright 2026 DFX AG
+// SPDX-License-Identifier: Apache-2.0
+
+// Sepolia sale of 1 USDT or 0.0001 ETH for EUR, or the same transfer rejected on the review screen.
+// --target production-polygon sells a given USDT amount on Polygon mainnet against the production API.
+// --target production-polygon --buy buys USDT on Polygon for EUR cents. The account holder pays by bank transfer.
+// --buy --rehearse replays the purchase checks against an existing buy. It does not pay and it does not open an order.
+// --rehearse replays the production sale checks against an existing sponsored sale. It does not send and it does not open an order.
+// The WDK starter wallet on the iOS simulator confirms the send, or leaves the review screen.
+// Without --send, only the preflight runs and the app is not driven.
+import { execFileSync, spawn } from 'node:child_process'
+import { createHash, randomBytes, randomInt } from 'node:crypto'
+import { closeSync, constants, copyFileSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, rmdirSync, unlinkSync } from 'node:fs'
+import { open } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
+import { fileURLToPath } from 'node:url'
+import { stripVTControlCharacters } from 'node:util'
+import DfxProtocol from '@dfx.swiss/wdk-protocol-fiat-dfx'
+import WDK from '@tetherto/wdk'
+import WalletManagerEvm from '@tetherto/wdk-wallet-evm'
+import { Contract, Interface, JsonRpcProvider, getAddress, parseUnits } from 'ethers'
+import { chromium } from 'playwright'
+import { FAILED_STATES } from '../../src/constants.js'
+
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
+const flowDir = fileURLToPath(new URL('./flow', import.meta.url))
+const buildPath = fileURLToPath(new URL('./out/build.json', import.meta.url))
+const patchPath = fileURLToPath(new URL('./starter.patch', import.meta.url))
+const API = 'https://dev.api.dfx.swiss'
+const PRODUCTION_API = 'https://api.dfx.swiss'
+const APP = 'https://dev.app.dfx.swiss'
+const PRODUCTION_APP = 'https://app.dfx.swiss'
+const EXPLORER = 'https://eth-sepolia.blockscout.com'
+const PRODUCTION_EXPLORER = 'https://polygon.blockscout.com'
+const DEFAULT_RPC = 'https://ethereum-sepolia-rpc.publicnode.com'
+const PRODUCTION_RPC = 'https://polygon-bor-rpc.publicnode.com'
+// The default Polygon RPC refuses historical state. A purchase and a rehearsal read those blocks here.
+const ARCHIVE_RPC = 'https://polygon.gateway.tenderly.co'
+const BASELINE_SOURCE = 'archive block-1 via polygon.gateway.tenderly.co'
+const PURCHASE_BASELINE_SOURCE = 'preflight latest; archive block-1 and block via polygon.gateway.tenderly.co'
+const BUNDLE_ID = 'io.tether.wdk.starter.reactnative'
+const CHAIN_ID = 11155111n
+const PRODUCTION_CHAIN_ID = 137n
+const USDT = getAddress('0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0')
+const PRODUCTION_USDT = getAddress('0xc2132D05D31c914a87C6611C10748AEb04B58e8F')
+// EntryPoint v0.8, the default of the Polygon account in @tetherto/wdk-wallet-evm-7702-gasless 1.0.0-beta.5.
+const ENTRY_POINT = getAddress('0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108')
+const USER_OP_EVENT_ABI = 'event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)'
+const USDT_AMOUNT = 1000000n
+const ETH_AMOUNT = 100000000000000n
+const ETH_FEE = parseUnits('0.0002', 18)
+const ASSET_TABLE = {
+  usdt: {
+    symbol: 'USDT',
+    decimals: 6,
+    baseUnits: USDT_AMOUNT,
+    token: USDT,
+    sellEntry: 'sell-entry',
+    assetTestId: 'send-asset-usdt-ethereum',
+    amountText: '1',
+    reviewAmount: '^1 USDT$'
+  },
+  eth: {
+    symbol: 'ETH',
+    decimals: 18,
+    baseUnits: ETH_AMOUNT,
+    token: null,
+    sellEntry: 'sell-eth-entry',
+    assetTestId: 'send-asset-eth-ethereum',
+    amountText: '0.0001',
+    reviewAmount: '^0[.]0001 ETH$'
+  }
+}
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+// EIP-7708 system address. It emits the one Transfer log of a native ETH send.
+const NATIVE_TRANSFER_ADDRESS = getAddress('0xfffffffffffffffffffffffffffffffffffffffe')
+const ERC20_ABI = ['function balanceOf(address) view returns (uint256)']
+const WALLET_INTERFACE = 'wdk-starter-react-native in the iOS simulator, driven by Maestro'
+const IBAN_LABEL = 'CH 00000 (invented per run)'
+const PRODUCTION_IBAN_LABEL = 'account holder\'s active bank account (not recorded)'
+const FLOW_SHOTS = ['sell-widget-open.png', 'send-review.png', 'send-success.png']
+const REJECT_FLOW_SHOTS = ['sell-widget-open.png', 'send-review.png', 'send-rejected.png']
+const BUY_FLOW_SHOTS = ['buy-widget-open.png']
+// Short transaction id in explorer-<hash>.png: 10 hex digits, no 0x prefix.
+const HASH_SHORT = 10
+const SALE_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
+  'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'depositAddress', 'ibanCountryAndClearing', 'asset', 'mode', 'hash', 'block', 'gasUsed', 'fee',
+  'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
+  'screenshots'
+]
+const PRODUCTION_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
+  'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'depositAddress', 'ibanCountryAndClearing', 'asset', 'mode',
+  'userOperationHash', 'hash', 'block', 'paymaster', 'actualGasCost', 'actualGasUsed', 'feePaidBy', 'bundlerHost', 'polBalance',
+  'balances', 'walletConfirmations', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
+  'screenshots'
+]
+const PURCHASE_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
+  'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'ibanCountryAndClearing', 'asset', 'mode', 'fiatCents', 'externalTransactionId', 'quote',
+  'hash', 'block', 'payoutFrom', 'value', 'balances', 'backend', 'moduleStatus', 'humanStep', 'waitedSeconds',
+  'backendReads', 'rpcReadRetries', 'explorerReloads', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
+  'baselineSource', 'screenshots'
+]
+// Purchase fields that a read-only rehearsal can fill, plus the fields a later sale rehearsal reuses.
+const REHEARSAL_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'ibanCountryAndClearing', 'asset', 'mode', 'fiatCents', 'externalTransactionId',
+  'hash', 'block', 'payoutFrom', 'value', 'balances', 'backend', 'moduleStatus',
+  'backendReads', 'rpcReadRetries', 'explorerReloads',
+  'rehearsal', 'rehearsedTransaction', 'notRehearsed', 'baselineSource',
+  'screenshots'
+]
+// Production-sale fields a read-only rehearsal can fill. The wallet, the build and the preflight balance are not among them.
+const SALE_REHEARSAL_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'depositAddress', 'ibanCountryAndClearing', 'asset', 'mode',
+  'userOperationHash', 'hash', 'block', 'paymaster', 'actualGasCost', 'actualGasUsed', 'feePaidBy', 'bundlerHost',
+  'balances', 'backend', 'moduleStatus', 'backendReads', 'rpcReadRetries', 'explorerReloads',
+  'rehearsal', 'rehearsedTransaction', 'notRehearsed', 'amountSource', 'baselineSource',
+  'screenshots'
+]
+// Steps of a production sale that this rehearsal does not run.
+const SALE_NOT_REHEARSED = [
+  'module-copy',
+  'build-record',
+  'maestro',
+  'simulator',
+  'tesseract',
+  'preflight-balance',
+  'sell-quote',
+  'bundler-entry-points',
+  'wallet-lock',
+  'clipboard',
+  'wallet-ui-flow',
+  'send-review-screenshot',
+  'send-success-screenshot',
+  'wallet-confirmation-count',
+  'backend-wait',
+  'installed-bundle',
+  'wallet-state'
+]
+const REJECT_RECORD_FIELDS = [
+  'date', 'moduleHead', 'dirty', 'starterCommit', 'patchSha256', 'mainJsbundleSha256',
+  'maestroVersion', 'simulatorRuntime', 'walletInterface', 'backendCommitStart', 'backendCommitEnd',
+  'account', 'depositAddress', 'ibanCountryAndClearing', 'asset', 'mode', 'observation', 'nonce',
+  'balances', 'walletConfirmations', 'backend', 'backendReads', 'rpcReadRetries', 'maestroStepRetries', 'clipboardCleared', 'walletStateCleared',
+  'screenshots'
+]
+const REJECT_ABSENT = ['hash', 'block', 'gasUsed', 'fee', 'moduleStatus', 'explorerReloads']
+
+class UsageError extends Error {}
+class NotRunError extends Error {}
+
+function assertModuleCopy () {
+  const mismatch = () => new NotRunError('not run: installed module differs from the working tree; run npm ci in e2e')
+  const installed = resolve(repoRoot, 'e2e/node_modules/@dfx.swiss/wdk-protocol-fiat-dfx')
+  try {
+    const collect = base => {
+      const files = []
+      const visit = relative => {
+        const path = resolve(base, relative)
+        let current = resolve('/')
+        for (const part of path.split('/').filter(Boolean)) {
+          current = resolve(current, part)
+          if (lstatSync(current).isSymbolicLink()) throw mismatch()
+        }
+        const stat = lstatSync(path)
+        if (stat.isDirectory()) {
+          for (const name of readdirSync(path)) visit(`${relative}/${name}`)
+        } else if (stat.isFile()) files.push(relative)
+        else throw mismatch()
+      }
+      for (const name of ['package.json', 'index.js', 'bare.js']) {
+        if (!lstatSync(resolve(base, name)).isFile()) throw mismatch()
+        visit(name)
+      }
+      for (const name of ['src', 'types']) {
+        if (!lstatSync(resolve(base, name)).isDirectory()) throw mismatch()
+        visit(name)
+      }
+      return files.sort()
+    }
+    const source = collect(repoRoot)
+    const copy = collect(installed)
+    if (source.length !== copy.length || source.some((file, i) => file !== copy[i])) throw mismatch()
+    const digest = path => {
+      const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+      try { return createHash('sha256').update(readFileSync(fd)).digest('hex') } finally { closeSync(fd) }
+    }
+    for (const file of source) {
+      if (digest(resolve(repoRoot, file)) !== digest(resolve(installed, file))) throw mismatch()
+    }
+  } catch (error) {
+    if (error instanceof NotRunError) throw error
+    throw mismatch()
+  }
+}
+class CheckError extends Error {
+  constructor (failedCheck, message, failedStep) {
+    super(message)
+    this.failedCheck = failedCheck
+    this.failedStep = failedStep
+  }
+}
+
+const state = {
+  clipboard: false,
+  clipboardClearAttempted: false,
+  clipboardPromise: null,
+  lockHeld: false,
+  lockDir: '',
+  udid: '',
+  provider: null,
+  wdk: null,
+  options: null,
+  recordWritten: false,
+  backendReads: 0,
+  rpcReadRetries: 0,
+  explorerReloads: 0,
+  browser: null,
+  fiat: null,
+  session: '',
+  saleIban: '',
+  flow1Started: false,
+  cleanupAttempted: false,
+  cleanupPromise: null,
+  releasePromise: null,
+  child: null,
+  interrupted: false,
+  signalExitCode: null,
+  signalPromise: null,
+  recordPromise: null,
+  failedStep: undefined,
+  screenshots: [],
+  evidence: {},
+  secrets: [],
+  ibanPatterns: []
+}
+
+function redact (value) {
+  let text = String(value ?? 'Unknown error')
+  const ordered = state.secrets.filter(Boolean).sort((a, b) => b.length - a.length)
+  for (const secret of ordered) text = text.split(secret).join('[REDACTED]')
+  for (const pattern of state.ibanPatterns) {
+    pattern.lastIndex = 0
+    text = text.replace(pattern, '[REDACTED]')
+  }
+  return text
+    .replace(/([?&]session=)[^&\s"'<>]+/g, '$1[REDACTED]')
+    .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[REDACTED]')
+    .replace(/https?:\/\/\S+/g, '[REDACTED]')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+}
+
+function rememberSecret (value) {
+  if (typeof value === 'string' && value !== '') state.secrets.push(value)
+}
+
+function compact (value) {
+  return String(value ?? '').replace(/[\s\u00a0]/g, '')
+}
+
+function rememberIban (iban) {
+  rememberSecret(iban)
+  rememberSecret(compact(iban))
+  const raw = compact(iban)
+  const spaced = raw.replace(/(.{4})(?=.)/g, '$1 ')
+  rememberSecret(spaced)
+  rememberSecret(spaced.replace(/ /g, '\u00a0'))
+  const body = [...raw].map(char => char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s\\u00a0?]*')
+  state.ibanPatterns.push(new RegExp(body, 'g'))
+}
+
+function inventedIban () {
+  const bban = '00000' + Array.from({ length: 12 }, () => String(randomInt(10))).join('')
+  const remainder = [...`${bban}121700`].reduce((n, digit) => (n * 10 + Number(digit)) % 97, 0)
+  return `CH${String(98 - remainder).padStart(2, '0')}${bban}`
+}
+
+function git (args) {
+  return execFileSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  }).trim()
+}
+
+function runCapture (command, args, stdinMode, env) {
+  const stdin = stdinMode === 'empty' ? 'pipe' : stdinMode === 'ignore' || stdinMode == null ? 'ignore' : stdinMode
+  return new Promise((resolve, reject) => {
+    let child
+    let settled = false
+    const finish = (handler, value) => {
+      if (settled) return
+      settled = true
+      handler(value)
+    }
+    try {
+      const options = { stdio: [stdin, 'pipe', 'pipe'] }
+      if (env) options.env = env
+      child = spawn(command, args, options)
+      state.child = child
+    } catch (error) {
+      reject(error)
+      return
+    }
+    if (stdinMode === 'empty') child.stdin.end()
+    const out = []
+    child.stdout.on('data', chunk => out.push(chunk))
+    child.stderr.on('data', () => {})
+    child.on('error', error => {
+      if (state.child === child) state.child = null
+      finish(reject, error)
+    })
+    child.on('close', code => {
+      if (state.child === child) state.child = null
+      finish(resolve, {
+        code: code == null ? 1 : code,
+        stdout: Buffer.concat(out).toString('utf8')
+      })
+    })
+  })
+}
+
+function captureSync (command, args) {
+  try {
+    return {
+      code: 0,
+      stdout: execFileSync(command, args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 16 * 1024 * 1024
+      })
+    }
+  } catch (error) {
+    const stdout = typeof error?.stdout === 'string' ? error.stdout : ''
+    if (typeof error?.status === 'number') return { code: error.status, stdout }
+    const wrapped = new Error('command failed')
+    wrapped.code = error?.code
+    throw wrapped
+  }
+}
+
+function sha256File (path) {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+  try {
+    return createHash('sha256').update(readFileSync(fd)).digest('hex')
+  } finally {
+    closeSync(fd)
+  }
+}
+
+function lookupAsset (name) {
+  const asset = ASSET_TABLE[name]
+  if (!asset) throw new UsageError('--asset must be usdt or eth')
+  const scale = 10n ** BigInt(asset.decimals)
+  const expected = asset.symbol === 'ETH' ? scale / 10000n : scale
+  if (asset.baseUnits !== expected) throw new UsageError('asset table is inconsistent')
+  return asset
+}
+
+function productionTarget (options = state.options) {
+  return options?.target === 'production-polygon'
+}
+
+function purchaseMode (options = state.options) {
+  return options?.buy === true
+}
+
+function rehearsalMode (options = state.options) {
+  return options?.rehearse === true
+}
+
+function displayAmount (text) {
+  if (!text.includes('.')) return text
+  return text.replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function selectedAsset () {
+  const asset = lookupAsset(state.options.asset)
+  if (!productionTarget()) return asset
+  const amountText = state.options.amount
+  // A sale rehearsal learns the amount from the chain and has no --amount text.
+  const reviewAmount = typeof amountText === 'string'
+    ? `^${displayAmount(amountText).replace(/\./g, '[.]')} USDT$`
+    : ''
+  return {
+    ...asset,
+    baseUnits: state.options.amountBase,
+    token: PRODUCTION_USDT,
+    sellEntry: 'sell-entry',
+    assetTestId: 'send-asset-usdt-polygon',
+    amountText,
+    reviewAmount
+  }
+}
+
+function recordFields () {
+  if (rehearsalMode()) return purchaseMode() ? REHEARSAL_RECORD_FIELDS : SALE_REHEARSAL_RECORD_FIELDS
+  if (state.options && state.options.reject) return REJECT_RECORD_FIELDS
+  if (purchaseMode()) return PURCHASE_RECORD_FIELDS
+  if (productionTarget()) return PRODUCTION_RECORD_FIELDS
+  return SALE_RECORD_FIELDS
+}
+
+function parseSaleAmount (text) {
+  if (typeof text !== 'string' || !/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(text)) {
+    throw new UsageError('--amount must be a USDT decimal with at most 6 decimal places')
+  }
+  let parsed
+  try {
+    parsed = parseUnits(text, 6)
+  } catch {
+    throw new UsageError('--amount must be a USDT decimal with at most 6 decimal places')
+  }
+  if (parsed === 0n) throw new UsageError('--amount must be a USDT decimal with at most 6 decimal places')
+  return parsed
+}
+
+function apiOrigin () {
+  return productionTarget() ? PRODUCTION_API : API
+}
+
+function appOrigin () {
+  return productionTarget() ? PRODUCTION_APP : APP
+}
+
+function explorerOrigin () {
+  return productionTarget() ? PRODUCTION_EXPLORER : EXPLORER
+}
+
+function scaled6 (text) {
+  const [whole, frac = ''] = text.split('.')
+  if (frac.length > 6 && !/^0+$/.test(frac.slice(6))) return null
+  return BigInt(`${whole}${frac.slice(0, 6).padEnd(6, '0')}`)
+}
+
+// Backend Util.roundReadable → roundByPrecision(amount, 5), ROUND_HALF_UP.
+function roundedSaleBase (base) {
+  let scale = 6
+  let coeff = base
+  while (coeff > 0n && coeff % 10n === 0n) {
+    coeff /= 10n
+    scale -= 1
+  }
+  const digits = coeff.toString()
+  if (digits.length <= 5) return base
+  let kept = BigInt(digits.slice(0, 5))
+  if (digits[5] >= '5') kept += 1n
+  const exponent = digits.length - 5 - scale + 6
+  return kept * (10n ** BigInt(exponent))
+}
+
+function amountCents (value) {
+  const text = typeof value === 'number' && Number.isFinite(value) ? String(value) : typeof value === 'string' ? value.trim() : ''
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return null
+  const [whole, frac = ''] = text.split('.')
+  if (frac.length > 2 && !/^0+$/.test(frac.slice(2))) return null
+  const cents = Number(whole) * 100 + Number((frac + '00').slice(0, 2))
+  if (!Number.isSafeInteger(cents)) return null
+  return cents
+}
+
+function amountIsSale (value) {
+  const expected = roundedSaleBase(state.options.amountBase)
+  if (typeof value === 'string') {
+    const text = value.trim()
+    if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return false
+    return scaled6(text) === expected
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const text = String(value)
+    if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return false
+    return scaled6(text) === expected
+  }
+  return false
+}
+
+function assertRehearseUsage (options) {
+  // --rehearse is shared. --buy selects the purchase rehearsal; without it, the sale rehearsal.
+  if (!options.rehearse) {
+    if (options.rehearseId != null) throw new UsageError('--rehearse-id requires --buy --rehearse')
+    throw new UsageError('--rehearse-user-op requires --rehearse')
+  }
+  if (options.send) throw new UsageError('--rehearse cannot be combined with --send')
+  if (options.confirm) throw new UsageError('--rehearse cannot be combined with --confirm')
+  if (options.reject) throw new UsageError('--rehearse cannot be combined with --reject')
+  if (options.amount != null) throw new UsageError('--rehearse cannot be combined with --amount')
+  if (options.fiatCents != null) throw new UsageError('--rehearse cannot be combined with --fiat-cents')
+  if (options.follow != null) throw new UsageError('--rehearse cannot be combined with --follow')
+  if (options.udid) throw new UsageError('--rehearse cannot be combined with --udid')
+  if (options.asset === 'eth') throw new UsageError('--asset eth is not valid with --rehearse')
+  if (options.target !== 'production-polygon') throw new UsageError('--rehearse is only valid for --target production-polygon')
+  if (options.buy) {
+    if (options.rehearseUserOp != null) throw new UsageError('--rehearse-user-op cannot be combined with --buy')
+    if (options.rehearseId == null) throw new UsageError('Required argument missing: --rehearse-id <DFX id>')
+    if (!/^[1-9]\d*$/.test(options.rehearseId) || !Number.isSafeInteger(Number(options.rehearseId))) {
+      throw new UsageError('--rehearse-id must be a positive integer')
+    }
+    options.rehearseId = Number(options.rehearseId)
+  } else {
+    if (options.rehearseId != null) throw new UsageError('--rehearse-id requires --buy --rehearse')
+    if (options.rehearseUserOp == null) throw new UsageError('Required argument missing: --rehearse-user-op <hash>')
+    if (!/^0x[0-9a-fA-F]{64}$/.test(options.rehearseUserOp)) {
+      throw new UsageError('--rehearse-user-op must be a 32-byte hex hash')
+    }
+    options.rehearseUserOp = options.rehearseUserOp.toLowerCase()
+  }
+  if (!options.screenshots) throw new UsageError('Required argument missing: --screenshots <dir>')
+  if (!options.record) throw new UsageError('Required argument missing: --record <file>')
+  if (!basename(options.record).includes('rehearsal')) throw new UsageError('--record file name must contain rehearsal')
+}
+
+function parseArgs (args) {
+  const options = { rpc: DEFAULT_RPC, send: false, confirm: false, reject: false, buy: false, rehearse: false, asset: 'usdt', target: 'sandbox-sepolia' }
+  const valued = new Map([
+    ['--seed-file', 'seedFile'],
+    ['--udid', 'udid'],
+    ['--record', 'record'],
+    ['--screenshots', 'screenshots'],
+    ['--follow', 'follow'],
+    ['--rpc', 'rpc'],
+    ['--asset', 'asset'],
+    ['--target', 'target'],
+    ['--amount', 'amount'],
+    ['--fiat-cents', 'fiatCents'],
+    ['--rehearse-id', 'rehearseId'],
+    ['--rehearse-user-op', 'rehearseUserOp']
+  ])
+  const seen = new Set()
+  for (let i = 0; i < args.length; i++) {
+    const name = args[i]
+    if (name === '--send' || name === '--confirm' || name === '--reject' || name === '--buy' || name === '--rehearse') {
+      if (seen.has(name)) throw new UsageError(`Duplicate argument: ${name}`)
+      seen.add(name)
+      options[name.slice(2)] = true
+    } else if (valued.has(name)) {
+      if (seen.has(name)) throw new UsageError(`Duplicate argument: ${name}`)
+      seen.add(name)
+      const value = args[++i]
+      if (!value || value.startsWith('--')) throw new UsageError(`Missing value for ${name}`)
+      options[valued.get(name)] = value
+    } else {
+      throw new UsageError('Unknown argument')
+    }
+  }
+  if (!options.seedFile) throw new UsageError('Required argument missing: --seed-file <path>')
+  if (options.rehearse || options.rehearseId != null || options.rehearseUserOp != null) assertRehearseUsage(options)
+  else if (!options.udid) throw new UsageError('Required argument missing: --udid <id>')
+  lookupAsset(options.asset)
+  if (options.target !== 'sandbox-sepolia' && options.target !== 'production-polygon') {
+    throw new UsageError('--target must be sandbox-sepolia or production-polygon')
+  }
+  if (options.buy) {
+    if (options.target !== 'production-polygon') throw new UsageError('--buy is only valid for --target production-polygon')
+    if (options.asset !== 'usdt') throw new UsageError('--asset eth is not valid with --buy')
+    if (options.reject) throw new UsageError('--buy and --reject cannot be combined')
+    if (options.amount != null) throw new UsageError('--buy and --amount cannot be combined')
+    if (!options.rehearse) {
+      if (options.fiatCents == null) throw new UsageError('Required argument missing: --fiat-cents <int>')
+      const cents = Number(options.fiatCents)
+      if (!/^[1-9]\d*$/.test(options.fiatCents) || !Number.isSafeInteger(cents) || String(cents) !== options.fiatCents) {
+        throw new UsageError('--fiat-cents must be a positive integer of EUR cents')
+      }
+      options.fiatCents = cents
+    }
+  } else if (options.fiatCents != null) {
+    throw new UsageError('--fiat-cents requires --buy')
+  }
+  if (options.target === 'production-polygon') {
+    if (options.asset !== 'usdt') throw new UsageError('--asset eth is not valid for --target production-polygon')
+    if (options.reject) throw new UsageError('--reject is not valid for --target production-polygon')
+    if (!options.buy && !options.rehearse) {
+      if (options.amount == null) throw new UsageError('Required argument missing: --amount <USDT>')
+      options.amountBase = parseSaleAmount(options.amount)
+    }
+    if (!seen.has('--rpc')) options.rpc = PRODUCTION_RPC
+  } else if (options.amount != null) {
+    throw new UsageError('--amount is only valid for --target production-polygon')
+  }
+  if (options.confirm && options.reject) throw new UsageError('--confirm and --reject cannot be combined')
+  if (options.send && options.confirm === options.reject) throw new UsageError('--send needs exactly one of --confirm or --reject')
+  if (!options.send && (options.confirm || options.reject)) throw new UsageError('--confirm and --reject require --send')
+  if (options.follow != null) {
+    if (!/^(?:[1-9]\d*)$/.test(options.follow) || Number(options.follow) > 240) {
+      throw new UsageError('--follow must be an integer from 1 to 240')
+    }
+    options.follow = Number(options.follow)
+  }
+  let protocol
+  try {
+    protocol = new URL(options.rpc).protocol
+  } catch {
+    throw new UsageError('--rpc must use HTTP or HTTPS')
+  }
+  if (protocol !== 'http:' && protocol !== 'https:') throw new UsageError('--rpc must use HTTP or HTTPS')
+  if (options.send) {
+    if (!options.follow) throw new UsageError('--send requires --follow <minutes>')
+    if (!options.screenshots) throw new UsageError('--send requires --screenshots <dir>')
+    if (!options.record) throw new UsageError('--send requires --record <file>')
+  }
+  return options
+}
+
+function prepareScreenshots (dir) {
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+  } catch (error) {
+    throw new UsageError(`--screenshots cannot be created (${error.code || 'failed'})`)
+  }
+  const stat = lstatSync(dir)
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o777) !== 0o700) {
+    throw new UsageError('--screenshots must be a non-symlink directory owned by the current user with mode 0700')
+  }
+}
+
+function assertRecordPath (path, seedFile, screenshots) {
+  let recordPath
+  let seedPath
+  let screenshotsPath
+  try {
+    recordPath = resolve(realpathSync(dirname(resolve(path))), basename(path))
+    seedPath = resolve(realpathSync(dirname(resolve(seedFile))), basename(seedFile))
+    screenshotsPath = realpathSync(resolve(screenshots))
+  } catch (error) {
+    throw new UsageError(`--record or --seed-file parent or --screenshots cannot be resolved (${error.code || 'failed'})`)
+  }
+  if (recordPath === seedPath) throw new UsageError('--record must not name the seed file')
+  const rel = relative(screenshotsPath, recordPath)
+  if (rel !== '' && !isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + sep)) throw new UsageError('--record must not be inside --screenshots')
+  try {
+    lstatSync(path)
+    throw new UsageError('--record must name a file that does not exist yet')
+  } catch (error) {
+    if (error instanceof UsageError) throw error
+    if (error.code !== 'ENOENT') throw new UsageError(`--record cannot be checked (${error.code || 'failed'})`)
+  }
+}
+
+async function readPrivateFile (path) {
+  let file
+  try {
+    file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+    const stat = await file.stat()
+    if (!stat.isFile() || stat.uid !== process.getuid() || (stat.mode & 0o077) !== 0) throw new Error()
+    const text = (await file.readFile('utf8')).trim()
+    if (!text) throw new Error()
+    return text
+  } catch {
+    throw new NotRunError('not run: --seed-file must be a non-empty regular file owned by the current user with owner-only permissions (for example 0600), and must not be a symlink.')
+  } finally {
+    if (file) await file.close().catch(() => {})
+  }
+}
+
+function takeLock (dir) {
+  try {
+    mkdirSync(dir)
+  } catch (error) {
+    if (error.code === 'EEXIST') throw new NotRunError('not run: wallet locked')
+    throw new NotRunError(`not run: cannot create lock (${error.code || 'failed'})`)
+  }
+  state.lockHeld = true
+  state.lockDir = dir
+}
+
+function isLagging (error) {
+  const pending = [error]
+  const seen = new Set()
+  while (pending.length) {
+    const item = pending.pop()
+    if (!item || typeof item !== 'object' || seen.has(item)) continue
+    seen.add(item)
+    if (item.code === -32001 || (typeof item.message === 'string' && /(?:block|header) not found/i.test(item.message))) return true
+    pending.push(item.error, item.info)
+  }
+  return false
+}
+
+async function readAtBlock (blockNumber, read) {
+  if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) throw new Error('A fixed block number is required')
+  const deadline = Date.now() + 60_000
+  while (true) {
+    try {
+      return await read()
+    } catch (error) {
+      if (!isLagging(error) || Date.now() + 2_000 >= deadline) throw error
+      await delay(2_000)
+      state.rpcReadRetries++
+    }
+  }
+}
+
+function quantity (value, failedCheck) {
+  if (typeof value === 'bigint') return value
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return BigInt(value)
+  if (typeof value === 'string' && /^(?:0x[0-9a-fA-F]+|\d+)$/.test(value)) return BigInt(value)
+  throw new CheckError(failedCheck, 'value was not a quantity')
+}
+
+function bootedRuntime (udid) {
+  const listed = captureSync('xcrun', ['simctl', 'list', 'devices', 'booted', '-j'])
+  if (listed.code !== 0) throw new NotRunError('not run: simulator list failed')
+  let body
+  try {
+    body = JSON.parse(listed.stdout)
+  } catch {
+    throw new NotRunError('not run: simulator list was not JSON')
+  }
+  let runtime = null
+  const devices = body && typeof body.devices === 'object' ? body.devices : {}
+  for (const [key, list] of Object.entries(devices)) {
+    if (!Array.isArray(list)) continue
+    for (const device of list) {
+      if (!device || String(device.udid).toLowerCase() !== udid.toLowerCase() || device.state !== 'Booted') continue
+      if (runtime) throw new NotRunError('not run: simulator udid is listed twice')
+      runtime = key
+    }
+  }
+  if (!runtime) throw new NotRunError('not run: simulator is not booted')
+  if (runtime !== 'com.apple.CoreSimulator.SimRuntime.iOS-26-5') throw new NotRunError(`not run: the simulator runtime is ${runtime}; this run needs iOS 26.5`)
+  return runtime
+}
+
+function foreignMaestro () {
+  let text
+  try {
+    text = execFileSync('ps', ['-ax', '-o', 'pid=,ppid=,command='], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 8 * 1024 * 1024
+    })
+  } catch {
+    throw new NotRunError('not run: process list unavailable')
+  }
+  const rows = []
+  for (const line of text.split('\n')) {
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
+    if (!match) continue
+    rows.push({ pid: Number(match[1]), ppid: Number(match[2]), command: match[3] })
+  }
+  const own = new Set([process.pid])
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const row of rows) {
+      if (own.has(row.ppid) && !own.has(row.pid)) {
+        own.add(row.pid)
+        grew = true
+      }
+    }
+  }
+  return rows.some(row => !own.has(row.pid) && (/(^|\/|\s)maestro(\s|$)/.test(row.command) || /(^|\s)maestro\.cli\.AppKt(\s|$)/.test(row.command)))
+}
+
+function assertNoForeignMaestro (duringSend) {
+  let busy
+  try {
+    busy = foreignMaestro()
+  } catch (error) {
+    if (duringSend) throw new CheckError('maestro-busy', 'nothing sent')
+    throw error
+  }
+  if (!busy) return
+  if (duringSend) throw new CheckError('maestro-busy', 'nothing sent')
+  throw new NotRunError('not run: another Maestro process is running')
+}
+
+function readBuild () {
+  let text
+  try {
+    text = readFileSync(buildPath, 'utf8')
+  } catch (error) {
+    if (error.code === 'ENOENT') throw new NotRunError('not run: out/build.json is missing')
+    throw new NotRunError('not run: out/build.json cannot be read')
+  }
+  let build
+  try {
+    build = JSON.parse(text)
+  } catch {
+    throw new NotRunError('not run: out/build.json is not JSON')
+  }
+  if (!build || typeof build !== 'object') throw new NotRunError('not run: out/build.json is not an object')
+  if (build.moduleDirty !== false) throw new NotRunError('not run: out/build.json does not record a clean module tree')
+  if (typeof build.moduleHead !== 'string' || !/^[0-9a-f]{40,64}$/.test(build.moduleHead)) {
+    throw new NotRunError('not run: out/build.json has no moduleHead')
+  }
+  if (typeof build.starterCommit !== 'string' || !/^[0-9a-f]{40}$/.test(build.starterCommit)) {
+    throw new NotRunError('not run: out/build.json has no starterCommit')
+  }
+  for (const key of ['patchSha256', 'mainJsbundleSha256']) {
+    if (typeof build[key] !== 'string' || !/^[0-9a-f]{64}$/.test(build[key])) {
+      throw new NotRunError(`not run: out/build.json has no ${key}`)
+    }
+  }
+  return build
+}
+
+function installedBundleSha (udid) {
+  const listed = captureSync('xcrun', ['simctl', 'get_app_container', udid, BUNDLE_ID, 'app'])
+  if (listed.code !== 0) throw new NotRunError('not run: starter app is not installed')
+  const container = listed.stdout.trim()
+  if (container === '' || container.includes('\n')) throw new NotRunError('not run: app container path is not a single line')
+  try {
+    return sha256File(join(container, 'main.jsbundle'))
+  } catch {
+    throw new NotRunError('not run: installed app has no readable main.jsbundle')
+  }
+}
+
+async function readVersion (preflight) {
+  const fail = message => {
+    if (preflight) throw new NotRunError(`not run: ${message}`)
+    throw new CheckError('backend-commit', message)
+  }
+  let response
+  try {
+    response = await fetch(`${apiOrigin()}/version`, { redirect: 'error', signal: AbortSignal.timeout(20_000) })
+  } catch {
+    fail('version unreachable')
+  }
+  if (!response.ok) fail(`version returned HTTP ${response.status}`)
+  let body
+  try {
+    body = await response.json()
+  } catch {
+    fail('version returned no JSON')
+  }
+  if (!body || typeof body.commit !== 'string' || body.commit === '') fail('version has no commit')
+  return body.commit
+}
+
+async function deriveAccount (seed, rpc) {
+  const key = productionTarget() ? 'polygon' : 'sepolia'
+  const wdk = new WDK(seed).registerWallet(key, WalletManagerEvm, { provider: rpc })
+  try {
+    const account = await wdk.getAccount(key, 0)
+    return getAddress(await account.getAddress())
+  } finally {
+    await wdk.dispose?.()
+  }
+}
+
+function readPolygonBundler () {
+  const envPath = fileURLToPath(new URL('./.starter/.env', import.meta.url))
+  let text
+  try {
+    text = readFileSync(envPath, 'utf8')
+  } catch {
+    throw new NotRunError('not run: starter .env cannot be read')
+  }
+  const prefix = 'EXPO_PUBLIC_EVM_POLYGON_BUNDLER_URL='
+  let found = null
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.replace(/\r$/, '')
+    if (!line.startsWith(prefix)) continue
+    if (found !== null) throw new NotRunError('not run: starter .env has more than one polygon bundler url')
+    found = line.slice(prefix.length).trim()
+  }
+  if (!found) throw new NotRunError('not run: starter .env has no polygon bundler url')
+  let parsed
+  try {
+    parsed = new URL(found)
+  } catch {
+    throw new NotRunError('not run: polygon bundler url is not a url')
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new NotRunError('not run: polygon bundler url must use HTTP or HTTPS')
+  }
+  if (!parsed.host) throw new NotRunError('not run: polygon bundler url has no host')
+  rememberSecret(found)
+  state.bundlerUrl = found
+  return parsed.host
+}
+
+async function assertPolygonBundlerAnswers () {
+  let body
+  try {
+    const response = await fetch(state.bundlerUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_supportedEntryPoints', params: [] }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000)
+    })
+    if (!response.ok) {
+      await response.body.cancel()
+      throw new Error('status')
+    }
+    body = await response.json()
+  } catch {
+    throw new NotRunError('not run: Polygon bundler does not answer')
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body) || body.error) {
+    throw new NotRunError('not run: Polygon bundler does not answer')
+  }
+  if (!Array.isArray(body.result)) throw new NotRunError('not run: Polygon bundler does not answer')
+  const wanted = ENTRY_POINT.toLowerCase()
+  const listed = body.result.some(item => typeof item === 'string' && item.trim().toLowerCase() === wanted)
+  if (!listed) throw new NotRunError('not run: Polygon bundler does not answer')
+}
+
+async function readActiveIban (session) {
+  let response
+  try {
+    response = await fetch(`${PRODUCTION_API}/v1/bankAccount`, {
+      headers: { authorization: `Bearer ${session}`, accept: 'application/json' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000)
+    })
+  } catch {
+    throw new NotRunError('not run: bank account list unreachable')
+  }
+  if (!response.ok) throw new NotRunError(`not run: bank account list returned HTTP ${response.status}`)
+  let body
+  try {
+    body = await response.json()
+  } catch {
+    throw new NotRunError('not run: bank account list was not JSON')
+  }
+  if (!Array.isArray(body)) throw new NotRunError('not run: bank account list was not an array')
+  const active = body.filter(row => row && row.active === true)
+  if (active.length !== 1) throw new NotRunError(`not run: expected one active bank account, found ${active.length}`)
+  if (typeof active[0].iban !== 'string') throw new NotRunError('not run: active bank account has no IBAN')
+  const iban = compact(active[0].iban).toUpperCase()
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) throw new NotRunError('not run: active bank account has no usable IBAN')
+  return iban
+}
+
+function productionWdk (seed, rpc) {
+  return new WDK(seed)
+    .registerWallet('polygon', WalletManagerEvm, { provider: rpc })
+    .registerProtocol('polygon', 'dfx', DfxProtocol, { environment: 'production', network: 'polygon' })
+}
+
+async function productionQuoteAndIban (seed, rpc, amountBase) {
+  const wdk = productionWdk(seed, rpc)
+  try {
+    const account = await wdk.getAccount('polygon', 0)
+    const fiat = account.getFiatProtocol('dfx')
+    try {
+      await fiat.quoteSell({ cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: amountBase })
+    } catch (error) {
+      if (error instanceof NotRunError) throw error
+      throw new NotRunError(`not run: sell quote is not valid (${redact(error?.message ?? error)})`)
+    }
+    let sellUrl
+    try {
+      ;({ sellUrl } = await fiat.sell({ cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: amountBase }))
+    } catch {
+      throw new NotRunError('not run: production sign-in failed')
+    }
+    rememberSecret(sellUrl)
+    let session
+    try {
+      session = new URL(sellUrl).searchParams.get('session')
+    } catch {
+      session = null
+    }
+    if (!session) throw new NotRunError('not run: production sign-in returned no session')
+    rememberSecret(session)
+    return await readActiveIban(session)
+  } finally {
+    await wdk.dispose?.()
+  }
+}
+
+// quoteBuy's cryptoAmount is the estimated USDT in base units. A valid quote does not
+// report the provider minimum; AmountTooLow puts that limit on the thrown error.
+function usdtDecimal (base) {
+  const whole = base / 1000000n
+  const frac = (base % 1000000n).toString().padStart(6, '0').replace(/0+$/, '')
+  return frac === '' ? whole.toString() : `${whole}.${frac}`
+}
+
+function purchaseQuoteRecord (quote) {
+  return {
+    estimatedUsdt: usdtDecimal(quote.cryptoAmount),
+    estimatedUsdtBase: quote.cryptoAmount.toString(),
+    fiatAmount: quote.fiatAmount.toString(),
+    fee: quote.fee.toString(),
+    rate: quote.rate
+  }
+}
+
+function buyQuoteAccepts (quote, fiatAmount) {
+  return Boolean(quote) &&
+    typeof quote.cryptoAmount === 'bigint' && quote.cryptoAmount > 0n &&
+    quote.fiatAmount === fiatAmount &&
+    typeof quote.fee === 'bigint' && quote.fee >= 0n &&
+    typeof quote.rate === 'string' && quote.rate !== ''
+}
+
+async function purchaseQuoteAndBaseline (seed, rpc, fiatCents) {
+  const wdk = productionWdk(seed, rpc)
+  try {
+    const account = await wdk.getAccount('polygon', 0)
+    const fiat = account.getFiatProtocol('dfx')
+    const fiatAmount = BigInt(fiatCents)
+    let buyUrl
+    try {
+      ;({ buyUrl } = await fiat.buy({
+        cryptoAsset: 'USDT',
+        fiatCurrency: 'EUR',
+        fiatAmount,
+        config: { network: 'polygon' }
+      }))
+    } catch {
+      throw new NotRunError('not run: production sign-in failed')
+    }
+    rememberSecret(buyUrl)
+    let session
+    try {
+      session = new URL(buyUrl).searchParams.get('session')
+    } catch {
+      session = null
+    }
+    if (!session) throw new NotRunError('not run: production sign-in returned no session')
+    rememberSecret(session)
+    const iban = await readActiveIban(session)
+    let quote
+    try {
+      quote = await fiat.quoteBuy({
+        cryptoAsset: 'USDT',
+        fiatCurrency: 'EUR',
+        fiatAmount,
+        config: { network: 'polygon' }
+      })
+    } catch (error) {
+      if (error instanceof NotRunError) throw error
+      throw new NotRunError(`not run: buy quote is not valid (${redact(error?.message ?? error)})`)
+    }
+    if (!buyQuoteAccepts(quote, fiatAmount)) throw new NotRunError('not run: buy quote is not valid')
+    const rows = await readTransactions(session, true)
+    const buyBaseline = new Set()
+    for (const row of rows) {
+      if (row && row.type === 'Buy' && row.id != null) buyBaseline.add(String(row.id))
+    }
+    return { iban, quote: purchaseQuoteRecord(quote), buyBaseline }
+  } finally {
+    await wdk.dispose?.()
+  }
+}
+
+async function rehearsePreflight (options) {
+  let porcelain
+  let moduleHead
+  try {
+    porcelain = git(['status', '--porcelain'])
+    moduleHead = git(['rev-parse', 'HEAD'])
+  } catch {
+    throw new NotRunError('not run: git failed')
+  }
+  if (porcelain !== '') throw new NotRunError('not run: the module working tree is not clean')
+  const backendCommitStart = await readVersion(true)
+  const provider = new JsonRpcProvider(options.rpc)
+  state.provider = provider
+  let network
+  try {
+    network = await provider.getNetwork()
+  } catch {
+    throw new NotRunError('not run: RPC unreachable')
+  }
+  if (network.chainId !== PRODUCTION_CHAIN_ID) throw new NotRunError(`not run: chain id is ${network.chainId}`)
+  const seed = await readPrivateFile(options.seedFile)
+  rememberSecret(seed)
+  let account
+  try {
+    account = await deriveAccount(seed, options.rpc)
+  } catch {
+    throw new NotRunError('not run: account could not be derived')
+  }
+  if (options.buy) {
+    // buy() returns a widget URL and does not create an order. The amount is only amount-in on that URL.
+    try {
+      await purchaseSession(seed, options.rpc, 1)
+    } catch (error) {
+      if (error instanceof CheckError) throw new NotRunError(`not run: ${error.message}`)
+      throw error
+    }
+  } else {
+    // sell() returns a widget URL and does not create an order. The amount is only amount-in on that URL.
+    try {
+      await saleSession(seed, options.rpc)
+    } catch (error) {
+      if (error instanceof CheckError) throw new NotRunError(`not run: ${error.message}`)
+      throw error
+    }
+  }
+  const iban = await readActiveIban(state.session)
+  rememberIban(iban)
+  state.saleIban = iban
+  if (options.buy) return { seed, moduleHead, backendCommitStart, account, provider, activeIban: iban }
+  const bundlerHost = readPolygonBundler()
+  const archive = new JsonRpcProvider(ARCHIVE_RPC, 137, { staticNetwork: true })
+  state.provider = archive
+  try { provider.destroy() } catch { /* closing the chain-id provider is not a chain check */ }
+  return {
+    seed,
+    moduleHead,
+    backendCommitStart,
+    account,
+    provider: archive,
+    usdt: new Contract(PRODUCTION_USDT, ERC20_ABI, archive),
+    activeIban: iban,
+    archive: true,
+    bundlerHost
+  }
+}
+
+async function preflight (options) {
+  if (options.rehearse) return rehearsePreflight(options)
+  let porcelain
+  let moduleHead
+  try {
+    porcelain = git(['status', '--porcelain'])
+    moduleHead = git(['rev-parse', 'HEAD'])
+  } catch {
+    throw new NotRunError('not run: git failed')
+  }
+  if (porcelain !== '') throw new NotRunError('not run: the module working tree is not clean')
+  assertModuleCopy()
+  const build = readBuild()
+  const recordedTarget = build.target === undefined ? 'sandbox-sepolia' : build.target
+  if (recordedTarget !== options.target) throw new NotRunError(`not run: out/build.json target is not ${options.target}`)
+  if (build.moduleHead !== moduleHead) throw new NotRunError('not run: out/build.json moduleHead is not HEAD')
+  let patchSha
+  try {
+    patchSha = sha256File(patchPath)
+  } catch {
+    throw new NotRunError('not run: starter.patch cannot be read')
+  }
+  if (patchSha !== build.patchSha256) throw new NotRunError('not run: starter.patch does not match out/build.json')
+  const bundleSha = installedBundleSha(options.udid)
+  if (bundleSha !== build.mainJsbundleSha256) throw new NotRunError('not run: installed main.jsbundle does not match out/build.json')
+  let maestroVersion
+  try {
+    const version = captureSync('maestro', ['--version'])
+    if (version.code !== 0) throw new Error()
+    maestroVersion = version.stdout.trim().split('\n')[0]
+  } catch {
+    throw new NotRunError('not run: maestro is not callable')
+  }
+  if (!maestroVersion) throw new NotRunError('not run: maestro did not report a version')
+  if (!/^2\.10\.\d+$/.test(maestroVersion)) throw new NotRunError(`not run: maestro 2.10 is required, found ${maestroVersion}`)
+  try {
+    const simctl = captureSync('xcrun', ['--find', 'simctl'])
+    if (simctl.code !== 0 || simctl.stdout.trim() === '') throw new Error()
+  } catch {
+    throw new NotRunError('not run: xcrun is not callable')
+  }
+  if (productionTarget(options)) {
+    try {
+      const tesseract = captureSync('tesseract', ['--version'])
+      if (tesseract.code !== 0) throw new Error()
+    } catch {
+      throw new NotRunError('not run: tesseract is required for the production target')
+    }
+  }
+  const simulatorRuntime = bootedRuntime(options.udid)
+  assertNoForeignMaestro(false)
+  const backendCommitStart = await readVersion(true)
+  const provider = new JsonRpcProvider(options.rpc)
+  state.provider = provider
+  let network
+  try {
+    network = await provider.getNetwork()
+  } catch {
+    throw new NotRunError('not run: RPC unreachable')
+  }
+  const expectedChain = productionTarget(options) ? PRODUCTION_CHAIN_ID : CHAIN_ID
+  if (network.chainId !== expectedChain) throw new NotRunError(`not run: chain id is ${network.chainId}`)
+  const seed = await readPrivateFile(options.seedFile)
+  rememberSecret(seed)
+  let account
+  try {
+    account = await deriveAccount(seed, options.rpc)
+  } catch {
+    throw new NotRunError('not run: account could not be derived')
+  }
+  const usdt = new Contract(productionTarget(options) ? PRODUCTION_USDT : USDT, ERC20_ABI, provider)
+  let usdtBalance
+  let ethBalance
+  try {
+    usdtBalance = BigInt(await usdt.balanceOf(account))
+    ethBalance = BigInt(await provider.getBalance(account))
+  } catch {
+    throw new NotRunError('not run: balance could not be read')
+  }
+  const asset = lookupAsset(options.asset)
+  if (productionTarget(options)) {
+    if (options.buy) {
+      readPolygonBundler()
+      const purchase = await purchaseQuoteAndBaseline(seed, options.rpc, options.fiatCents)
+      rememberIban(purchase.iban)
+      state.saleIban = purchase.iban
+      return {
+        seed, moduleHead, build, maestroVersion, simulatorRuntime, backendCommitStart, account, provider, usdt,
+        polBalance: ethBalance, usdtBalance, activeIban: purchase.iban, quote: purchase.quote, buyBaseline: purchase.buyBaseline
+      }
+    }
+    if (usdtBalance < options.amountBase) throw new NotRunError('not run: account has less USDT than --amount')
+    const activeIban = await productionQuoteAndIban(seed, options.rpc, options.amountBase)
+    rememberIban(activeIban)
+    state.saleIban = activeIban
+    const bundlerHost = readPolygonBundler()
+    await assertPolygonBundlerAnswers()
+    return {
+      seed, moduleHead, build, maestroVersion, simulatorRuntime, backendCommitStart, account, provider, usdt,
+      polBalance: ethBalance, activeIban, bundlerHost
+    }
+  }
+  if (asset.symbol === 'USDT') {
+    if (usdtBalance < USDT_AMOUNT) throw new NotRunError('not run: account has less than 1 USDT')
+    if (ethBalance < ETH_FEE) throw new NotRunError('not run: account has less than 0.0002 ETH')
+  } else if (ethBalance < ETH_AMOUNT + ETH_FEE) {
+    throw new NotRunError('not run: account has less than 0.0001 ETH plus 0.0002 ETH')
+  }
+  return { seed, moduleHead, build, maestroVersion, simulatorRuntime, backendCommitStart, account, provider, usdt }
+}
+
+function confirmationCount (stdout) {
+  return stdout.split(/\r?\n/).filter(line => /send-confirm/.test(line) && /COMPLETED/.test(line) && /Tap on/i.test(line)).length
+}
+
+function failedStep (stdout) {
+  const line = stripVTControlCharacters(stdout).split(/\r?\n/).find(line => /FAILED\s*$/.test(line))
+  if (!line) return 'no failed step line in the Maestro output'
+  return redact(line.trim().replace(/CH(?:[\s\u00a0]*\d){19}/g, 'CH[REDACTED]')).slice(0, 200)
+}
+
+function saleFlowShots () {
+  if (purchaseMode()) return BUY_FLOW_SHOTS
+  if (productionTarget()) return ['send-review.png', 'send-success.png']
+  return FLOW_SHOTS
+}
+
+function normalizeOcr (value) {
+  return String(value)
+    .toUpperCase()
+    .replace(/O/g, '0')
+    .replace(/[IL]/g, '1')
+    .replace(/S/g, '5')
+    .replace(/B/g, '8')
+    .replace(/[^0-9A-Z]/g, '')
+}
+
+function payoutOcrTail (iban) {
+  const normalized = normalizeOcr(iban)
+  if (normalized.length < 10) return ''
+  return normalized.slice(-10)
+}
+
+// The OCR text and the payout account are not logged, recorded, or put on an error.
+// On a production sale this runs on the Maestro source, before that file is copied.
+async function assertFlowShotHidesIban (source) {
+  if (!productionTarget() || !state.saleIban) return
+  const tail = payoutOcrTail(state.saleIban)
+  if (tail.length !== 10) throw new CheckError('screenshots', 'flow screenshot could not be checked')
+  let matched = false
+  try {
+    const result = await runCapture('tesseract', [source, '-'], 'ignore')
+    const text = result.stdout
+    result.stdout = ''
+    if (result.code !== 0) throw new Error('ocr failed')
+    matched = normalizeOcr(text).includes(tail)
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    try {
+      unlinkSync(source)
+    } catch {
+      throw new CheckError('screenshots', 'flow screenshot could not be read')
+    }
+    throw new CheckError('screenshots', 'flow screenshot could not be read')
+  }
+  if (!matched) return
+  try {
+    unlinkSync(source)
+  } catch {
+    throw new CheckError('screenshots', 'flow screenshot shows the payout IBAN')
+  }
+  throw new CheckError('screenshots', 'flow screenshot shows the payout IBAN; deleted')
+}
+
+async function copyShots (fromDir, toDir) {
+  const copied = []
+  const visit = async dir => {
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch (error) {
+      if (error.code === 'ENOENT') return
+      throw error
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        await visit(path)
+      } else if (entry.isFile() && entry.name.endsWith('.png') && path.includes('takeScreenshot')) {
+        const dest = join(toDir, entry.name)
+        if (productionTarget() && state.saleIban) {
+          await assertFlowShotHidesIban(path)
+        }
+        copyFileSync(path, dest, constants.COPYFILE_EXCL)
+        copied.push({ file: entry.name, sha256: sha256File(dest) })
+      }
+    }
+  }
+  await visit(fromDir)
+  return copied
+}
+
+function maestroSecretEnv (secrets) {
+  if (!secrets || Object.keys(secrets).length === 0) return undefined
+  const childEnv = { ...process.env }
+  for (const [name, value] of Object.entries(secrets)) childEnv[`MAESTRO_${name}`] = value
+  return childEnv
+}
+
+async function runFlow (file, env, secrets) {
+  const debugDir = mkdtempSync(join(tmpdir(), 'wallet-ui-debug-'))
+  const outDir = mkdtempSync(join(tmpdir(), 'wallet-ui-out-'))
+  const childEnv = maestroSecretEnv(secrets)
+  const args = ['--udid', state.udid, 'test']
+  for (const [key, value] of Object.entries(env)) args.push('-e', `${key}=${value}`)
+  args.push('--debug-output', debugDir, '--test-output-dir', outDir, file)
+  try {
+    const result = await runCapture('maestro', args, 'ignore', childEnv)
+    if (result.code !== 0) state.failedStep = failedStep(result.stdout)
+    let copied = []
+    try {
+      copied = await copyShots(outDir, state.options.screenshots)
+    } catch (error) {
+      if (error instanceof CheckError) throw error
+      const unpaid = purchaseMode() ? 'nothing paid' : 'nothing sent'
+      const step = state.evidence.depositAddress && confirmationCount(result.stdout) === 1 ? undefined : state.failedStep
+      throw new CheckError('screenshots', `screenshot copy failed${state.evidence.depositAddress ? '' : `; ${unpaid}`}`, step)
+    }
+    state.screenshots.push(...copied)
+    return { code: result.code, stdout: result.stdout }
+  } finally {
+    rmSync(debugDir, { recursive: true, force: true })
+    rmSync(outDir, { recursive: true, force: true })
+  }
+}
+
+function clearWalletState () {
+  if (state.cleanupPromise) return state.cleanupPromise
+  if (!state.flow1Started || state.cleanupAttempted) return Promise.resolve()
+  state.cleanupPromise = (async () => {
+    state.cleanupAttempted = true
+    state.evidence.walletStateCleared = false
+    const previousStep = state.failedStep
+    try {
+      const result = await runFlow(join(flowDir, 'cleanup.yaml'), {})
+      if (result.code !== 0) throw new Error('cleanup flow failed')
+      state.evidence.walletStateCleared = true
+    } catch {
+      throw new CheckError('cleanup', 'wallet state could not be cleared')
+    } finally {
+      state.failedStep = previousStep
+    }
+  })()
+  return state.cleanupPromise
+}
+
+function clearClipboard () {
+  if (state.clipboardPromise) return state.clipboardPromise
+  state.clipboardPromise = (async () => {
+    state.clipboardClearAttempted = true
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const result = await runCapture('xcrun', ['simctl', 'pbcopy', state.udid], 'empty')
+        if (result.code === 0) {
+          state.clipboard = false
+          state.evidence.clipboardCleared = true
+          return
+        }
+      } catch {}
+    }
+    state.evidence.clipboardCleared = false
+    throw new CheckError('clipboard', 'the simulator clipboard could not be cleared and may still hold the seed; clear it by hand')
+  })()
+  return state.clipboardPromise
+}
+
+async function copySeed (seedFile) {
+  state.clipboard = true
+  let fd
+  try {
+    fd = openSync(seedFile, constants.O_RDONLY | constants.O_NOFOLLOW)
+  } catch {
+    throw new CheckError('clipboard', 'nothing sent')
+  }
+  try {
+    const result = await runCapture('xcrun', ['simctl', 'pbcopy', state.udid], fd)
+    if (result.code !== 0) throw new CheckError('clipboard', 'nothing sent')
+  } finally {
+    closeSync(fd)
+  }
+}
+
+function oneLine (text) {
+  if (text.endsWith('\n')) return text.slice(0, -1).replace(/\r$/, '')
+  return text
+}
+
+function labelValues (node) {
+  const sources = [node]
+  if (node.attributes && typeof node.attributes === 'object') sources.push(node.attributes)
+  const values = []
+  for (const source of sources) {
+    for (const key of ['accessibilityLabel', 'accessibilityText', 'label', 'text']) {
+      if (typeof source[key] === 'string') values.push(source[key])
+    }
+  }
+  return values
+}
+
+function identifierValues (node) {
+  const sources = [node]
+  if (node.attributes && typeof node.attributes === 'object') sources.push(node.attributes)
+  const values = []
+  for (const source of sources) {
+    for (const key of ['id', 'identifier', 'resource-id', 'resourceId', 'accessibilityIdentifier']) {
+      if (typeof source[key] === 'string') values.push(source[key])
+    }
+  }
+  return values
+}
+
+function collectHashes (node, hashes) {
+  for (const value of labelValues(node)) {
+    const found = value.match(/0x[0-9a-fA-F]{64}\b/g) || []
+    for (const hash of found) hashes.add(hash.toLowerCase())
+  }
+}
+
+function walkHierarchy (node, hashes, matched) {
+  if (!node || typeof node !== 'object') return
+  if (Array.isArray(node)) {
+    for (const item of node) walkHierarchy(item, hashes, matched)
+    return
+  }
+  const matchedHere = matched || identifierValues(node).includes('send-success-hash')
+  if (matchedHere) collectHashes(node, hashes)
+  const children = Array.isArray(node.children) ? node.children : Array.isArray(node.elements) ? node.elements : []
+  for (const child of children) walkHierarchy(child, hashes, matchedHere)
+}
+
+async function readSuccessHash () {
+  const result = await runCapture('maestro', ['--udid', state.udid, 'hierarchy'], 'ignore')
+  if (result.code !== 0) throw new CheckError('hash', 'hierarchy failed')
+  const start = result.stdout.indexOf('{')
+  const arrayStart = result.stdout.indexOf('[')
+  const openAt = start === -1 ? arrayStart : arrayStart === -1 ? start : Math.min(start, arrayStart)
+  const endBrace = result.stdout.lastIndexOf('}')
+  const endBracket = result.stdout.lastIndexOf(']')
+  const closeAt = Math.max(endBrace, endBracket)
+  if (openAt < 0 || closeAt < openAt) throw new CheckError('hash', 'hierarchy was not JSON')
+  let tree
+  try {
+    tree = JSON.parse(result.stdout.slice(openAt, closeAt + 1))
+  } catch {
+    throw new CheckError('hash', 'hierarchy was not JSON')
+  }
+  const hashes = new Set()
+  walkHierarchy(tree, hashes, false)
+  if (hashes.size !== 1) throw new CheckError('hash', `found ${hashes.size} hashes`)
+  return [...hashes][0]
+}
+
+async function readReceipt (provider, hash) {
+  const deadline = Date.now() + 60_000
+  while (true) {
+    let raw
+    try {
+      raw = await provider.send('eth_getTransactionReceipt', [hash])
+    } catch (error) {
+      if (!isLagging(error) || Date.now() + 2_000 >= deadline) throw new CheckError('receipt', 'receipt read failed')
+      await delay(2_000)
+      state.rpcReadRetries++
+      continue
+    }
+    if (raw) return raw
+    if (Date.now() + 2_000 >= deadline) throw new CheckError('receipt', 'no receipt')
+    await delay(2_000)
+    state.rpcReadRetries++
+  }
+}
+
+async function readUserOperationReceipt (hash) {
+  const deadline = Date.now() + 180_000
+  while (true) {
+    let body
+    try {
+      const response = await fetch(state.bundlerUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getUserOperationReceipt', params: [hash] }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(20_000)
+      })
+      if (!response.ok) throw new Error('http')
+      body = await response.json()
+    } catch {
+      if (Date.now() + 2_000 >= deadline) throw new CheckError('userop-receipt', 'user operation receipt read failed')
+      await delay(2_000)
+      state.rpcReadRetries++
+      continue
+    }
+    if (body && body.result) return body.result
+    if (Date.now() + 2_000 >= deadline) throw new CheckError('userop-receipt', 'no user operation receipt')
+    await delay(2_000)
+    state.rpcReadRetries++
+  }
+}
+
+function addressFromTopic (topic, failedCheck) {
+  if (typeof topic !== 'string' || topic.length < 40) throw new CheckError(failedCheck, 'Transfer topic is not an address')
+  return getAddress(`0x${topic.slice(-40)}`)
+}
+
+async function checkChain (prelude, hash, depositAddress) {
+  const raw = await readReceipt(prelude.provider, hash)
+  const status = quantity(raw.status, 'receipt-status')
+  if (status !== 1n) throw new CheckError('receipt-status', `status is ${status}`)
+  let from
+  try {
+    from = getAddress(raw.from)
+  } catch {
+    throw new CheckError('receipt-from', 'from is not an address')
+  }
+  if (from !== prelude.account) throw new CheckError('receipt-from', 'from is not the account')
+  let to
+  try {
+    to = raw.to ? getAddress(raw.to) : null
+  } catch {
+    to = null
+  }
+  if (to !== USDT) throw new CheckError('receipt-to', 'to is not the token')
+  const logs = Array.isArray(raw.logs)
+    ? raw.logs.filter(log => {
+      try {
+        return getAddress(log.address) === USDT && String(log.topics?.[0] ?? '').toLowerCase() === TRANSFER_TOPIC
+      } catch {
+        return false
+      }
+    })
+    : []
+  if (logs.length !== 1) throw new CheckError('transfer', `found ${logs.length} USDT Transfer logs`)
+  const transfer = logs[0]
+  const transferFrom = addressFromTopic(transfer.topics?.[1], 'transfer')
+  const transferTo = addressFromTopic(transfer.topics?.[2], 'transfer')
+  const transferValue = quantity(transfer.data, 'transfer')
+  if (transferFrom !== prelude.account || transferTo !== depositAddress || transferValue !== USDT_AMOUNT) {
+    throw new CheckError('transfer', 'USDT Transfer is not 1 USDT from the account to the deposit address')
+  }
+  const block = Number(quantity(raw.blockNumber, 'receipt'))
+  if (!Number.isSafeInteger(block) || block < 1) throw new CheckError('receipt', 'block number is not usable')
+  const gasUsed = quantity(raw.gasUsed, 'balance-account-eth')
+  if (typeof raw.effectiveGasPrice !== 'string' && typeof raw.effectiveGasPrice !== 'number') {
+    throw new CheckError('balance-account-eth', 'receipt has no effectiveGasPrice')
+  }
+  const fee = gasUsed * quantity(raw.effectiveGasPrice, 'balance-account-eth')
+  const usdtBalance = async (address, blockNumber) => {
+    const value = await readAtBlock(blockNumber, () => prelude.usdt.balanceOf(address, { blockTag: blockNumber }))
+    return BigInt(value)
+  }
+  const ethBalance = async (address, blockNumber) => {
+    const value = await readAtBlock(blockNumber, () => prelude.provider.getBalance(address, blockNumber))
+    return BigInt(value)
+  }
+  let accountUsdtBefore
+  let accountUsdtAfter
+  let depositUsdtBefore
+  let depositUsdtAfter
+  let accountEthBefore
+  let accountEthAfter
+  try {
+    accountUsdtBefore = await usdtBalance(prelude.account, block - 1)
+    accountUsdtAfter = await usdtBalance(prelude.account, block)
+  } catch {
+    throw new CheckError('balance-account-usdt', 'balance read failed')
+  }
+  if (accountUsdtBefore - accountUsdtAfter !== USDT_AMOUNT) {
+    throw new CheckError('balance-account-usdt', 'account USDT balance did not fall by 1000000')
+  }
+  try {
+    depositUsdtBefore = await usdtBalance(depositAddress, block - 1)
+    depositUsdtAfter = await usdtBalance(depositAddress, block)
+  } catch {
+    throw new CheckError('balance-deposit-usdt', 'balance read failed')
+  }
+  if (depositUsdtAfter - depositUsdtBefore !== USDT_AMOUNT) {
+    throw new CheckError('balance-deposit-usdt', 'deposit USDT balance did not rise by 1000000')
+  }
+  try {
+    accountEthBefore = await ethBalance(prelude.account, block - 1)
+    accountEthAfter = await ethBalance(prelude.account, block)
+  } catch {
+    throw new CheckError('balance-account-eth', 'balance read failed')
+  }
+  if (accountEthBefore - accountEthAfter !== fee) {
+    throw new CheckError('balance-account-eth', 'account ETH balance did not fall by the effective fee')
+  }
+  state.evidence.block = block
+  state.evidence.gasUsed = gasUsed.toString()
+  state.evidence.fee = fee.toString()
+  state.evidence.balances = [
+    { address: prelude.account, asset: 'USDT', before: accountUsdtBefore.toString(), after: accountUsdtAfter.toString() },
+    { address: prelude.account, asset: 'ETH', before: accountEthBefore.toString(), after: accountEthAfter.toString() },
+    { address: depositAddress, asset: 'USDT', before: depositUsdtBefore.toString(), after: depositUsdtAfter.toString() }
+  ]
+}
+
+async function checkSponsoredChain (prelude, userOpHash, depositAddress) {
+  const amount = state.options.amountBase
+  const userOp = await readUserOperationReceipt(userOpHash)
+  if (userOp.success !== true) throw new CheckError('userop-success', 'user operation success is not true')
+  let sender
+  try {
+    sender = getAddress(userOp.sender)
+  } catch {
+    throw new CheckError('userop-sender', 'sender is not an address')
+  }
+  if (sender !== prelude.account) throw new CheckError('userop-sender', 'sender is not the account')
+  const txHashRaw = userOp.receipt && userOp.receipt.transactionHash
+  if (typeof txHashRaw !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHashRaw)) {
+    throw new CheckError('userop-receipt', 'user operation receipt has no transaction hash')
+  }
+  const txHash = txHashRaw.toLowerCase()
+  state.evidence.hash = txHash
+  const raw = await readReceipt(prelude.provider, txHash)
+  const status = quantity(raw.status, 'receipt-status')
+  if (status !== 1n) throw new CheckError('receipt-status', `status is ${status}`)
+  const iface = new Interface([USER_OP_EVENT_ABI])
+  const event = iface.getEvent('UserOperationEvent')
+  if (!event) throw new CheckError('userop-event', 'UserOperationEvent is not in the interface')
+  const topic0 = event.topicHash.toLowerCase()
+  const opLogs = Array.isArray(raw.logs) ? raw.logs.filter(log => {
+    try {
+      return getAddress(log.address) === ENTRY_POINT &&
+        String(log.topics?.[0] ?? '').toLowerCase() === topic0 &&
+        String(log.topics?.[1] ?? '').toLowerCase() === userOpHash.toLowerCase()
+    } catch {
+      return false
+    }
+  }) : []
+  if (opLogs.length !== 1) throw new CheckError('userop-event', `found ${opLogs.length} UserOperationEvent logs`)
+  let decoded
+  try {
+    decoded = iface.parseLog({ topics: opLogs[0].topics, data: opLogs[0].data })
+  } catch {
+    throw new CheckError('userop-event', 'UserOperationEvent did not decode')
+  }
+  if (!decoded || decoded.args.success !== true) throw new CheckError('userop-event', 'UserOperationEvent success is not true')
+  let paymaster
+  try {
+    paymaster = getAddress(decoded.args.paymaster)
+  } catch {
+    throw new CheckError('userop-event', 'paymaster is not an address')
+  }
+  if (paymaster === getAddress('0x0000000000000000000000000000000000000000')) {
+    throw new CheckError('userop-event', 'paymaster is zero')
+  }
+  // The account that sends is not the paymaster, and a paymaster is a contract.
+  let eventSender
+  try {
+    eventSender = getAddress(decoded.args.sender)
+  } catch {
+    throw new CheckError('userop-event', 'sender is not an address')
+  }
+  if (paymaster === eventSender || paymaster.toLowerCase() === String(prelude.account).toLowerCase()) {
+    throw new CheckError('userop-event', 'paymaster is the sender or the account')
+  }
+  const actualGasCost = decoded.args.actualGasCost
+  const actualGasUsed = decoded.args.actualGasUsed
+  if (typeof actualGasCost !== 'bigint' || typeof actualGasUsed !== 'bigint') {
+    throw new CheckError('userop-event', 'gas figures are not quantities')
+  }
+  const transfers = Array.isArray(raw.logs) ? raw.logs.filter(log => {
+    try {
+      if (getAddress(log.address) !== PRODUCTION_USDT || String(log.topics?.[0] ?? '').toLowerCase() !== TRANSFER_TOPIC) return false
+      const from = addressFromTopic(log.topics?.[1], 'transfer')
+      const to = addressFromTopic(log.topics?.[2], 'transfer')
+      return from === prelude.account && to === depositAddress && quantity(log.data, 'transfer') === amount
+    } catch {
+      return false
+    }
+  }) : []
+  if (transfers.length !== 1) throw new CheckError('transfer', `found ${transfers.length} USDT Transfer logs from the account to the deposit address`)
+  const block = Number(quantity(raw.blockNumber, 'receipt'))
+  if (!Number.isSafeInteger(block) || block < 1) throw new CheckError('receipt', 'block number is not usable')
+  let paymasterCode
+  try {
+    // prelude.provider is the archive provider in a rehearsal, and the sale RPC otherwise.
+    paymasterCode = await readAtBlock(block, () => prelude.provider.getCode(paymaster, block))
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError('userop-event', 'paymaster code read failed')
+  }
+  if (typeof paymasterCode !== 'string') throw new CheckError('userop-event', 'paymaster code read failed')
+  if (paymasterCode === '0x') throw new CheckError('userop-event', 'paymaster has no code')
+  const accountUsdtBefore = await tokenBalanceAt(prelude, prelude.account, block - 1, 'balance-account-usdt')
+  const accountUsdtAfter = await tokenBalanceAt(prelude, prelude.account, block, 'balance-account-usdt')
+  if (accountUsdtBefore - accountUsdtAfter !== amount) {
+    throw new CheckError('balance-account-usdt', 'account USDT balance did not fall by the sale amount')
+  }
+  const accountPolBefore = await etherBalanceAt(prelude, prelude.account, block - 1, 'balance-account-pol')
+  const accountPolAfter = await etherBalanceAt(prelude, prelude.account, block, 'balance-account-pol')
+  if (accountPolBefore !== accountPolAfter) {
+    throw new CheckError('balance-account-pol', 'account POL balance changed')
+  }
+  state.evidence.block = block
+  state.evidence.paymaster = paymaster
+  state.evidence.actualGasCost = actualGasCost.toString()
+  state.evidence.actualGasUsed = actualGasUsed.toString()
+  state.evidence.feePaidBy = 'paymaster'
+  state.evidence.balances = [
+    { address: prelude.account, asset: 'USDT', before: accountUsdtBefore.toString(), after: accountUsdtAfter.toString() },
+    { address: prelude.account, asset: 'POL', before: accountPolBefore.toString(), after: accountPolAfter.toString() }
+  ]
+}
+
+async function readTransaction (provider, hash) {
+  const deadline = Date.now() + 60_000
+  while (true) {
+    let tx
+    try {
+      tx = await provider.getTransaction(hash)
+    } catch (error) {
+      if (!isLagging(error) || Date.now() + 2_000 >= deadline) throw new CheckError('transfer-value', 'transaction read failed')
+      await delay(2_000)
+      state.rpcReadRetries++
+      continue
+    }
+    if (tx) return tx
+    if (Date.now() + 2_000 >= deadline) throw new CheckError('transfer-value', 'transaction missing')
+    await delay(2_000)
+    state.rpcReadRetries++
+  }
+}
+
+async function etherBalanceAt (prelude, address, blockNumber, failedCheck) {
+  try {
+    const read = () => prelude.provider.getBalance(address, blockNumber)
+    // The archive RPC is the only reader that still serves a block from a finished sale.
+    if (prelude.archive) return readArchiveQuantity(read, failedCheck)
+    const value = await readAtBlock(blockNumber, read)
+    return BigInt(value)
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError(failedCheck, 'balance read failed')
+  }
+}
+
+async function tokenBalanceAt (prelude, address, blockNumber, failedCheck) {
+  try {
+    const read = () => prelude.usdt.balanceOf(address, { blockTag: blockNumber })
+    if (prelude.archive) return readArchiveQuantity(read, failedCheck)
+    const value = await readAtBlock(blockNumber, read)
+    return BigInt(value)
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError(failedCheck, 'balance read failed')
+  }
+}
+
+async function checkEthChain (prelude, hash, depositAddress) {
+  const raw = await readReceipt(prelude.provider, hash)
+  const status = quantity(raw.status, 'receipt-status')
+  if (status !== 1n) throw new CheckError('receipt-status', `status is ${status}`)
+  let from
+  try {
+    from = getAddress(raw.from)
+  } catch {
+    throw new CheckError('receipt-from', 'from is not an address')
+  }
+  if (from !== prelude.account) throw new CheckError('receipt-from', 'from is not the account')
+  let to
+  try {
+    to = raw.to ? getAddress(raw.to) : null
+  } catch {
+    to = null
+  }
+  if (to !== depositAddress) throw new CheckError('receipt-to', 'to is not the deposit address')
+  const tx = await readTransaction(prelude.provider, hash)
+  const value = quantity(tx.value, 'transfer-value')
+  if (value !== ETH_AMOUNT) throw new CheckError('transfer-value', 'value is not 100000000000000')
+  // EIP-7708 writes one Transfer log from the system address for a native ETH
+  // transfer. Measured on Sepolia: the log address is the system address,
+  // topics[0] is the Transfer topic, and data is the value in wei. The
+  // deposit address in that receipt had no code.
+  const logs = Array.isArray(raw.logs) ? raw.logs : null
+  if (!logs || logs.length !== 1) {
+    throw new CheckError('receipt-logs', `found ${logs ? logs.length : 'no'} logs`)
+  }
+  let logAddress = null
+  try {
+    logAddress = getAddress(logs[0].address)
+  } catch {
+    logAddress = null
+  }
+  const topic0 = String(logs[0].topics?.[0] ?? '').toLowerCase()
+  if (logAddress !== NATIVE_TRANSFER_ADDRESS || topic0 !== TRANSFER_TOPIC) {
+    throw new CheckError('receipt-logs', 'log is not the native transfer')
+  }
+  const transferFrom = addressFromTopic(logs[0].topics?.[1], 'transfer')
+  const transferTo = addressFromTopic(logs[0].topics?.[2], 'transfer')
+  const transferValue = quantity(logs[0].data, 'transfer')
+  if (transferFrom !== prelude.account || transferTo !== depositAddress || transferValue !== ETH_AMOUNT) {
+    throw new CheckError('transfer', 'native Transfer is not 100000000000000 wei from the account to the deposit address')
+  }
+  const block = Number(quantity(raw.blockNumber, 'receipt'))
+  if (!Number.isSafeInteger(block) || block < 1) throw new CheckError('receipt', 'block number is not usable')
+  const gasUsed = quantity(raw.gasUsed, 'balance-account-eth')
+  if (typeof raw.effectiveGasPrice !== 'string' && typeof raw.effectiveGasPrice !== 'number') {
+    throw new CheckError('balance-account-eth', 'receipt has no effectiveGasPrice')
+  }
+  const fee = gasUsed * quantity(raw.effectiveGasPrice, 'balance-account-eth')
+  const accountEthBefore = await etherBalanceAt(prelude, prelude.account, block - 1, 'balance-account-eth')
+  const accountEthAfter = await etherBalanceAt(prelude, prelude.account, block, 'balance-account-eth')
+  if (accountEthBefore - accountEthAfter !== ETH_AMOUNT + fee) {
+    throw new CheckError('balance-account-eth', 'account ETH balance did not fall by the amount plus the effective fee')
+  }
+  const depositEthBefore = await etherBalanceAt(prelude, depositAddress, block - 1, 'balance-deposit-eth')
+  const depositEthAfter = await etherBalanceAt(prelude, depositAddress, block, 'balance-deposit-eth')
+  if (depositEthAfter - depositEthBefore !== ETH_AMOUNT) {
+    throw new CheckError('balance-deposit-eth', 'deposit ETH balance did not rise by 100000000000000')
+  }
+  const accountUsdtBefore = await tokenBalanceAt(prelude, prelude.account, block - 1, 'balance-account-usdt')
+  const accountUsdtAfter = await tokenBalanceAt(prelude, prelude.account, block, 'balance-account-usdt')
+  if (accountUsdtBefore !== accountUsdtAfter) {
+    throw new CheckError('balance-account-usdt', 'account USDT balance changed')
+  }
+  const depositUsdtBefore = await tokenBalanceAt(prelude, depositAddress, block - 1, 'balance-deposit-usdt')
+  const depositUsdtAfter = await tokenBalanceAt(prelude, depositAddress, block, 'balance-deposit-usdt')
+  if (depositUsdtBefore !== depositUsdtAfter) {
+    throw new CheckError('balance-deposit-usdt', 'deposit USDT balance changed')
+  }
+  state.evidence.block = block
+  state.evidence.gasUsed = gasUsed.toString()
+  state.evidence.fee = fee.toString()
+  state.evidence.balances = [
+    { address: prelude.account, asset: 'ETH', before: accountEthBefore.toString(), after: accountEthAfter.toString() },
+    { address: depositAddress, asset: 'ETH', before: depositEthBefore.toString(), after: depositEthAfter.toString() },
+    { address: prelude.account, asset: 'USDT', before: accountUsdtBefore.toString(), after: accountUsdtAfter.toString() },
+    { address: depositAddress, asset: 'USDT', before: depositUsdtBefore.toString(), after: depositUsdtAfter.toString() }
+  ]
+}
+
+function plain (value, failedCheck) {
+  if (typeof value === 'string' || typeof value === 'number') return value
+  throw new CheckError(failedCheck, 'backend field is not a plain value')
+}
+
+function amountIsOne (value) {
+  if (typeof value === 'number') return Object.is(value, 1)
+  if (typeof value === 'string') return /^1(?:\.0+)?$/.test(value.trim())
+  return false
+}
+
+function amountIsEthSale (value) {
+  if (typeof value === 'number') return Object.is(value, 0.0001)
+  if (typeof value === 'string') return /^0\.0001(?:0*)$/.test(value.trim())
+  return false
+}
+
+function finiteAmount (value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value)) {
+    const amount = Number(value)
+    return Number.isFinite(amount) ? amount : undefined
+  }
+  return undefined
+}
+
+// sell() passes fiatCurrency EUR, and the starter sale does too. A sale amount is rounded to 2 decimal places; the exact amount is not checked.
+function assertBookedPayout (row) {
+  const amount = finiteAmount(row.outputAmount)
+  if (amount === undefined) throw new CheckError('backend-payout', 'outputAmount is not a finite number')
+  if (!(amount > 0)) throw new CheckError('backend-payout', 'outputAmount is not greater than 0')
+  if (row.outputAsset !== 'EUR') throw new CheckError('backend-payout', 'outputAsset is not EUR')
+}
+
+function assertSaleShape (row) {
+  const asset = selectedAsset()
+  if (!row || typeof row !== 'object') throw new CheckError('backend-shape', 'record is not an object')
+  if (row.type !== 'Sell') throw new CheckError('backend-shape', 'type is not Sell')
+  if (row.inputAsset !== asset.symbol) throw new CheckError('backend-shape', `asset is not ${asset.symbol}`)
+  const chainName = productionTarget() ? 'Polygon' : 'Sepolia'
+  if (row.inputBlockchain !== chainName) throw new CheckError('backend-shape', `blockchain is not ${chainName}`)
+  if (asset.symbol === 'USDT') {
+    if (productionTarget()) {
+      if (!amountIsSale(row.inputAmount)) throw new CheckError('backend-shape', 'amount is not the sale amount')
+    } else if (!amountIsOne(row.inputAmount)) throw new CheckError('backend-shape', 'amount is not 1')
+  } else if (!amountIsEthSale(row.inputAmount)) {
+    throw new CheckError('backend-shape', 'amount is not 0.0001')
+  }
+  plain(row.id, 'backend-shape')
+  plain(row.uid, 'backend-shape')
+  plain(row.state, 'backend-shape')
+  if (row.reason != null) plain(row.reason, 'backend-shape')
+  if (row.outputAmount != null) plain(row.outputAmount, 'backend-shape')
+  if (row.outputAsset != null) plain(row.outputAsset, 'backend-shape')
+}
+
+function backendView (row) {
+  return {
+    id: plain(row.id, 'backend-shape'),
+    uid: plain(row.uid, 'backend-shape'),
+    state: plain(row.state, 'backend-shape'),
+    reason: row.reason == null ? null : plain(row.reason, 'backend-shape'),
+    outputAmount: row.outputAmount == null ? null : plain(row.outputAmount, 'backend-shape'),
+    outputAsset: row.outputAsset == null ? null : plain(row.outputAsset, 'backend-shape'),
+    detection: 'self'
+  }
+}
+
+async function sessionFor (seed, rpc) {
+  const production = productionTarget()
+  const key = production ? 'polygon' : 'sepolia'
+  const wdk = new WDK(seed)
+    .registerWallet(key, WalletManagerEvm, { provider: rpc })
+    .registerProtocol(key, 'dfx', DfxProtocol, {
+      environment: production ? 'production' : 'sandbox',
+      network: production ? 'polygon' : 'sepolia'
+    })
+  state.wdk = wdk
+  let sellUrl
+  try {
+    const account = await wdk.getAccount(key, 0)
+    const fiat = account.getFiatProtocol('dfx')
+    state.fiat = fiat
+    // sell() is the public call that returns a session. It opens a second sandbox sale.
+    const cryptoAmount = production ? state.options.amountBase : USDT_AMOUNT
+    ;({ sellUrl } = await fiat.sell({ cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount }))
+  } catch {
+    throw new CheckError('backend-auth', production ? 'production sign-in failed' : 'sandbox sign-in failed')
+  }
+  rememberSecret(sellUrl)
+  let session
+  try {
+    session = new URL(sellUrl).searchParams.get('session')
+  } catch {
+    session = null
+  }
+  if (!session) throw new CheckError('backend-auth', production ? 'production sign-in returned no session' : 'sandbox sign-in returned no session')
+  rememberSecret(session)
+  state.session = session
+  return session
+}
+
+async function readTransactions (session, preflight = false) {
+  const fail = (check, message) => {
+    if (preflight) throw new NotRunError(`not run: ${message}`)
+    throw new CheckError(check, message)
+  }
+  state.backendReads++
+  let response
+  try {
+    response = await fetch(`${apiOrigin()}/v1/transaction`, {
+      headers: { authorization: `Bearer ${session}`, accept: 'application/json' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000)
+    })
+  } catch {
+    fail('backend-read', 'transaction list unreachable')
+  }
+  if (!response.ok) fail('backend-read', `transaction list returned HTTP ${response.status}`)
+  let body
+  try {
+    body = await response.json()
+  } catch {
+    fail('backend-read', 'transaction list was not JSON')
+  }
+  if (!Array.isArray(body)) fail('backend-shape', 'transaction list was not an array')
+  return body
+}
+
+// One pass of the sale follow: the row whose inputTxId is the transaction hash, its shape, and its state.
+// A booked row is returned. A failed state is red. Anything else is not booked and is not waited on here.
+function inspectSaleRows (rows, hash) {
+  const hits = rows.filter(row => String(row?.inputTxId ?? '').toLowerCase() === hash)
+  if (hits.length > 1) throw new CheckError('backend-count', `found ${hits.length} records`)
+  if (hits.length !== 1) return { row: null, booked: false }
+  const row = hits[0]
+  assertSaleShape(row)
+  state.evidence.backend = backendView(row)
+  if (row.state === 'PayoutInProgress' || row.state === 'Completed') {
+    assertBookedPayout(row)
+    return { row, booked: true }
+  }
+  if (FAILED_STATES.has(row.state)) {
+    throw new CheckError('backend-state', `state ${row.state}; reason ${row.reason ?? 'none'}`)
+  }
+  return { row, booked: false }
+}
+
+async function followBackend (session, hash, followMinutes) {
+  const deadline = Date.now() + followMinutes * 60_000
+  let last = null
+  while (true) {
+    const found = inspectSaleRows(await readTransactions(session), hash)
+    if (found.row) last = found.row
+    if (found.booked) return found.row
+    if (Date.now() + 20_000 > deadline) {
+      const reason = last?.reason ?? 'none'
+      const current = last?.state ?? 'none'
+      throw new CheckError('backend-deadline', `last state ${current}; reason ${reason}`)
+    }
+    await delay(20_000)
+  }
+}
+
+function explorerShotName (hash) {
+  if (typeof hash !== 'string' || !/^0x[a-f0-9]{64}$/.test(hash)) {
+    throw new CheckError('explorer-capture', 'explorer capture failed')
+  }
+  return `explorer-${hash.slice(2, 2 + HASH_SHORT)}.png`
+}
+
+function bookingShotName (uid, session) {
+  const text = typeof uid === 'number' ? String(uid) : uid
+  if (typeof text !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(text)) {
+    throw new CheckError('booking-capture', 'booking id is not a file name')
+  }
+  const name = `booking-${text}.png`
+  if (typeof session === 'string' && session !== '' && name.includes(session)) {
+    throw new CheckError('booking-capture', 'booking id is not a file name')
+  }
+  return name
+}
+
+function absentShot (name, failedCheck) {
+  const filePath = resolve(state.options.screenshots, name)
+  try {
+    lstatSync(filePath)
+  } catch (error) {
+    if (error.code === 'ENOENT') return filePath
+    throw new CheckError(failedCheck, 'screenshot path cannot be checked')
+  }
+  throw new CheckError(failedCheck, 'screenshot already exists')
+}
+
+async function maskedScreenshot (page, filePath, ibans, widget, step, keep, failedCheck) {
+  const found = await page.evaluate(({ values, keep: evidence }) => {
+    const compactText = text => (text || '').replace(/[\s\u00a0]/g, '').toUpperCase()
+    const elements = [...globalThis.document.querySelectorAll('body *')]
+    for (const el of elements) el.removeAttribute('data-iban-mask')
+    const visible = el => {
+      const rect = el.getBoundingClientRect()
+      const style = globalThis.getComputedStyle(el)
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'
+    }
+    const findIbans = text => {
+      const raw = text || ''
+      const shaped = raw.match(/(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?:[\s\u00a0]{0,2}[A-Z0-9]){11,30}(?![A-Za-z0-9])/g) || []
+      return [...shaped.map(compactText), ...values.filter(value => compactText(raw).includes(value))]
+    }
+    for (const el of globalThis.document.querySelectorAll('input, textarea')) {
+      if (visible(el) && findIbans(el.value.toUpperCase()).length > 0) el.setAttribute('data-iban-mask', 'true')
+    }
+    const hits = findIbans(globalThis.document.body.innerText)
+    const holders = hits.map(value => ({
+      value,
+      elements: elements.filter(el => visible(el) && compactText(el.innerText).includes(value) &&
+        ![...el.children].some(child => visible(child) && compactText(child.innerText).includes(value)))
+    }))
+    let missing = false
+    const occurrences = (text, value) => {
+      let count = 0
+      for (let index = text.indexOf(value); index !== -1; index = text.indexOf(value, index + 1)) count++
+      return count
+    }
+    for (const { value, elements: holdersFound } of holders) {
+      if (holdersFound.length === 0) missing = true
+      for (const el of holdersFound) {
+        const expected = occurrences(compactText(el.innerText), value)
+        if (compactText(el.innerText).length <= value.length + 24) {
+          el.setAttribute('data-iban-mask', 'true')
+        } else {
+          const walker = globalThis.document.createTreeWalker(el, globalThis.NodeFilter.SHOW_TEXT)
+          const nodes = []
+          while (walker.nextNode()) nodes.push(walker.currentNode)
+          const pattern = new RegExp([...value].join('[\\s\\u00a0]*'), 'g')
+          for (const node of nodes) {
+            if (node.parentElement.closest('[data-iban-mask="true"]')) continue
+            const text = node.data.toUpperCase()
+            if (text.length !== node.data.length) continue
+            const foundText = [...text.matchAll(pattern)]
+            for (const match of foundText.reverse()) {
+              const range = globalThis.document.createRange()
+              range.setStart(node, match.index)
+              range.setEnd(node, match.index + match[0].length)
+              const span = globalThis.document.createElement('span')
+              span.setAttribute('data-iban-mask', 'true')
+              range.surroundContents(span)
+            }
+          }
+        }
+        const marked = el.matches('[data-iban-mask="true"]')
+          ? [el]
+          : [...el.querySelectorAll('[data-iban-mask="true"]')].filter(visible)
+        if (marked.reduce((count, item) => count + occurrences(compactText(item.innerText), value), 0) < expected) missing = true
+      }
+    }
+    const matches = [...globalThis.document.querySelectorAll('[data-iban-mask="true"]')]
+    const outermost = matches.filter(el => !el.parentElement?.closest('[data-iban-mask="true"]'))
+    for (const value of hits) {
+      const expected = occurrences(compactText(globalThis.document.body.innerText), value)
+      if (outermost.reduce((count, el) => count + occurrences(compactText(el.innerText), value), 0) < expected) missing = true
+    }
+    return {
+      text: hits.length > 0,
+      count: matches.length,
+      missing,
+      coversEvidence: matches.some(el => evidence.some(value => compactText(el.innerText).includes(compactText(value))))
+    }
+  }, { values: ibans.map(iban => compact(iban).toUpperCase()), keep })
+  if (found.missing) throw new CheckError(failedCheck, 'IBAN-shaped text has no small element to mask')
+  if (widget && found.text && found.count === 0) throw new CheckError(failedCheck, 'IBAN is visible in widget text but no element is masked')
+  if (found.coversEvidence) throw new CheckError(failedCheck, `The mask would cover the evidence on ${step}`)
+  await page.screenshot({
+    path: filePath,
+    mask: [page.locator('[data-iban-mask="true"]'), page.locator('input[name="iban"]')],
+    maskColor: '#000000'
+  })
+}
+
+async function captureExplorer (browser, hash) {
+  const name = explorerShotName(hash)
+  const filePath = absentShot(name, 'explorer-capture')
+  let context
+  try {
+    context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
+    const page = await context.newPage()
+    const deadline = Date.now() + 300_000
+    while (Date.now() < deadline) {
+      try {
+        await page.goto(`${explorerOrigin()}/tx/${hash}`, { waitUntil: 'domcontentloaded', timeout: Math.max(1, deadline - Date.now()) })
+      } catch (error) {
+        if (error.name === 'TimeoutError' && Date.now() >= deadline) break
+        throw error
+      }
+      try {
+        await page.waitForFunction(value => {
+          const text = globalThis.document.body?.innerText || ''
+          return text.toLowerCase().includes(value.toLowerCase()) && /\bSuccess\b/.test(text)
+        }, hash, { timeout: Math.min(5_000, Math.max(1, deadline - Date.now())) })
+      } catch (error) {
+        if (error.name !== 'TimeoutError') throw error
+        if (Date.now() >= deadline) break
+        state.explorerReloads++
+        continue
+      }
+      await maskedScreenshot(page, filePath, state.saleIban ? [state.saleIban] : [], false, 'explorer', [hash], 'explorer-capture')
+      state.screenshots.push({ file: name, sha256: sha256File(filePath) })
+      return
+    }
+    throw new CheckError('explorer-capture', 'explorer did not show the hash and Success within 5 minutes')
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError('explorer-capture', 'explorer capture failed')
+  } finally {
+    if (context) await context.close().catch(() => {})
+  }
+}
+
+function shortenedTx (hash) {
+  return (hash.slice(0, 24) + '...' + hash.slice(-22)).toLowerCase()
+}
+
+async function captureBookingPage (browser, session, uid, expected, keep) {
+  const name = bookingShotName(uid, session)
+  const filePath = absentShot(name, 'booking-capture')
+  let context
+  try {
+    context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1100 } })
+    const page = await context.newPage()
+    await page.goto(`${appOrigin()}/tx/${encodeURIComponent(String(uid))}?session=${encodeURIComponent(session)}&lang=en`)
+    try {
+      await page.waitForFunction(checks => {
+        const lines = (globalThis.document.body?.innerText || '').split('\n').map(line => line.trim()).filter(Boolean)
+        const matches = (label, value, lowercase = false) => {
+          const indexes = lines.flatMap((line, index) => line === label ? [index] : [])
+          if (indexes.length !== 1) return false
+          const next = lines[indexes[0] + 1]
+          return lowercase ? next?.toLowerCase() === value : next === value
+        }
+        return checks.every(item => matches(item.label, item.value, item.lowercase === true))
+      }, expected, { timeout: 60_000 })
+    } catch (error) {
+      if (error.name !== 'TimeoutError') throw error
+      throw new CheckError('booking-capture', 'Booking page did not show id, hash and state within 60 seconds')
+    }
+    await maskedScreenshot(page, filePath, state.saleIban ? [state.saleIban] : [], true, 'booking', keep, 'booking-capture')
+    state.screenshots.push({ file: name, sha256: sha256File(filePath) })
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError('booking-capture', 'booking capture failed')
+  } finally {
+    if (context) await context.close().catch(() => {})
+  }
+}
+
+async function captureBooking (browser, session, hash, sale) {
+  const stateText = sale.state === 'Completed' ? 'Completed' : 'Payout in progress'
+  const inputTx = shortenedTx(hash)
+  await captureBookingPage(browser, session, sale.uid, [
+    { label: 'ID', value: String(sale.id) },
+    { label: 'Type', value: 'Sell' },
+    { label: 'State', value: stateText },
+    { label: 'Input TX', value: inputTx, lowercase: true }
+  ], [String(sale.id), 'Sell', stateText, inputTx])
+}
+
+async function capturePurchaseBooking (browser, session, hash, row) {
+  const outputTx = shortenedTx(hash)
+  await captureBookingPage(browser, session, row.uid, [
+    { label: 'ID', value: String(row.id) },
+    { label: 'Type', value: 'Buy' },
+    { label: 'State', value: 'Completed' },
+    { label: 'Output TX', value: outputTx, lowercase: true }
+  ], [String(row.id), 'Buy', 'Completed', outputTx])
+}
+
+async function captureEvidence (session, hash, sale) {
+  let browser
+  try {
+    try {
+      browser = await chromium.launch({ headless: true })
+    } catch {
+      throw new CheckError('explorer-capture', 'explorer capture failed')
+    }
+    state.browser = browser
+    await captureExplorer(browser, hash)
+    await captureBooking(browser, session, hash, sale)
+  } finally {
+    state.browser = null
+    if (browser) await browser.close().catch(() => {})
+  }
+}
+
+async function assertModuleStatus (sale) {
+  if (sale.state !== 'PayoutInProgress' && sale.state !== 'Completed') {
+    throw new CheckError('module-status', 'module status does not match the sale')
+  }
+  const expected = sale.state === 'Completed' ? 'completed' : 'in_progress'
+  let detail
+  try {
+    detail = await state.fiat.getTransactionDetail(String(sale.uid))
+  } catch {
+    throw new CheckError('module-status', 'module detail failed')
+  }
+  if (detail?.cryptoAsset !== selectedAsset().symbol || detail?.fiatCurrency !== 'EUR' || detail?.status !== expected) {
+    throw new CheckError('module-status', 'module status does not match the sale')
+  }
+  state.evidence.moduleStatus = {
+    cryptoAsset: detail.cryptoAsset,
+    fiatCurrency: detail.fiatCurrency,
+    status: detail.status
+  }
+}
+
+function sendFlowEnv (depositRaw) {
+  const asset = selectedAsset()
+  return {
+    DEP_HEAD: depositRaw.slice(0, 6),
+    DEP_TAIL: depositRaw.slice(-4),
+    ASSET_TESTID: asset.assetTestId,
+    AMOUNT_TEXT: asset.amountText,
+    SYMBOL: asset.symbol,
+    REVIEW_AMOUNT: asset.reviewAmount,
+    NETWORK_TEXT: productionTarget() ? 'Polygon' : 'Ethereum \\(Sepolia\\)'
+  }
+}
+
+async function assertClosedBackendAndTree (prelude) {
+  const backendCommitEnd = await readVersion(false)
+  if (backendCommitEnd !== prelude.backendCommitStart) {
+    throw new CheckError('backend-commit', 'backend commit changed during the run')
+  }
+  state.evidence.backendCommitEnd = backendCommitEnd
+  let porcelain
+  let head
+  try {
+    porcelain = git(['status', '--porcelain'])
+    head = git(['rev-parse', 'HEAD'])
+  } catch {
+    throw new CheckError('git', 'git failed')
+  }
+  state.evidence.dirty = porcelain !== ''
+  state.evidence.moduleHead = head
+  if (porcelain !== '' || head !== prelude.moduleHead) {
+    throw new CheckError('dirty-tree', 'the module tree changed during the run')
+  }
+}
+
+async function assertClosed (prelude) {
+  await assertClosedBackendAndTree(prelude)
+  const options = state.options
+  let bundleSha
+  try {
+    bundleSha = installedBundleSha(options.udid)
+  } catch {
+    throw new CheckError('bundle', 'installed main.jsbundle cannot be read')
+  }
+  if (bundleSha !== prelude.build.mainJsbundleSha256) {
+    throw new CheckError('bundle', 'installed main.jsbundle changed during the run')
+  }
+}
+
+async function confirmedNonce (provider, address, blockNumber) {
+  try {
+    return BigInt(await readAtBlock(blockNumber, () => provider.getTransactionCount(address, blockNumber)))
+  } catch (error) {
+    if (error instanceof CheckError) throw error
+    throw new CheckError('nonce', 'nonce read failed')
+  }
+}
+
+async function pendingNonce (provider, address) {
+  const deadline = Date.now() + 60_000
+  while (true) {
+    try {
+      return BigInt(await provider.getTransactionCount(address, 'pending'))
+    } catch (error) {
+      if (!isLagging(error) || Date.now() + 2_000 >= deadline) throw new CheckError('nonce', 'nonce read failed')
+      await delay(2_000)
+      state.rpcReadRetries++
+    }
+  }
+}
+
+async function observeMinutes (minutes) {
+  const deadline = Date.now() + minutes * 60_000
+  while (Date.now() < deadline) {
+    if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+    await delay(Math.min(20_000, deadline - Date.now()))
+  }
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+}
+
+async function headBlock (provider) {
+  let block
+  try {
+    block = Number(await provider.getBlockNumber())
+  } catch {
+    throw new CheckError('nonce', 'block read failed')
+  }
+  if (!Number.isSafeInteger(block) || block < 0) throw new CheckError('nonce', 'block number is not usable')
+  return block
+}
+
+async function rejectBalances (prelude, depositAddress, blockNumber) {
+  const asset = selectedAsset()
+  const accountAsset = asset.token
+    ? await tokenBalanceAt(prelude, prelude.account, blockNumber, 'balance-account-asset')
+    : await etherBalanceAt(prelude, prelude.account, blockNumber, 'balance-account-asset')
+  const accountEth = await etherBalanceAt(prelude, prelude.account, blockNumber, 'balance-account-eth')
+  const depositFailed = 'balance-deposit-asset'
+  const depositAsset = asset.token
+    ? await tokenBalanceAt(prelude, depositAddress, blockNumber, depositFailed)
+    : await etherBalanceAt(prelude, depositAddress, blockNumber, depositFailed)
+  return { accountAsset, accountEth, depositAsset }
+}
+
+function balanceRows (account, depositAddress, before, after) {
+  const asset = selectedAsset()
+  const rows = [{
+    address: account,
+    asset: asset.symbol,
+    before: before.accountAsset.toString(),
+    after: after.accountAsset.toString()
+  }]
+  if (asset.symbol !== 'ETH') {
+    rows.push({
+      address: account,
+      asset: 'ETH',
+      before: before.accountEth.toString(),
+      after: after.accountEth.toString()
+    })
+  }
+  rows.push({
+    address: depositAddress,
+    asset: asset.symbol,
+    before: before.depositAsset.toString(),
+    after: after.depositAsset.toString()
+  })
+  return rows
+}
+
+function sameBalances (before, after) {
+  if (after.accountAsset !== before.accountAsset) throw new CheckError('balance-account-asset', 'account asset balance changed')
+  if (after.accountEth !== before.accountEth) throw new CheckError('balance-account-eth', 'account ETH balance changed')
+  if (after.depositAsset !== before.depositAsset) throw new CheckError('balance-deposit-asset', 'deposit asset balance changed')
+}
+
+function transactionIds (rows) {
+  const ids = new Set()
+  for (const row of rows) {
+    if (row && row.id != null) ids.add(String(row.id))
+  }
+  return ids
+}
+
+async function rejectShotSet (expectedShots) {
+  const options = state.options
+  const shots = state.screenshots.map(item => {
+    if (sha256File(join(options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    return item
+  })
+  const byName = new Map(shots.map(item => [item.file, item]))
+  if (byName.size !== shots.length || expectedShots.some(name => !byName.has(name)) || byName.size !== expectedShots.length) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+  state.evidence.screenshots = expectedShots.map(name => byName.get(name))
+}
+
+async function rejectTransfer (prelude, depositAddress, depositRaw) {
+  const options = state.options
+  const asset = selectedAsset()
+  await sessionFor(prelude.seed, options.rpc)
+  const baseline = await readTransactions(state.session)
+  const baselineIds = transactionIds(baseline)
+  const fromBlock = await headBlock(prelude.provider)
+  const nonceBefore = await confirmedNonce(prelude.provider, prelude.account, fromBlock)
+  const before = await rejectBalances(prelude, depositAddress, fromBlock)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+  const flow2 = await runFlow(join(flowDir, 'sell-2-reject.yaml'), sendFlowEnv(depositRaw))
+  const confirmations = confirmationCount(flow2.stdout)
+  flow2.stdout = ''
+  state.evidence.walletConfirmations = confirmations
+  if (confirmations !== 0) {
+    throw new CheckError('wallet-confirmations', `completed send-confirm taps: ${confirmations}`, state.failedStep)
+  }
+  if (flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed', state.failedStep)
+  await observeMinutes(options.follow)
+  const toBlock = await headBlock(prelude.provider)
+  const nonceAfter = await confirmedNonce(prelude.provider, prelude.account, toBlock)
+  const noncePending = await pendingNonce(prelude.provider, prelude.account)
+  state.evidence.observation = { fromBlock, toBlock, minutes: options.follow }
+  state.evidence.nonce = {
+    before: nonceBefore.toString(),
+    after: nonceAfter.toString(),
+    pendingAfter: noncePending.toString()
+  }
+  if (nonceAfter !== nonceBefore || noncePending !== nonceAfter) throw new CheckError('nonce', 'nonce changed')
+  const after = await rejectBalances(prelude, depositAddress, toBlock)
+  state.evidence.balances = balanceRows(prelude.account, depositAddress, before, after)
+  sameBalances(before, after)
+  const rows = await readTransactions(state.session)
+  const fresh = rows.filter(row => {
+    if (!row || typeof row !== 'object') return false
+    const id = row.id == null ? null : String(row.id)
+    if (id != null && baselineIds.has(id)) return false
+    return row.type === 'Sell' && row.inputAsset === asset.symbol
+  })
+  state.evidence.backend = { newSaleRows: fresh.length, baselineRows: baseline.length }
+  if (fresh.length !== 0) throw new CheckError('backend-no-sale', `found ${fresh.length} new ${asset.symbol} sales`)
+  await assertClosed(prelude)
+  await rejectShotSet(REJECT_FLOW_SHOTS)
+}
+
+function eurText (cents) {
+  const whole = Math.trunc(cents / 100)
+  const frac = String(cents % 100).padStart(2, '0')
+  return `${whole}.${frac}`
+}
+
+function purchaseExternalId (moduleHead) {
+  const now = new Date()
+  const pad = value => String(value).padStart(2, '0')
+  const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`
+  const id = `wdk-e2e-buy-${moduleHead.slice(0, 8)}-${stamp}-${randomBytes(4).toString('hex')}`
+  if (!/^[A-Za-z0-9._:-]{1,256}$/.test(id)) throw new CheckError('record', 'externalTransactionId is not valid')
+  return id
+}
+
+function assertBuyFlowShots () {
+  const shots = state.screenshots.map(item => {
+    if (sha256File(join(state.options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    return item
+  })
+  const byName = new Map(shots.map(item => [item.file, item]))
+  if (byName.size !== shots.length || BUY_FLOW_SHOTS.some(name => !byName.has(name)) || byName.size !== BUY_FLOW_SHOTS.length) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+}
+
+async function saleSession (seed, rpc) {
+  const wdk = productionWdk(seed, rpc)
+  state.wdk = wdk
+  let sellUrl
+  try {
+    const account = await wdk.getAccount('polygon', 0)
+    const fiat = account.getFiatProtocol('dfx')
+    state.fiat = fiat
+    // sell() returns a widget URL and does not create an order, and it does not call paymentInfos.
+    // The amount is only amount-in on that URL. The rehearsed sale amount comes from the chain, later.
+    ;({ sellUrl } = await fiat.sell({ cryptoAsset: 'USDT', fiatCurrency: 'EUR', cryptoAmount: USDT_AMOUNT }))
+  } catch {
+    throw new CheckError('backend-auth', 'production sign-in failed')
+  }
+  rememberSecret(sellUrl)
+  let session
+  try {
+    session = new URL(sellUrl).searchParams.get('session')
+  } catch {
+    session = null
+  }
+  if (!session) throw new CheckError('backend-auth', 'production sign-in returned no session')
+  rememberSecret(session)
+  state.session = session
+  return session
+}
+
+async function purchaseSession (seed, rpc, fiatCents) {
+  const wdk = productionWdk(seed, rpc)
+  state.wdk = wdk
+  let buyUrl
+  try {
+    const account = await wdk.getAccount('polygon', 0)
+    const fiat = account.getFiatProtocol('dfx')
+    state.fiat = fiat
+    ;({ buyUrl } = await fiat.buy({
+      cryptoAsset: 'USDT',
+      fiatCurrency: 'EUR',
+      fiatAmount: BigInt(fiatCents),
+      config: { network: 'polygon' }
+    }))
+  } catch {
+    throw new CheckError('backend-auth', 'production sign-in failed')
+  }
+  rememberSecret(buyUrl)
+  let session
+  try {
+    session = new URL(buyUrl).searchParams.get('session')
+  } catch {
+    session = null
+  }
+  if (!session) throw new CheckError('backend-auth', 'production sign-in returned no session')
+  rememberSecret(session)
+  state.session = session
+  return session
+}
+
+async function followPurchase (session, externalId, baseline, followMinutes) {
+  const deadline = Date.now() + followMinutes * 60_000
+  const started = Date.now()
+  let last = null
+  try {
+    while (true) {
+      if (state.interrupted) throw new CheckError('interrupted', 'nothing paid')
+      const rows = await readTransactions(session)
+      const fresh = rows.filter(row => row && row.type === 'Buy' && row.id != null && !baseline.has(String(row.id)))
+      const foreign = fresh.filter(row => row.externalTransactionId !== externalId)
+      if (foreign.length > 0) throw new CheckError('backend-match', `found ${foreign.length} new buy records with a different external id`)
+      const ours = fresh.filter(row => row.externalTransactionId === externalId)
+      if (ours.length > 1) throw new CheckError('backend-count', `found ${ours.length} records`)
+      if (ours.length === 1) {
+        last = ours[0]
+        if (FAILED_STATES.has(last.state)) {
+          throw new CheckError('backend-state', `state ${last.state}; reason ${last.reason ?? 'none'}`)
+        }
+        if (last.state === 'Completed' && /^0x[0-9a-fA-F]{64}$/.test(String(last.outputTxId ?? ''))) return last
+      }
+      if (Date.now() + 30_000 > deadline) {
+        throw new CheckError('backend-deadline', `last state ${last?.state ?? 'none'}`)
+      }
+      await delay(30_000)
+    }
+  } finally {
+    state.evidence.waitedSeconds = Math.max(0, Math.round((Date.now() - started) / 1000))
+  }
+}
+
+function assertPurchaseShape (row, fiatCents) {
+  if (!row || typeof row !== 'object') throw new CheckError('backend-shape', 'record is not an object')
+  if (row.inputAsset !== 'EUR') throw new CheckError('backend-shape', 'inputAsset is not EUR')
+  const cents = amountCents(row.inputAmount)
+  if (cents == null || cents !== fiatCents) throw new CheckError('backend-shape', 'inputAmount is not the fiat amount')
+  if (row.outputAsset !== 'USDT') throw new CheckError('backend-shape', 'outputAsset is not USDT')
+  if (row.outputBlockchain !== 'Polygon') throw new CheckError('backend-shape', 'outputBlockchain is not Polygon')
+  if (typeof row.outputAmount !== 'number' || !Number.isFinite(row.outputAmount) || !(row.outputAmount > 0)) {
+    throw new CheckError('backend-shape', 'outputAmount is not a finite number greater than 0')
+  }
+}
+
+function purchaseBackend (row) {
+  return purchaseBackendFields(row, plain(row.externalTransactionId, 'backend-shape'))
+}
+
+function purchaseBackendFields (row, externalTransactionId) {
+  return {
+    id: plain(row.id, 'backend-shape'),
+    uid: plain(row.uid, 'backend-shape'),
+    state: plain(row.state, 'backend-shape'),
+    inputAmount: plain(row.inputAmount, 'backend-shape'),
+    outputAmount: plain(row.outputAmount, 'backend-shape'),
+    outputAsset: plain(row.outputAsset, 'backend-shape'),
+    externalTransactionId
+  }
+}
+
+async function checkPurchaseChain (prelude, row) {
+  const hash = String(row.outputTxId).toLowerCase()
+  let raw
+  try {
+    raw = await readReceipt(prelude.provider, hash)
+  } catch (error) {
+    if (error instanceof CheckError) throw new CheckError('chain', error.message)
+    throw new CheckError('chain', 'receipt read failed')
+  }
+  const status = quantity(raw.status, 'chain')
+  if (status !== 1n) throw new CheckError('chain', `status is ${status}`)
+  const logs = Array.isArray(raw.logs) ? raw.logs.filter(log => {
+    try {
+      if (getAddress(log.address) !== PRODUCTION_USDT) return false
+      if (String(log.topics?.[0] ?? '').toLowerCase() !== TRANSFER_TOPIC) return false
+      return addressFromTopic(log.topics?.[2], 'chain') === prelude.account
+    } catch (error) {
+      if (error instanceof CheckError) throw error
+      return false
+    }
+  }) : []
+  if (logs.length !== 1) throw new CheckError('chain', `found ${logs.length} USDT Transfer logs to the wallet`)
+  const transfer = logs[0]
+  const payoutFrom = addressFromTopic(transfer.topics?.[1], 'chain')
+  const value = quantity(transfer.data, 'chain')
+  const expected = scaled6(String(row.outputAmount))
+  if (expected == null || roundedSaleBase(value) !== expected) {
+    throw new CheckError('chain', 'USDT Transfer value does not match outputAmount')
+  }
+  const block = Number(quantity(raw.blockNumber, 'chain'))
+  if (!Number.isSafeInteger(block) || block < 1) throw new CheckError('chain', 'block number is not usable')
+  state.evidence.payoutFrom = payoutFrom
+  state.evidence.block = block
+  state.evidence.value = value.toString()
+  state.evidence.hash = hash
+  return { hash, block, value }
+}
+
+function assertPurchaseBalanceDelta (checks) {
+  for (const check of checks) {
+    const ok = check.value === undefined ? check.after === check.before : check.after === check.before + check.value
+    if (!ok) throw new CheckError('balance', check.message)
+  }
+}
+
+async function readArchiveQuantity (read, failedCheck) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return BigInt(await read())
+    } catch {
+      if (attempt >= 5) {
+        throw new CheckError(failedCheck || 'balance', failedCheck ? 'balance read failed' : 'archive balance read failed')
+      }
+      await delay(2_000)
+      state.rpcReadRetries++
+      state.evidence.rpcReadRetries = (state.evidence.rpcReadRetries ?? 0) + 1
+    }
+  }
+}
+
+async function archiveBalances (account, block) {
+  // A static network stops ethers from probing this node with eth_chainId.
+  const archive = new JsonRpcProvider(ARCHIVE_RPC, 137, { staticNetwork: true })
+  try {
+    const usdt = new Contract(PRODUCTION_USDT, ERC20_ABI, archive)
+    const usdtBefore = await readArchiveQuantity(() => usdt.balanceOf(account, { blockTag: block - 1 }))
+    const usdtAfter = await readArchiveQuantity(() => usdt.balanceOf(account, { blockTag: block }))
+    const polBefore = await readArchiveQuantity(() => archive.getBalance(account, block - 1))
+    const polAfter = await readArchiveQuantity(() => archive.getBalance(account, block))
+    return { usdtBefore, usdtAfter, polBefore, polAfter }
+  } finally {
+    try { archive.destroy() } catch { /* closing the provider is not a balance check */ }
+  }
+}
+
+async function checkPurchaseBalance (prelude, block, value, baselineUsdt, baselinePol) {
+  let archived
+  let usdtLatest
+  let polLatest
+  try {
+    archived = await archiveBalances(prelude.account, block)
+    usdtLatest = BigInt(await prelude.usdt.balanceOf(prelude.account))
+    polLatest = BigInt(await prelude.provider.getBalance(prelude.account))
+  } catch (error) {
+    if (error instanceof CheckError && error.failedCheck === 'balance') throw error
+    throw new CheckError('balance', 'balance read failed')
+  }
+  assertPurchaseBalanceDelta([
+    { before: baselineUsdt, after: archived.usdtBefore, message: 'USDT balance before the payout is not the preflight baseline' },
+    { before: baselineUsdt, after: archived.usdtAfter, value, message: 'USDT balance at the receipt block is not the baseline plus the payout' },
+    { before: baselineUsdt, after: usdtLatest, value, message: 'USDT balance is not the baseline plus the payout' },
+    { before: baselinePol, after: archived.polBefore, message: 'POL balance before the payout is not the preflight baseline' },
+    { before: baselinePol, after: archived.polAfter, message: 'POL balance at the receipt block is not the preflight baseline' },
+    { before: baselinePol, after: polLatest, message: 'POL balance changed' }
+  ])
+  state.evidence.baselineSource = PURCHASE_BASELINE_SOURCE
+  state.evidence.balances = [
+    { address: prelude.account, asset: 'USDT', before: baselineUsdt.toString(), after: usdtLatest.toString() },
+    { address: prelude.account, asset: 'POL', before: baselinePol.toString(), after: polLatest.toString() }
+  ]
+}
+
+function purchaseDetailIsCompleted (detail) {
+  return detail?.cryptoAsset === 'USDT' && detail?.fiatCurrency === 'EUR' && detail?.status === 'completed'
+}
+
+function purchaseDetailView (detail) {
+  return {
+    cryptoAsset: detail.cryptoAsset,
+    fiatCurrency: detail.fiatCurrency,
+    status: detail.status
+  }
+}
+
+async function purchaseDetailByExternalId (externalTransactionId) {
+  let detail
+  try {
+    detail = await state.fiat.getTransactionDetail(externalTransactionId, { idType: 'externalTransactionId' })
+  } catch {
+    throw new CheckError('module-status', 'module detail failed')
+  }
+  if (!purchaseDetailIsCompleted(detail)) {
+    throw new CheckError('module-status', 'module status does not match the purchase')
+  }
+  return detail
+}
+
+async function purchaseDetailByUid (row) {
+  let detail
+  try {
+    detail = await state.fiat.getTransactionDetail(String(row.uid))
+  } catch {
+    throw new CheckError('module-status', 'module detail failed')
+  }
+  if (!purchaseDetailIsCompleted(detail)) {
+    throw new CheckError('module-status', 'module status does not match the purchase')
+  }
+  return detail
+}
+
+async function assertPurchaseModuleStatus (row, externalTransactionId) {
+  const byExternalId = await purchaseDetailByExternalId(externalTransactionId)
+  const byUid = await purchaseDetailByUid(row)
+  state.evidence.moduleStatus = {
+    byExternalId: purchaseDetailView(byExternalId),
+    byUid: purchaseDetailView(byUid)
+  }
+}
+
+async function capturePurchaseEvidence (session, hash, row) {
+  let browser
+  try {
+    try {
+      browser = await chromium.launch({ headless: true })
+    } catch {
+      throw new CheckError('explorer-capture', 'explorer capture failed')
+    }
+    state.browser = browser
+    await captureExplorer(browser, hash)
+    await capturePurchaseBooking(browser, session, hash, row)
+  } finally {
+    state.browser = null
+    if (browser) await browser.close().catch(() => {})
+  }
+}
+
+async function buyAndCheck (prelude) {
+  const options = state.options
+  await copySeed(options.seedFile)
+  const iban = prelude.activeIban
+  state.saleIban = iban
+  rememberIban(iban)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing paid')
+  const externalId = purchaseExternalId(prelude.moduleHead)
+  state.evidence.externalTransactionId = externalId
+  const secret = { IBAN_PATTERN: `.*${[...iban].join(' ?')}.*` }
+  state.flow1Started = true
+  const flow = await runFlow(join(flowDir, 'buy-1-widget.yaml'), {
+    BUY_CENTS: String(options.fiatCents),
+    BUY_EXT: externalId
+  }, secret)
+  const flowCode = flow.code
+  flow.stdout = ''
+  if (flowCode !== 0) throw new CheckError('flow-buy', 'nothing paid', state.failedStep)
+  assertBuyFlowShots()
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing paid')
+  const session = await purchaseSession(prelude.seed, options.rpc, options.fiatCents)
+  console.log(`wallet-ui buy: waiting up to ${options.follow} minutes for the account holder's bank transfer of ${eurText(options.fiatCents)} EUR`)
+  const row = await followPurchase(session, externalId, prelude.buyBaseline, options.follow)
+  state.evidence.backend = purchaseBackend(row)
+  assertPurchaseShape(row, options.fiatCents)
+  const chain = await checkPurchaseChain(prelude, row)
+  await checkPurchaseBalance(prelude, chain.block, chain.value, prelude.usdtBalance, prelude.polBalance)
+  await assertPurchaseModuleStatus(row, externalId)
+  await capturePurchaseEvidence(session, chain.hash, row)
+  await assertClosed(prelude)
+  const explorerName = explorerShotName(chain.hash)
+  const bookingName = bookingShotName(row.uid, session)
+  assertCapturedShots(BUY_FLOW_SHOTS, explorerName, bookingName)
+}
+
+function assertCapturedShots (flowShots, explorerName, bookingName) {
+  const shots = state.screenshots.map(item => {
+    if (sha256File(join(state.options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    return item
+  })
+  const byName = new Map(shots.map(item => [item.file, item]))
+  if (byName.size !== shots.length || flowShots.some(name => !byName.has(name))) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+  if (!byName.has(explorerName)) throw new CheckError('explorer-capture', 'explorer screenshot missing')
+  if (!byName.has(bookingName)) throw new CheckError('booking-capture', 'booking screenshot missing')
+  const expectedShots = [...flowShots, explorerName, bookingName]
+  if (byName.size !== expectedShots.length) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+  state.evidence.screenshots = expectedShots.map(name => byName.get(name))
+}
+
+function sameTransactionId (value, id) {
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return value === id
+  if (typeof value === 'string' && /^[1-9]\d*$/.test(value)) return value === String(id)
+  return false
+}
+
+function selectRehearsalPurchase (rows, id) {
+  const hits = rows.filter(row => row && typeof row === 'object' && sameTransactionId(row.id, id))
+  if (hits.length !== 1) throw new CheckError('backend-match', `found ${hits.length} records`)
+  const row = hits[0]
+  if (row.type !== 'Buy') throw new CheckError('backend-match', 'type is not Buy')
+  if (row.state !== 'Completed') throw new CheckError('backend-match', 'state is not Completed')
+  if (typeof row.outputTxId !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(row.outputTxId)) {
+    throw new CheckError('backend-match', 'outputTxId is not a 32-byte hash')
+  }
+  return row
+}
+
+async function checkRehearsalBalance (prelude, block, value) {
+  const archived = await archiveBalances(prelude.account, block)
+  assertPurchaseBalanceDelta([
+    { before: archived.usdtBefore, after: archived.usdtAfter, value, message: 'USDT balance at the receipt block is not the baseline plus the payout' },
+    { before: archived.polBefore, after: archived.polAfter, message: 'POL balance changed' }
+  ])
+  state.evidence.baselineSource = BASELINE_SOURCE
+  state.evidence.balances = [
+    { address: prelude.account, asset: 'USDT', before: archived.usdtBefore.toString(), after: archived.usdtAfter.toString() },
+    { address: prelude.account, asset: 'POL', before: archived.polBefore.toString(), after: archived.polAfter.toString() }
+  ]
+}
+
+async function readSaleTransfer (prelude, userOpHash) {
+  const userOp = await readUserOperationReceipt(userOpHash)
+  const txHashRaw = userOp.receipt && userOp.receipt.transactionHash
+  if (typeof txHashRaw !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHashRaw)) {
+    throw new CheckError('userop-receipt', 'user operation receipt has no transaction hash')
+  }
+  const raw = await readReceipt(prelude.provider, txHashRaw.toLowerCase())
+  const logs = Array.isArray(raw.logs) ? raw.logs.filter(log => {
+    try {
+      if (getAddress(log.address) !== PRODUCTION_USDT || String(log.topics?.[0] ?? '').toLowerCase() !== TRANSFER_TOPIC) return false
+      return addressFromTopic(log.topics?.[1], 'transfer') === prelude.account
+    } catch {
+      return false
+    }
+  }) : []
+  if (logs.length !== 1) throw new CheckError('transfer', `found ${logs.length} USDT Transfer logs from the account`)
+  return {
+    depositAddress: addressFromTopic(logs[0].topics?.[2], 'transfer'),
+    amount: quantity(logs[0].data, 'transfer')
+  }
+}
+
+async function rehearseSale (prelude) {
+  const session = state.session
+  const userOpHash = state.options.rehearseUserOp
+  const transfer = await readSaleTransfer(prelude, userOpHash)
+  state.options.amountBase = transfer.amount
+  state.evidence.amountSource = 'chain transfer log'
+  state.evidence.depositAddress = transfer.depositAddress
+  await checkSponsoredChain(prelude, userOpHash, transfer.depositAddress)
+  state.evidence.baselineSource = BASELINE_SOURCE
+  const found = inspectSaleRows(await readTransactions(session), state.evidence.hash)
+  if (!found.booked) {
+    if (!found.row) throw new CheckError('backend-count', 'found 0 records')
+    throw new CheckError('backend-state', `state ${found.row.state}; reason ${found.row.reason ?? 'none'}`)
+  }
+  const sale = found.row
+  await assertModuleStatus(sale)
+  await captureEvidence(session, state.evidence.hash, sale)
+  await assertClosedBackendAndTree(prelude)
+  assertCapturedShots([], explorerShotName(state.evidence.hash), bookingShotName(sale.uid, session))
+}
+
+async function rehearsePurchase (prelude) {
+  const session = state.session
+  const rows = await readTransactions(session)
+  const row = selectRehearsalPurchase(rows, state.options.rehearseId)
+  const externalId = row.externalTransactionId
+  if (externalId === null) {
+    state.evidence.backend = purchaseBackendFields(row, null)
+    state.evidence.externalTransactionId = null
+    state.evidence.notRehearsed = ['external-id-match', 'module-status-by-external-id']
+  } else if (typeof externalId === 'string') {
+    state.evidence.backend = purchaseBackend(row)
+    state.evidence.externalTransactionId = state.evidence.backend.externalTransactionId
+    state.evidence.notRehearsed = []
+    if (state.evidence.externalTransactionId !== externalId) {
+      throw new CheckError('backend-match', 'externalTransactionId does not match')
+    }
+  } else {
+    throw new CheckError('backend-match', 'externalTransactionId is not a string or null')
+  }
+  const fiatCents = amountCents(row.inputAmount)
+  state.evidence.fiatCents = fiatCents
+  assertPurchaseShape(row, fiatCents)
+  const chain = await checkPurchaseChain(prelude, row)
+  await checkRehearsalBalance(prelude, chain.block, chain.value)
+  if (externalId === null) {
+    const byUid = await purchaseDetailByUid(row)
+    state.evidence.moduleStatus = { byExternalId: null, byUid: purchaseDetailView(byUid) }
+  } else {
+    await assertPurchaseModuleStatus(row, externalId)
+  }
+  await capturePurchaseEvidence(session, chain.hash, row)
+  await assertClosedBackendAndTree(prelude)
+  assertCapturedShots([], explorerShotName(chain.hash), bookingShotName(row.uid, session))
+}
+
+async function sendAndCheck (prelude) {
+  const options = state.options
+  await copySeed(options.seedFile)
+  const production = productionTarget()
+  const iban = production ? prelude.activeIban : inventedIban()
+  state.saleIban = iban
+  rememberIban(iban)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+  state.flow1Started = true
+  const flow1Env = production
+    ? { SELL_ENTRY: 'sell-entry', SELL_AMOUNT: String(options.amountBase) }
+    : { IBAN: iban, IBAN_PATTERN: `.*${[...iban].join(' ?')}.*`, SELL_ENTRY: selectedAsset().sellEntry }
+  const flow1Secrets = production ? { IBAN_PATTERN: `.*${[...iban].join(' ?')}.*` } : undefined
+  const flow1 = await runFlow(join(flowDir, production ? 'sell-1-widget-saved-iban.yaml' : 'sell-1-widget.yaml'), flow1Env, flow1Secrets)
+  const flow1Code = flow1.code
+  flow1.stdout = ''
+  if (flow1Code !== 0) throw new CheckError('flow-1', 'nothing sent', state.failedStep)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+  const pasted = await runCapture('xcrun', ['simctl', 'pbpaste', state.udid], 'ignore')
+  if (pasted.code !== 0) throw new CheckError('clipboard', 'nothing sent')
+  const depositRaw = oneLine(pasted.stdout)
+  if (!/^0x[a-fA-F0-9]{40}$/.test(depositRaw)) throw new CheckError('clipboard', 'nothing sent')
+  let depositAddress
+  try {
+    depositAddress = getAddress(depositRaw)
+  } catch {
+    throw new CheckError('clipboard', 'nothing sent')
+  }
+  state.evidence.depositAddress = depositAddress
+  assertNoForeignMaestro(true)
+  if (state.interrupted) throw new CheckError('interrupted', 'nothing sent')
+  if (options.reject) {
+    await rejectTransfer(prelude, depositAddress, depositRaw)
+    return
+  }
+  const flow2 = await runFlow(join(flowDir, 'sell-2-send.yaml'), sendFlowEnv(depositRaw))
+  const confirmations = confirmationCount(flow2.stdout)
+  flow2.stdout = ''
+  state.evidence.walletConfirmations = confirmations
+  if (confirmations !== 1) {
+    if (confirmations === 0 && flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed before send-confirm', state.failedStep)
+    throw new CheckError('wallet-confirmations', `completed send-confirm taps: ${confirmations}`, state.failedStep)
+  }
+  const hash = await readSuccessHash()
+  if (productionTarget()) state.evidence.userOperationHash = hash
+  else state.evidence.hash = hash
+  if (flow2.code !== 0) throw new CheckError('flow-2', 'flow 2 failed after send-confirm', state.failedStep)
+  if (productionTarget()) await checkSponsoredChain(prelude, hash, depositAddress)
+  else if (selectedAsset().symbol === 'ETH') await checkEthChain(prelude, hash, depositAddress)
+  else await checkChain(prelude, hash, depositAddress)
+  const chainHash = productionTarget() ? state.evidence.hash : hash
+  const session = await sessionFor(prelude.seed, options.rpc)
+  const sale = await followBackend(session, chainHash, options.follow)
+  await assertModuleStatus(sale)
+  await captureEvidence(session, chainHash, sale)
+  await assertClosed(prelude)
+  const explorerName = explorerShotName(chainHash)
+  const bookingName = bookingShotName(sale.uid, session)
+  const flowShots = saleFlowShots()
+  const expectedShots = [...flowShots, explorerName, bookingName]
+  const shots = state.screenshots.map(item => {
+    if (sha256File(join(options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    return item
+  })
+  const byName = new Map(shots.map(item => [item.file, item]))
+  if (byName.size !== shots.length || flowShots.some(name => !byName.has(name))) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+  if (!byName.has(explorerName)) throw new CheckError('explorer-capture', 'explorer screenshot missing')
+  if (!byName.has(bookingName)) throw new CheckError('booking-capture', 'booking screenshot missing')
+  if (byName.size !== expectedShots.length) {
+    throw new CheckError('screenshots', `found ${shots.map(item => item.file).join(', ') || 'none'}`)
+  }
+  state.evidence.screenshots = expectedShots.map(name => byName.get(name))
+}
+
+function measuredRecord () {
+  const evidence = state.evidence
+  const body = {}
+  for (const key of recordFields()) {
+    if (key === 'date') body.date = new Date().toISOString()
+    else if (key === 'backendReads') body.backendReads = state.backendReads
+    else if (key === 'rpcReadRetries') body.rpcReadRetries = state.rpcReadRetries
+    else if (key === 'explorerReloads') body.explorerReloads = state.explorerReloads
+    else if (key === 'maestroStepRetries') body.maestroStepRetries = 0
+    else if (key === 'screenshots') {
+      if (state.screenshots.length || evidence.screenshots) body.screenshots = evidence.screenshots || state.screenshots
+    } else if (evidence[key] !== undefined) body[key] = evidence[key]
+  }
+  if (state.failedStep !== undefined) body.failedStep = state.failedStep
+  return body
+}
+
+function assertRejectedPass (body) {
+  const asset = selectedAsset()
+  if (body.walletConfirmations !== 0) throw new CheckError('wallet-confirmations', 'walletConfirmations is not 0')
+  if (body.walletStateCleared !== true) throw new CheckError('cleanup', 'wallet state was not cleared')
+  if (body.asset !== asset.symbol || body.mode !== 'rejected') throw new CheckError('record', 'asset or mode is wrong')
+  if (!body.nonce || body.nonce.before !== body.nonce.after || body.nonce.pendingAfter !== body.nonce.after) {
+    throw new CheckError('nonce', 'nonce changed')
+  }
+  if (!body.observation || !Number.isSafeInteger(body.observation.fromBlock) || !Number.isSafeInteger(body.observation.toBlock) || body.observation.minutes !== state.options.follow) {
+    throw new CheckError('record', 'observation is incomplete')
+  }
+  if (!body.backend || body.backend.newSaleRows !== 0 || typeof body.backend.baselineRows !== 'number') {
+    throw new CheckError('backend-no-sale', 'backend observation is wrong')
+  }
+  for (const key of REJECT_ABSENT) {
+    if (body[key] !== undefined) throw new CheckError('record', `unexpected ${key}`)
+  }
+  const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
+  if (names.length !== REJECT_FLOW_SHOTS.length || REJECT_FLOW_SHOTS.some((name, index) => names[index] !== name)) {
+    throw new CheckError('screenshots', 'screenshot set changed')
+  }
+}
+
+function assertSaleRehearsalPass (body) {
+  for (const key of SALE_REHEARSAL_RECORD_FIELDS) {
+    if (body[key] === undefined) throw new CheckError('record', `missing ${key}`)
+  }
+  if (body.rehearsal !== true) throw new CheckError('record', 'rehearsal is not true')
+  if (body.result !== 'rehearsal-pass') throw new CheckError('record', 'result is not rehearsal-pass')
+  if (body.humanStep !== undefined) throw new CheckError('record', 'humanStep is present')
+  if (body.dirty !== false) throw new CheckError('dirty-tree', 'the module tree is not clean')
+  const asset = selectedAsset()
+  if (body.asset !== asset.symbol || body.mode !== 'sale') throw new CheckError('record', 'asset or mode is wrong')
+  if (body.rehearsedTransaction !== state.options.rehearseUserOp) throw new CheckError('record', 'rehearsedTransaction is wrong')
+  if (body.userOperationHash !== state.options.rehearseUserOp) throw new CheckError('record', 'userOperationHash is wrong')
+  if (body.amountSource !== 'chain transfer log') throw new CheckError('record', 'amountSource is wrong')
+  if (body.baselineSource !== BASELINE_SOURCE) throw new CheckError('record', 'baselineSource is wrong')
+  if (body.ibanCountryAndClearing !== PRODUCTION_IBAN_LABEL) throw new CheckError('record', 'iban label changed')
+  if (body.feePaidBy !== 'paymaster') throw new CheckError('record', 'feePaidBy is not paymaster')
+  let paymaster
+  try {
+    paymaster = getAddress(body.paymaster)
+  } catch {
+    throw new CheckError('userop-event', 'paymaster is not an address')
+  }
+  if (paymaster === getAddress('0x0000000000000000000000000000000000000000')) {
+    throw new CheckError('userop-event', 'paymaster is zero')
+  }
+  if (String(body.paymaster).toLowerCase() === String(body.account).toLowerCase()) {
+    throw new CheckError('userop-event', 'paymaster is the account')
+  }
+  const pol = Array.isArray(body.balances)
+    ? body.balances.filter(row => row && row.asset === 'POL' && row.address === body.account)
+    : []
+  if (pol.length !== 1 || pol[0].before !== pol[0].after) {
+    throw new CheckError('balance-account-pol', 'account POL balance changed')
+  }
+  if (!body.backend || (body.backend.state !== 'PayoutInProgress' && body.backend.state !== 'Completed')) {
+    throw new CheckError('backend-state', 'backend state is not booked')
+  }
+  if (body.backend.uid == null || body.backend.uid === '') throw new CheckError('backend-shape', 'backend uid is missing')
+  const expectedStatus = body.backend.state === 'Completed' ? 'completed' : 'in_progress'
+  if (!body.moduleStatus || body.moduleStatus.cryptoAsset !== asset.symbol || body.moduleStatus.fiatCurrency !== 'EUR' || body.moduleStatus.status !== expectedStatus) {
+    throw new CheckError('module-status', 'module status does not match the sale')
+  }
+  const skipped = body.notRehearsed
+  if (!Array.isArray(skipped) || skipped.length !== SALE_NOT_REHEARSED.length || SALE_NOT_REHEARSED.some((name, index) => skipped[index] !== name)) {
+    throw new CheckError('record', 'notRehearsed is wrong')
+  }
+  const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
+  const expectedNames = [explorerShotName(body.hash), bookingShotName(body.backend.uid, state.session)]
+  if (names.length !== expectedNames.length || expectedNames.some((name, index) => names[index] !== name)) {
+    throw new CheckError('screenshots', 'screenshot set changed')
+  }
+}
+
+function assertRehearsalPass (body) {
+  if (body.mode === 'sale') {
+    assertSaleRehearsalPass(body)
+    return
+  }
+  for (const key of REHEARSAL_RECORD_FIELDS) {
+    if (body[key] === undefined) throw new CheckError('record', `missing ${key}`)
+  }
+  if (body.rehearsal !== true) throw new CheckError('record', 'rehearsal is not true')
+  if (body.result !== 'rehearsal-pass') throw new CheckError('record', 'result is not rehearsal-pass')
+  if (body.humanStep !== undefined) throw new CheckError('record', 'humanStep is present')
+  if (body.dirty !== false) throw new CheckError('dirty-tree', 'the module tree is not clean')
+  if (body.asset !== 'USDT' || body.mode !== 'purchase') throw new CheckError('record', 'asset or mode is wrong')
+  if (body.rehearsedTransaction !== state.options.rehearseId) throw new CheckError('record', 'rehearsedTransaction is wrong')
+  if (body.baselineSource !== BASELINE_SOURCE) throw new CheckError('record', 'baselineSource is wrong')
+  if (!body.backend || body.backend.state !== 'Completed') throw new CheckError('backend-state', 'backend state is not Completed')
+  const skipped = body.notRehearsed
+  if (body.externalTransactionId === null) {
+    if (!Array.isArray(skipped) || skipped.length !== 2 || skipped[0] !== 'external-id-match' || skipped[1] !== 'module-status-by-external-id') {
+      throw new CheckError('record', 'notRehearsed is wrong')
+    }
+    if (!body.moduleStatus || body.moduleStatus.byExternalId !== null) {
+      throw new CheckError('module-status', 'module status by external id ran')
+    }
+  } else {
+    if (!Array.isArray(skipped) || skipped.length !== 0) throw new CheckError('record', 'notRehearsed is wrong')
+    if (typeof body.externalTransactionId !== 'string' || body.backend.externalTransactionId !== body.externalTransactionId) {
+      throw new CheckError('backend-match', 'externalTransactionId does not match')
+    }
+    if (!purchaseDetailIsCompleted(body.moduleStatus?.byExternalId)) {
+      throw new CheckError('module-status', 'module status does not match the purchase')
+    }
+  }
+  if (!purchaseDetailIsCompleted(body.moduleStatus?.byUid)) {
+    throw new CheckError('module-status', 'module status does not match the purchase')
+  }
+  const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
+  const expectedNames = [explorerShotName(body.hash), bookingShotName(body.backend.uid, state.session)]
+  if (names.length !== expectedNames.length || expectedNames.some((name, index) => names[index] !== name)) {
+    throw new CheckError('screenshots', 'screenshot set changed')
+  }
+}
+
+function assertPurchasePass (body) {
+  if (body.walletStateCleared !== true) throw new CheckError('cleanup', 'wallet state was not cleared')
+  if (body.asset !== 'USDT' || body.mode !== 'purchase') throw new CheckError('record', 'asset or mode is wrong')
+  if (body.baselineSource !== PURCHASE_BASELINE_SOURCE) throw new CheckError('record', 'baselineSource is wrong')
+  if (body.humanStep !== 'bank transfer by the account holder') throw new CheckError('record', 'humanStep is wrong')
+  if (!body.backend || body.backend.state !== 'Completed') throw new CheckError('backend-state', 'backend state is not Completed')
+  if (body.backend.externalTransactionId !== body.externalTransactionId) {
+    throw new CheckError('backend-match', 'externalTransactionId does not match')
+  }
+  if (!purchaseDetailIsCompleted(body.moduleStatus?.byExternalId) || !purchaseDetailIsCompleted(body.moduleStatus?.byUid)) {
+    throw new CheckError('module-status', 'module status does not match the purchase')
+  }
+  const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
+  const expectedNames = [...BUY_FLOW_SHOTS, explorerShotName(body.hash), bookingShotName(body.backend.uid, state.session)]
+  if (names.length !== expectedNames.length || expectedNames.some((name, index) => names[index] !== name)) {
+    throw new CheckError('screenshots', 'screenshot set changed')
+  }
+}
+
+function assertPass (body) {
+  for (const key of recordFields()) {
+    if (body[key] === undefined) throw new CheckError('record', `missing ${key}`)
+  }
+  if (body.dirty !== false) throw new CheckError('dirty-tree', 'the module tree is not clean')
+  if (body.walletInterface !== WALLET_INTERFACE) throw new CheckError('record', 'walletInterface changed')
+  const ibanLabel = productionTarget() ? PRODUCTION_IBAN_LABEL : IBAN_LABEL
+  if (body.ibanCountryAndClearing !== ibanLabel) throw new CheckError('record', 'iban label changed')
+  if (productionTarget() && body.mode !== 'purchase' && body.feePaidBy !== 'paymaster') throw new CheckError('record', 'feePaidBy is not paymaster')
+  if (productionTarget() && body.mode === 'sale' && String(body.paymaster).toLowerCase() === String(body.account).toLowerCase()) {
+    throw new CheckError('userop-event', 'paymaster is the account')
+  }
+  if (body.mode === 'rejected') {
+    assertRejectedPass(body)
+    return
+  }
+  if (body.mode === 'purchase') {
+    assertPurchasePass(body)
+    return
+  }
+  if (body.walletConfirmations !== 1) throw new CheckError('wallet-confirmations', 'walletConfirmations is not 1')
+  if (body.walletStateCleared !== true) throw new CheckError('cleanup', 'wallet state was not cleared')
+  const asset = selectedAsset()
+  if (body.asset !== asset.symbol || body.mode !== 'sale') throw new CheckError('record', 'asset or mode is wrong')
+  const expectedStatus = body.backend.state === 'Completed' ? 'completed' : 'in_progress'
+  if (body.backend.state !== 'PayoutInProgress' && body.backend.state !== 'Completed') {
+    throw new CheckError('module-status', 'module status does not match the sale')
+  }
+  if (!body.moduleStatus || body.moduleStatus.cryptoAsset !== asset.symbol || body.moduleStatus.fiatCurrency !== 'EUR' || body.moduleStatus.status !== expectedStatus) {
+    throw new CheckError('module-status', 'module status does not match the sale')
+  }
+  const names = Array.isArray(body.screenshots) ? body.screenshots.map(item => item && item.file) : []
+  const expectedNames = [...saleFlowShots(), explorerShotName(body.hash), bookingShotName(body.backend.uid, state.session)]
+  if (names.length !== expectedNames.length || expectedNames.some((name, index) => names[index] !== name)) {
+    throw new CheckError('screenshots', 'screenshot set changed')
+  }
+}
+
+async function writeRecord (body) {
+  const path = state.options.record
+  const line = redact(JSON.stringify(body)) + '\n'
+  if (state.secrets.some(secret => secret.length >= 16 && line.includes(secret))) {
+    throw new CheckError('record', 'record redaction failed')
+  }
+  const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+  try {
+    const stat = await file.stat()
+    if (!stat.isFile() || stat.uid !== process.getuid() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) {
+      throw new Error('record is not a private regular file')
+    }
+    await file.chmod(0o600)
+    await file.writeFile(line)
+  } finally {
+    await file.close()
+  }
+  state.recordWritten = true
+}
+
+async function writeFail (error) {
+  if (state.recordWritten || !state.options?.record) return
+  const failedCheck = error instanceof CheckError ? error.failedCheck : 'run'
+  const body = measuredRecord()
+  body.result = rehearsalMode() ? 'rehearsal-fail' : 'fail'
+  body.failedCheck = failedCheck
+  try {
+    state.recordPromise = writeRecord(body)
+    await state.recordPromise
+  } catch (writeError) {
+    console.error(`wallet-ui failed: record: ${redact(writeError?.message ?? writeError)}`)
+  }
+}
+
+function cleanupWarning (error) {
+  console.error(`wallet-ui cleanup warning: ${redact(error?.message ?? error).replace(/[\r\n]+/g, ' ')}`)
+}
+
+function releaseResources () {
+  if (state.releasePromise) return state.releasePromise
+  state.releasePromise = (async () => {
+    try {
+      if (state.browser) {
+        const browser = state.browser
+        state.browser = null
+        await browser.close()
+      }
+    } catch (error) { cleanupWarning(error) }
+    try {
+      if (state.provider) {
+        const provider = state.provider
+        state.provider = null
+        provider.destroy()
+      }
+    } catch (error) { cleanupWarning(error) }
+    try {
+      if (state.wdk) {
+        const wdk = state.wdk
+        state.wdk = null
+        await wdk.dispose?.()
+      }
+    } catch (error) { cleanupWarning(error) }
+    try {
+      if (state.lockHeld) {
+        rmdirSync(state.lockDir)
+        state.lockHeld = false
+      }
+    } catch (error) { cleanupWarning(error) }
+  })()
+  return state.releasePromise
+}
+
+async function stopChild (child) {
+  const closed = new Promise(resolve => child.once('close', resolve))
+  child.kill('SIGTERM')
+  let timer
+  const timedOut = await Promise.race([
+    closed.then(() => false),
+    new Promise(resolve => { timer = setTimeout(() => resolve(true), 10_000) })
+  ])
+  clearTimeout(timer)
+  if (timedOut) {
+    child.kill('SIGKILL')
+    const killTimedOut = await Promise.race([
+      closed.then(() => false),
+      new Promise(resolve => { timer = setTimeout(() => resolve(true), 5_000) })
+    ])
+    clearTimeout(timer)
+    if (killTimedOut) cleanupWarning('child process did not close after SIGKILL')
+  }
+}
+
+function installSignalHandlers () {
+  const onSignal = signal => {
+    const exitCode = signal === 'SIGINT' ? 130 : 143
+    if (state.interrupted) {
+      console.error('wallet-ui: interrupted during cleanup; erase the simulator before the next run')
+      try {
+        if (state.lockHeld) {
+          rmdirSync(state.lockDir)
+          state.lockHeld = false
+        }
+      } catch (error) { cleanupWarning(error) }
+      process.exit(state.signalExitCode)
+    }
+    state.interrupted = true
+    state.signalExitCode = exitCode
+    state.signalPromise = (async () => {
+      try {
+        if (state.cleanupPromise) await state.cleanupPromise
+        else if (state.child) await stopChild(state.child)
+      } catch (error) { cleanupWarning(error) }
+      try {
+        if (state.clipboard) await clearClipboard()
+      } catch (error) { cleanupWarning(error) }
+      try { await clearWalletState() } catch (error) { cleanupWarning(error) }
+      try {
+        if (state.recordPromise) await state.recordPromise.catch(() => {})
+        if (state.options?.record && state.flow1Started && !state.recordWritten) await writeFail(new CheckError('interrupted', `received ${signal}`))
+      } catch (error) { cleanupWarning(error) }
+      try { await releaseResources() } catch (error) { cleanupWarning(error) }
+      process.exit(exitCode)
+    })()
+  }
+  process.on('SIGINT', () => onSignal('SIGINT'))
+  process.on('SIGTERM', () => onSignal('SIGTERM'))
+}
+
+async function main () {
+  const options = parseArgs(process.argv.slice(2))
+  state.options = options
+  state.udid = options.udid
+  if (options.screenshots) prepareScreenshots(options.screenshots)
+  if (options.rehearse) assertRecordPath(options.record, options.seedFile, options.screenshots)
+  if (options.send) {
+    assertRecordPath(options.record, options.seedFile, options.screenshots)
+    const reservedShots = options.buy ? BUY_FLOW_SHOTS : options.reject ? REJECT_FLOW_SHOTS : FLOW_SHOTS
+    for (const name of reservedShots) {
+      try {
+        lstatSync(join(options.screenshots, name))
+      } catch (error) {
+        if (error.code === 'ENOENT') continue
+        throw new UsageError('--screenshots cannot be checked')
+      }
+      throw new UsageError('--screenshots already contains a result from this flow')
+    }
+  }
+  if (options.send) {
+    installSignalHandlers()
+    takeLock(join(tmpdir(), 'wdk-wallet-ui-run.lock'))
+  }
+  const prelude = await preflight(options)
+  if (state.interrupted) await state.signalPromise
+  if (!options.send && !options.rehearse) {
+    console.log('wallet-ui preflight ok')
+    return
+  }
+  if (options.rehearse) {
+    state.evidence = {
+      rehearsal: true,
+      rehearsedTransaction: options.buy ? options.rehearseId : options.rehearseUserOp,
+      moduleHead: prelude.moduleHead,
+      dirty: false,
+      backendCommitStart: prelude.backendCommitStart,
+      account: prelude.account,
+      ibanCountryAndClearing: PRODUCTION_IBAN_LABEL,
+      asset: 'USDT',
+      mode: options.buy ? 'purchase' : 'sale'
+    }
+    if (!options.buy) {
+      state.evidence.userOperationHash = options.rehearseUserOp
+      state.evidence.bundlerHost = prelude.bundlerHost
+      state.evidence.notRehearsed = SALE_NOT_REHEARSED
+    }
+  } else {
+    state.evidence = {
+      moduleHead: prelude.moduleHead,
+      dirty: false,
+      starterCommit: prelude.build.starterCommit,
+      patchSha256: prelude.build.patchSha256,
+      mainJsbundleSha256: prelude.build.mainJsbundleSha256,
+      maestroVersion: prelude.maestroVersion,
+      simulatorRuntime: prelude.simulatorRuntime,
+      walletInterface: WALLET_INTERFACE,
+      backendCommitStart: prelude.backendCommitStart,
+      account: prelude.account,
+      ibanCountryAndClearing: productionTarget(options) ? PRODUCTION_IBAN_LABEL : IBAN_LABEL,
+      asset: options.buy ? 'USDT' : selectedAsset().symbol,
+      mode: options.buy ? 'purchase' : options.reject ? 'rejected' : 'sale'
+    }
+    if (productionTarget(options) && !options.buy) {
+      state.evidence.bundlerHost = prelude.bundlerHost
+      state.evidence.polBalance = prelude.polBalance.toString()
+    }
+    if (options.buy) {
+      state.evidence.fiatCents = options.fiatCents
+      state.evidence.quote = prelude.quote
+      state.evidence.humanStep = 'bank transfer by the account holder'
+    }
+  }
+  try {
+    if (options.rehearse) {
+      if (options.buy) await rehearsePurchase(prelude)
+      else await rehearseSale(prelude)
+      const body = measuredRecord()
+      body.result = 'rehearsal-pass'
+      assertRehearsalPass(body)
+      state.recordPromise = writeRecord(body)
+      await state.recordPromise
+      console.log('wallet-ui rehearsal: pass (read-only; not a run)')
+      return
+    }
+    if (options.buy) await buyAndCheck(prelude)
+    else await sendAndCheck(prelude)
+    await clearClipboard()
+    await clearWalletState()
+    if (installedBundleSha(options.udid) !== prelude.build.mainJsbundleSha256) throw new CheckError('bundle', 'installed main.jsbundle changed during cleanup')
+    for (const item of state.screenshots) {
+      if (sha256File(join(options.screenshots, item.file)) !== item.sha256) throw new CheckError('screenshots', 'screenshot changed after capture')
+    }
+    const body = measuredRecord()
+    body.result = 'pass'
+    assertPass(body)
+    if (state.interrupted) await state.signalPromise
+    state.recordPromise = writeRecord(body)
+    await state.recordPromise
+    console.log(body.mode === 'rejected' ? 'wallet-ui pass: rejected' : `wallet-ui pass: ${body.hash}`)
+  } catch (error) {
+    if (state.interrupted) {
+      await state.signalPromise
+      return
+    }
+    if (!options.rehearse) {
+      if (state.clipboard && !state.clipboardClearAttempted) {
+        try {
+          await clearClipboard()
+        } catch (clipboardError) {
+          console.error(`wallet-ui failed: ${redact(clipboardError.message)}`)
+        }
+      }
+      try {
+        await clearWalletState()
+      } catch (cleanupError) {
+        console.error(`wallet-ui failed: ${redact(cleanupError.message)}`)
+      }
+    }
+    if (state.interrupted) {
+      await state.signalPromise
+      return
+    }
+    if (error instanceof UsageError || error instanceof NotRunError) throw error
+    if (state.evidence.dirty === false) {
+      try {
+        if (git(['status', '--porcelain']) !== '') state.evidence.dirty = true
+      } catch {
+        delete state.evidence.dirty
+      }
+    }
+    await writeFail(error)
+    throw error
+  }
+}
+
+try {
+  await main()
+} catch (error) {
+  const message = redact(error?.message ?? error)
+  const name = error instanceof CheckError ? `${error.failedCheck}: ` : ''
+  if (error instanceof UsageError || error instanceof NotRunError) console.error(`wallet-ui: ${message}`)
+  else if (error instanceof CheckError && error.failedCheck === 'clipboard' && state.evidence.clipboardCleared === false) console.error(`wallet-ui failed: ${message}`)
+  else console.error(`wallet-ui failed: ${name}${message}${error?.failedStep ? `; step: ${error.failedStep}` : ''}`)
+  if (error instanceof UsageError) process.exitCode = 2
+  else if (error instanceof NotRunError) process.exitCode = 3
+  else process.exitCode = 1
+  if (rehearsalMode() && !(error instanceof UsageError) && !(error instanceof NotRunError)) {
+    console.log('wallet-ui rehearsal: fail (read-only; not a run)')
+  }
+} finally {
+  if (state.interrupted) await state.signalPromise
+  await releaseResources()
+}

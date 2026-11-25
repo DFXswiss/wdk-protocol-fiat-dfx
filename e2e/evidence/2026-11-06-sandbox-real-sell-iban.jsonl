@@ -1,0 +1,35 @@
+{"run": "dry-92be2ce", "account": null, "step": "chain", "asset": null, "ok": true, "chainId": 11155111}
+{"run": "dry-92be2ce", "account": null, "step": "version", "asset": null, "ok": true, "commit": "ad68c2ead6de336c39cae80e51219f28d973a753", "startedAt": "2026-11-06T11:39:09.506Z"}
+{"run": "dry-92be2ce", "account": "smart", "step": "safe-preflight", "asset": null, "ok": true, "address": "0xceaf3Af1b9D5C89242b979F3D0442573f5651d4D", "index": 1614634916, "deployed": false}
+{"run": "dry-92be2ce", "account": "eoa", "step": "ready", "asset": null, "ok": true, "runId": "1793967417757-22d616", "address": "0x4B33B90cFC38341Db2b9EC5cF3B737508801c617", "send": false}
+{"run": "dry-92be2ce", "account": "eoa", "step": "quoteSell", "asset": "USDT", "ok": true, "cryptoAmount": "1000000", "fiatAmount": "88", "fee": "2", "rate": "0.88"}
+{"run": "dry-92be2ce", "account": "eoa", "step": "sellUrl", "asset": "USDT", "ok": true, "externalTransactionId": "wdk-real-sell-1793967417757-22d616-eoa-USDT", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "dry-92be2ce", "account": "eoa", "step": "paymentInfos", "asset": "USDT", "ok": true, "id": 34299, "depositAddress": "0xaa605a0b22D6266f73C51360eAD2d120Cd15B32a", "currency": "EUR"}
+{"run": "dry-92be2ce", "account": "eoa", "step": "quoteSell", "asset": "ETH", "ok": true, "cryptoAmount": "100000000000000", "fiatAmount": "20", "fee": "0", "rate": "2000"}
+{"run": "dry-92be2ce", "account": "eoa", "step": "sellUrl", "asset": "ETH", "ok": true, "externalTransactionId": "wdk-real-sell-1793967417757-22d616-eoa-ETH", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "dry-92be2ce", "account": "eoa", "step": "paymentInfos", "asset": "ETH", "ok": true, "id": 34301, "depositAddress": "0xaa605a0b22D6266f73C51360eAD2d120Cd15B32a", "currency": "EUR"}
+{"run": "dry-92be2ce", "account": "smart", "step": "quoteSell", "asset": "USDT", "ok": true, "cryptoAmount": "1000000", "fiatAmount": "88", "fee": "2", "rate": "0.88"}
+{"run": "dry-92be2ce", "account": "smart", "step": "safe-code", "asset": "USDT", "ok": true, "deployed": false}
+{"run": "dry-92be2ce", "account": "smart", "step": "sellUrl", "asset": "USDT", "ok": true, "externalTransactionId": "wdk-real-sell-1793967417757-22d616-smart-USDT", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "dry-92be2ce", "account": "smart", "step": "user", "asset": "USDT", "ok": true, "status": 200}
+{"run": "dry-92be2ce", "account": "smart", "step": "paymentInfos", "asset": "USDT", "ok": true, "id": 34303, "depositAddress": "0xb62fC0BD8e32bac787a055Fb62b32fE0F96DFB32", "currency": "EUR"}
+{"run": "dry-92be2ce", "account": "smart", "step": "quoteSell", "asset": "ETH", "ok": true, "cryptoAmount": "100000000000000", "fiatAmount": "20", "fee": "0", "rate": "2000"}
+{"run": "dry-92be2ce", "account": "smart", "step": "safe-code", "asset": "ETH", "ok": true, "deployed": false}
+{"run": "dry-92be2ce", "account": "smart", "step": "sellUrl", "asset": "ETH", "ok": true, "externalTransactionId": "wdk-real-sell-1793967417757-22d616-smart-ETH", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"run": "dry-92be2ce", "account": "smart", "step": "user", "asset": "ETH", "ok": true, "status": 200}
+{"run": "dry-92be2ce", "account": "smart", "step": "paymentInfos", "asset": "ETH", "ok": true, "id": 34305, "depositAddress": "0xb62fC0BD8e32bac787a055Fb62b32fE0F96DFB32", "currency": "EUR"}
+{"run": "dry-92be2ce", "account": "smart", "step": "send", "asset": null, "ok": true, "result": "dry run: nothing sent"}
+{"mutation": "m4-iban-choice", "account": null, "step": "chain", "asset": null, "ok": true, "chainId": 11155111}
+{"mutation": "m4-iban-choice", "account": null, "step": "version", "asset": null, "ok": true, "commit": "ad68c2ead6de336c39cae80e51219f28d973a753", "startedAt": "2026-11-06T11:39:09.506Z"}
+{"mutation": "m4-iban-choice", "account": "eoa", "step": "ready", "asset": null, "ok": true, "runId": "1793967488189-b56434", "address": "0x4B33B90cFC38341Db2b9EC5cF3B737508801c617", "send": false}
+{"mutation": "m4-iban-choice", "account": "eoa", "step": "quoteSell", "asset": "USDT", "ok": true, "cryptoAmount": "1000000", "fiatAmount": "88", "fee": "2", "rate": "0.88"}
+{"mutation": "m4-iban-choice", "account": "eoa", "step": "sellUrl", "asset": "USDT", "ok": true, "externalTransactionId": "wdk-real-sell-1793967488189-b56434-eoa-USDT", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"mutation": "m4-iban-choice", "account": "eoa", "step": "paymentInfos", "asset": "USDT", "ok": false, "error": "No valid paymentInfos response with the deposit address visible"}
+{"mutation": "m4-iban-choice", "stderr": "real-sell failed: No valid paymentInfos response with the deposit address visible"}
+{"mutation": "n1-other-invented-iban", "account": null, "step": "chain", "asset": null, "ok": true, "chainId": 11155111}
+{"mutation": "n1-other-invented-iban", "account": null, "step": "version", "asset": null, "ok": true, "commit": "ad68c2ead6de336c39cae80e51219f28d973a753", "startedAt": "2026-11-06T11:39:09.506Z"}
+{"mutation": "n1-other-invented-iban", "account": "eoa", "step": "ready", "asset": null, "ok": true, "runId": "1793967550796-ba2ce8", "address": "0x4B33B90cFC38341Db2b9EC5cF3B737508801c617", "send": false}
+{"mutation": "n1-other-invented-iban", "account": "eoa", "step": "quoteSell", "asset": "USDT", "ok": true, "cryptoAmount": "1000000", "fiatAmount": "88", "fee": "2", "rate": "0.88"}
+{"mutation": "n1-other-invented-iban", "account": "eoa", "step": "sellUrl", "asset": "USDT", "ok": true, "externalTransactionId": "wdk-real-sell-1793967550796-ba2ce8-eoa-USDT", "origin": "https://dev.app.dfx.swiss", "path": "/sell", "params": ["session", "lang", "asset-in", "asset-out", "blockchain", "amount-in", "external-transaction-id"]}
+{"mutation": "n1-other-invented-iban", "account": "eoa", "step": "paymentInfos", "asset": "USDT", "ok": false, "error": "No valid paymentInfos response with the deposit address visible"}
+{"mutation": "n1-other-invented-iban", "stderr": "real-sell failed: No valid paymentInfos response with the deposit address visible"}
