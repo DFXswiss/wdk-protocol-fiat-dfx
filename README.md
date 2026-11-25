@@ -494,7 +494,7 @@ without a wallet user interface (hybrid). See [TESTING.md](https://github.com/DF
 Pull requests into `develop` are the working line. `main` only accepts `develop`,
 through the release pull request. The jobs each pull request runs are listed in
 [CONTRIBUTING.md](https://github.com/DFXswiss/wdk-protocol-fiat-dfx/blob/develop/CONTRIBUTING.md). Quality gates follow the A38 standard in
-[DFXswiss/agent docs/a38.md](https://github.com/DFXswiss/agent/blob/e63980625f5b778c5a93104b0bf5de7fb5e379a8/docs/a38.md).
+[DFXswiss/agent docs/a38.md](https://github.com/DFXswiss/agent/blob/3528240c62d72e8f50f8ec5ddda0c4d213f0f04a/docs/a38.md).
 Two reviews are required before Ready. One review is enough only when the pull
 request opener is listed in one_review_authors in the trusted .github/pr-guard.json
 on the default branch. A missing file, a missing key, or an empty list keeps two
